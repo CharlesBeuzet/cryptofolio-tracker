@@ -1,4 +1,6 @@
 """Main FastAPI application entry point."""
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from strawberry.fastapi import GraphQLRouter
@@ -10,8 +12,23 @@ from .services.scheduler import DataUpdateScheduler
 # Initialize database
 init_db()
 
+scheduler = DataUpdateScheduler()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Start APScheduler after the event loop is running; stop on shutdown."""
+    scheduler.start()
+    try:
+        await scheduler.update_portfolio_data()
+    except Exception as e:
+        print(f"Initial portfolio update failed: {e}")
+    yield
+    scheduler.stop()
+
+
 # Create FastAPI app
-app = FastAPI(title="Crypto Portfolio Tracker API")
+app = FastAPI(title="Crypto Portfolio Tracker API", lifespan=lifespan)
 
 # Configure CORS for localhost only
 app.add_middleware(
@@ -25,10 +42,6 @@ app.add_middleware(
 # Add GraphQL endpoint
 graphql_app = GraphQLRouter(schema)
 app.include_router(graphql_app, prefix="/graphql")
-
-# Initialize and start scheduler
-scheduler = DataUpdateScheduler()
-scheduler.start()
 
 
 @app.get("/")
@@ -47,4 +60,3 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
-

@@ -134,7 +134,7 @@ class DataUpdateScheduler:
         # Schedule hourly updates
         self.scheduler.add_job(
             self.update_portfolio_data,
-            trigger=CronTrigger(minute=0),  # Run at the top of every hour
+            trigger=CronTrigger(minute=30),  # Run at the top of every hour
             id="update_portfolio",
             name="Update portfolio data",
             replace_existing=True,

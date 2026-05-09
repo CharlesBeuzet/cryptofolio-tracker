@@ -180,3 +180,6 @@ settings/config.yaml
 portfolio.db
 *.db
 *.db-journal
+
+# cursor
+.cursor/
