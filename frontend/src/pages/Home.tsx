@@ -1,18 +1,20 @@
 import { useQuery } from '@apollo/client'
 import { Link } from 'react-router-dom'
-import { GET_PORTFOLIO, GET_PORTFOLIO_HISTORY } from '../graphql/queries'
+import { GET_PORTFOLIO, GET_PORTFOLIO_HISTORY, GET_FIAT_DEPOSITS_SUMMARY } from '../graphql/queries'
 import PortfolioValueChart from '../components/charts/PortfolioValueChart'
 import PieChart from '../components/charts/PieChart'
 import PnLCard from '../components/portfolio/PnLCard'
 import PositionsList from '../components/portfolio/PositionsList'
+import FiatSummaryCard from '../components/portfolio/FiatSummaryCard'
 
 export default function Home() {
   const { data: portfolioData, loading: portfolioLoading } = useQuery(GET_PORTFOLIO)
   const { data: historyData, loading: historyLoading } = useQuery(GET_PORTFOLIO_HISTORY, {
     variables: { days: 180 },
   })
+  const { data: fiatSummaryData, loading: fiatSummaryLoading } = useQuery(GET_FIAT_DEPOSITS_SUMMARY)
 
-  if (portfolioLoading || historyLoading) {
+  if (portfolioLoading || historyLoading || fiatSummaryLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-gray-400">Loading portfolio data...</div>
@@ -40,6 +42,11 @@ export default function Home() {
         value={portfolio?.totalValue || 0}
         pnl={portfolio?.todaysPnl || 0}
         pnlPercent={portfolio?.todaysPnlPercent || 0}
+      />
+
+      <FiatSummaryCard
+        totalsByCurrency={fiatSummaryData?.fiatDepositsSummary?.totalsByCurrency || []}
+        includedRecordCount={fiatSummaryData?.fiatDepositsSummary?.includedRecordCount ?? 0}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

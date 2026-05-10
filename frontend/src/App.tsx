@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import Home from './pages/Home'
 import Performance from './pages/Performance'
 import Position from './pages/Position'
+import FiatDeposits from './pages/FiatDeposits'
 import Layout from './components/common/Layout'
 
 function App() {
@@ -11,6 +12,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/performance" element={<Performance />} />
+          <Route path="/fiat-deposits" element={<FiatDeposits />} />
           <Route path="/position/:id" element={<Position />} />
         </Routes>
       </Layout>

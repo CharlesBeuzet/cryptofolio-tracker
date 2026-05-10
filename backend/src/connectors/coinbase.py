@@ -28,7 +28,7 @@ class CoinbaseConnector(BaseConnector):
             balance = self.exchange.fetch_balance()
             balances = []
             for symbol, amount in balance["total"].items():
-                if amount > 0 and symbol not in ["USD", "USDT", "USDC", "EUR"]:
+                if amount > 0 and symbol not in ["USD", "EUR"]:
                     balances.append(
                         {
                             "symbol": symbol,

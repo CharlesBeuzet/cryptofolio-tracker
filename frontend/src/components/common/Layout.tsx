@@ -41,6 +41,16 @@ export default function Layout({ children }: LayoutProps) {
                 >
                   Performance
                 </Link>
+                <Link
+                  to="/fiat-deposits"
+                  className={`flex items-center px-3 py-2 rounded-md text-sm font-medium ${
+                    location.pathname === '/fiat-deposits'
+                      ? 'bg-crypto-border text-crypto-green'
+                      : 'text-gray-300 hover:bg-crypto-border hover:text-white'
+                  }`}
+                >
+                  Fiat deposits
+                </Link>
               </div>
             </div>
           </div>
