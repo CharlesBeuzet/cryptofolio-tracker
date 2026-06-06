@@ -28,15 +28,8 @@ class BinanceConnector(BaseConnector):
             balance = self.exchange.fetch_balance()
             balances = []
             for symbol, amount in balance["total"].items():
-                # Track stablecoins; skip fiat buckets and deprecated BUSD listing noise.
+                # Skip fiat buckets and deprecated BUSD listing noise but track everything else
                 if amount > 0 and symbol not in ["BUSD", "EUR"]:
-                    # Convert to USDT pair for price lookup
-                    if symbol == "BTC":
-                        pair = "BTC/USDT"
-                    elif symbol == "ETH":
-                        pair = "ETH/USDT"
-                    else:
-                        pair = f"{symbol}/USDT"
                     balances.append(
                         {
                             "symbol": symbol,
