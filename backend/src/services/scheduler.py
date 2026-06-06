@@ -14,7 +14,7 @@ from ..connectors.binance import BinanceConnector
 from .fiat_deposits import FiatDepositService
 from .portfolio import PortfolioService
 
-
+# TODO : remove when we have a way to get prices for all symbols
 def _apply_stablecoin_usd_prices(prices: Dict[str, float], symbols):
     """Treat USD-pegged stables as ~1 USD when ticker fetch misses."""
     for sym in symbols:
