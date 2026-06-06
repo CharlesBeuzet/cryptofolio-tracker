@@ -10,6 +10,7 @@ from ..connectors.base import BaseConnector
 from ..connectors.binance import BinanceConnector
 from .fiat_deposits import FiatDepositService
 from .assets import AssetsService
+from .orders import OrderService
 
 
 class DataUpdateScheduler:
@@ -70,6 +71,22 @@ class DataUpdateScheduler:
                 except Exception as e:
                     print(f"Error syncing fiat deposits from {connector.name}: {e}")
                     db.rollback()
+
+            order_svc = OrderService(db)
+            for connector in self.connectors:
+                symbols = order_svc.get_symbols_for_connector(connector)
+                for symbol in symbols:
+                    try:
+                        n = order_svc.sync_orders_from_connector(connector, symbol)
+                        if n:
+                            print(
+                                f"Synced {n} new order(s) for {symbol} from {connector.name}."
+                            )
+                    except Exception as e:
+                        print(
+                            f"Error syncing orders for {symbol} from {connector.name}: {e}"
+                        )
+                        db.rollback()
 
         except Exception as e:
             print(f"Error updating portfolio data: {e}")

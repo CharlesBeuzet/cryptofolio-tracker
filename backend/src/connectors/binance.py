@@ -1,6 +1,6 @@
 """Binance exchange connector."""
 import ccxt
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from .base import BaseConnector
@@ -42,34 +42,114 @@ class BinanceConnector(BaseConnector):
             print(f"Error fetching Binance balances: {e}")
             return []
 
-    async def fetch_orders(self, symbol: Optional[str] = None) -> List[Dict]:
-        """Fetch order history from Binance."""
+    def _normalize_executed_order(
+        self, order: Dict[str, Any], market_pair: str
+    ) -> Optional[Dict[str, Any]]:
+        if order.get("status") != "closed":
+            return None
+        order_id = order.get("id")
+        if order_id is None:
+            return None
+        ts_ms = order.get("lastTradeTimestamp") or order.get("timestamp")
         try:
-            orders = []
-            if symbol:
-                # Fetch orders for specific symbol
-                pair = f"{symbol}/USDT" if not "/" in symbol else symbol
-                order_list = self.exchange.fetch_orders(pair)
+            if ts_ms is not None:
+                executed_at = datetime.fromtimestamp(
+                    int(ts_ms) / 1000.0, tz=timezone.utc
+                ).replace(tzinfo=None)
             else:
-                # Fetch all orders (this might be limited by exchange)
-                order_list = self.exchange.fetch_orders()
+                executed_at = datetime.utcnow()
+        except (TypeError, ValueError, OSError):
+            executed_at = datetime.utcnow()
+        try:
+            quantity = float(order.get("filled") or 0)
+            price = float(order.get("average") or order.get("price") or 0)
+        except (TypeError, ValueError):
+            return None
+        if quantity <= 0:
+            return None
+        base = market_pair.split("/")[0] if "/" in market_pair else market_pair
+        return {
+            "external_order_id": str(order_id),
+            "symbol": base,
+            "type": "buy" if order.get("side") == "buy" else "sell",
+            "quantity": quantity,
+            "price": price,
+            "executed_at": executed_at,
+            "exchange": self.name,
+        }
 
-            for order in order_list:
-                if order["status"] == "closed":  # Only completed orders
-                    orders.append(
-                        {
-                            "symbol": order["symbol"].split("/")[0],
-                            "type": "buy" if order["side"] == "buy" else "sell",
-                            "quantity": float(order["filled"]),
-                            "price": float(order["price"]),
-                            "executed_at": order["datetime"],
-                            "exchange": "binance",
-                        }
-                    )
-            return orders
+    def _fetch_executed_orders(
+        self,
+        market_pair: str,
+        since_ms: Optional[int],
+        limit: int,
+        paginate: bool,
+    ) -> List[Dict[str, Any]]:
+        """ccxt names this fetch_closed_orders; we treat fully filled orders as executed."""
+        params: Dict[str, Any] = {}
+        if paginate:
+            params["paginate"] = True
+        kwargs: Dict[str, Any] = {"limit": limit, "params": params}
+        if since_ms is not None:
+            kwargs["since"] = since_ms
+        return self.exchange.fetch_closed_orders(market_pair, **kwargs)
+
+    def fetch_orders_sync(
+        self,
+        market_pair: str,
+        since_ms: Optional[int],
+        *,
+        limit: int = 500,
+        paginate: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """Fetch executed spot orders for one pair (sync, for scheduler)."""
+        try:
+            executed_orders = self._fetch_executed_orders(
+                market_pair,
+                since_ms,
+                limit=min(max(limit, 1), 1000),
+                paginate=paginate,
+            )
+            out: List[Dict[str, Any]] = []
+            for order in executed_orders:
+                row = self._normalize_executed_order(order, market_pair)
+                if row:
+                    out.append(row)
+            return out
         except Exception as e:
-            print(f"Error fetching Binance orders: {e}")
+            print(f"Error fetching Binance orders for {market_pair}: {e}")
             return []
+
+    async def fetch_orders(self, symbol: Optional[str] = None) -> List[Dict]:
+        """Fetch order history from Binance for one base symbol or market pair."""
+        if not symbol:
+            print("Binance fetch_orders requires a symbol or market pair.")
+            return []
+        if "/" in symbol:
+            pairs = [symbol]
+        else:
+            pairs = [
+                f"{symbol}/{quote}"
+                for quote in ("USDT", "USDC")
+                if symbol != quote
+            ]
+        since_ms = int(
+            (datetime.now(tz=timezone.utc) - timedelta(days=90)).timestamp() * 1000
+        )
+        orders: List[Dict] = []
+        seen_ids: set[str] = set()
+        for market_pair in pairs:
+            for row in self.fetch_orders_sync(
+                market_pair, since_ms=since_ms, limit=500, paginate=False
+            ):
+                ext_id = row.get("external_order_id")
+                if ext_id and ext_id in seen_ids:
+                    continue
+                if ext_id:
+                    seen_ids.add(ext_id)
+                orders.append(row)
+        return orders
+
 
     async def fetch_prices(self, symbols: List[str]) -> Dict[str, float]:
         """Fetch current prices from Binance."""
