@@ -11,8 +11,6 @@ from sqlalchemy.orm import Session
 from ..models.database import SessionLocal, PortfolioSnapshot, Asset
 from ..connectors.base import BaseConnector
 from ..connectors.binance import BinanceConnector
-from ..connectors.coinbase import CoinbaseConnector
-from ..connectors.hot_wallet import HotWalletConnector
 from .fiat_deposits import FiatDepositService
 from .portfolio import PortfolioService
 
@@ -55,22 +53,6 @@ class DataUpdateScheduler:
             except Exception as e:
                 print(f"Failed to initialize Binance connector: {e}")
 
-        # Initialize Coinbase connector
-        if config.get("coinbase"):
-            try:
-                self.connectors.append(CoinbaseConnector(config["coinbase"]))
-                print("Coinbase connector initialized")
-            except Exception as e:
-                print(f"Failed to initialize Coinbase connector: {e}")
-
-        # Initialize Hot Wallet connector
-        if config.get("hot_wallets"):
-            try:
-                self.connectors.append(HotWalletConnector(config["hot_wallets"]))
-                print("Hot Wallet connector initialized")
-            except Exception as e:
-                print(f"Failed to initialize Hot Wallet connector: {e}")
-
     async def update_portfolio_data(self):
         """Update portfolio data from all connectors."""
         print("Starting portfolio data update...")
@@ -92,7 +74,7 @@ class DataUpdateScheduler:
             # # Use first available connector that supports price fetching
             # prices = {}
             # for connector in self.connectors:
-            #     if hasattr(connector, "fetch_prices") and connector.name in ["binance", "coinbase"]:
+            #     if hasattr(connector, "fetch_prices") and connector.name == "binance":
             #         try:
             #             prices = await connector.fetch_prices(list(all_symbols))
             #             break
