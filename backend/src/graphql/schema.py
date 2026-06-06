@@ -6,6 +6,7 @@ from strawberry.fastapi import GraphQLRouter
 
 from ..models.database import Position, Order, PortfolioSnapshot, Asset, SessionLocal
 from ..services.portfolio import PortfolioService
+from ..services.fiat_deposits import FiatDepositService
 
 
 @strawberry.type
@@ -89,6 +90,39 @@ class PerformanceMetricsType:
     total_value: float
     todays_pnl: float
     todays_pnl_percent: float
+
+
+@strawberry.type
+class FiatCurrencyTotalType:
+    """Aggregated fiat injected for one currency (fiat units, not USD converted)."""
+
+    currency: str
+    total_amount: float
+
+
+@strawberry.type
+class FiatDepositsSummaryType:
+    """Roll-up of fiat injections for the dashboard home."""
+
+    totals_by_currency: List[FiatCurrencyTotalType]
+    included_record_count: int
+
+
+@strawberry.type
+class FiatDepositRecordType:
+    """Single fiat deposit / injection row."""
+
+    id: int
+    exchange: str
+    external_order_id: Optional[str]
+    currency: str
+    amount: float
+    fee: Optional[float]
+    status: Optional[str]
+    method: Optional[str]
+    source: str
+    deposited_at: datetime
+    created_at: datetime
 
 
 @strawberry.type
@@ -269,6 +303,49 @@ class Query:
                     pnl_percent=h["pnl_percent"],
                 )
                 for h in history
+            ]
+        finally:
+            db.close()
+
+    @strawberry.field
+    def fiat_deposits_summary(self) -> FiatDepositsSummaryType:
+        """Summarize fiat injected (successful synced deposits + all manual rows)."""
+        db = SessionLocal()
+        try:
+            svc = FiatDepositService(db)
+            data = svc.get_summary()
+            return FiatDepositsSummaryType(
+                totals_by_currency=[
+                    FiatCurrencyTotalType(currency=r["currency"], total_amount=r["total_amount"])
+                    for r in data["totals_by_currency"]
+                ],
+                included_record_count=data["included_record_count"],
+            )
+        finally:
+            db.close()
+
+    @strawberry.field
+    def fiat_deposits(self, limit: int = 500) -> List[FiatDepositRecordType]:
+        """List fiat deposit records, newest first."""
+        db = SessionLocal()
+        try:
+            svc = FiatDepositService(db)
+            rows = svc.list_deposits(limit=limit)
+            return [
+                FiatDepositRecordType(
+                    id=r.id,
+                    exchange=r.exchange,
+                    external_order_id=r.external_order_id,
+                    currency=r.currency,
+                    amount=r.amount,
+                    fee=r.fee,
+                    status=r.status,
+                    method=r.method,
+                    source=r.source,
+                    deposited_at=r.deposited_at,
+                    created_at=r.created_at,
+                )
+                for r in rows
             ]
         finally:
             db.close()

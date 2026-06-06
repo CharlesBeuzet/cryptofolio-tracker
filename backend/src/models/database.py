@@ -11,6 +11,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     create_engine,
 )
 from sqlalchemy.ext.declarative import declarative_base
@@ -79,6 +80,27 @@ class PortfolioSnapshot(Base):
     id = Column(Integer, primary_key=True, index=True)
     total_value = Column(Float, nullable=False)
     timestamp = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+
+
+class FiatDeposit(Base):
+    """Fiat injected via exchange fiat rails (synced) or manual SQLite rows."""
+
+    __tablename__ = "fiat_deposits"
+    __table_args__ = (
+        UniqueConstraint("exchange", "external_order_id", name="uq_fiat_deposit_exchange_order"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    exchange = Column(String(50), nullable=False, index=True)
+    external_order_id = Column(String(128), nullable=True)
+    currency = Column(String(16), nullable=False, index=True)
+    amount = Column(Float, nullable=False)
+    fee = Column(Float, nullable=True)
+    status = Column(String(64), nullable=True)
+    method = Column(String(128), nullable=True)
+    deposited_at = Column(DateTime, nullable=False, index=True)
+    source = Column(String(32), nullable=False, default="api_sync")  # api_sync | manual
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
 
 # Database setup

@@ -1,6 +1,7 @@
 """Binance exchange connector."""
 import ccxt
-from typing import Dict, List, Optional
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
 from .base import BaseConnector
 
@@ -27,14 +28,8 @@ class BinanceConnector(BaseConnector):
             balance = self.exchange.fetch_balance()
             balances = []
             for symbol, amount in balance["total"].items():
-                if amount > 0 and symbol not in ["USDT", "USDC", "BUSD", "EUR"]:
-                    # Convert to USDT pair for price lookup
-                    if symbol == "BTC":
-                        pair = "BTC/USDT"
-                    elif symbol == "ETH":
-                        pair = "ETH/USDT"
-                    else:
-                        pair = f"{symbol}/USDT"
+                # Skip fiat buckets and deprecated BUSD listing noise but track everything else
+                if amount > 0 and symbol not in ["BUSD", "EUR"]:
                     balances.append(
                         {
                             "symbol": symbol,
@@ -105,4 +100,101 @@ class BinanceConnector(BaseConnector):
         except Exception as e:
             print(f"Binance connection test failed: {e}")
             return False
+
+    def fetch_fiat_deposit_orders_sync(self, rows: int = 100) -> List[Dict[str, Any]]:
+        """
+        Binance SAPI fiat deposits (transactionType=0) from both fiat/orders and fiat/payments.
+        Both endpoints are queried each sync (same parameters); rows are normalized and deduped
+        by orderNo (fiat/orders wins over fiat/payments when both list the same order).
+        Implements BaseConnector.fetch_fiat_deposit_orders_sync.
+        Set at parameter to the past one year.
+        """
+        n = min(max(rows, 1), 500)
+        params = {
+            "transactionType": 0,
+            "rows": n,
+        }
+
+        def _data_rows(resp: Any, label: str) -> List[Dict[str, Any]]:
+            if resp is None:
+                return []
+            code = resp.get("code")
+            if code not in (None, "000000", 0, "0"):
+                print(f"Binance {label} returned code={code} message={resp.get('message')}")
+                return []
+            raw = resp.get("data") or []
+            return raw if isinstance(raw, list) else []
+
+        def _normalize_row(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+            order_no = item.get("orderNo")
+            if not order_no:
+                return None
+            try:
+                amt = float(
+                    item.get("amount")
+                    or item.get("indicatedAmount")
+                    or item.get("sourceAmount")
+                    or 0
+                )
+            except (TypeError, ValueError):
+                amt = 0.0
+            fee_raw = item.get("totalFee") or item.get("fee")
+            try:
+                fee = float(fee_raw) if fee_raw is not None else None
+            except (TypeError, ValueError):
+                fee = None
+            ts_ms = item.get("createTime") or item.get("updateTime")
+            try:
+                ts_ms = int(ts_ms)
+                deposited_at = datetime.fromtimestamp(ts_ms / 1000.0, tz=timezone.utc).replace(
+                    tzinfo=None
+                )
+            except (TypeError, ValueError, OSError):
+                deposited_at = datetime.utcnow()
+            return {
+                "external_order_id": str(order_no),
+                "currency": str(item.get("fiatCurrency") or "").upper() or "UNKNOWN",
+                "amount": amt,
+                "fee": fee,
+                "status": item.get("status"),
+                "method": item.get("paymentMethod") or item.get("method"),
+                "deposited_at": deposited_at,
+            }
+
+        def _get_orders():
+            try:
+                return self.exchange.sapi_get_fiat_orders(params)
+            except Exception as e:
+                print(f"Error fetching Binance sapi_get_fiat_orders: {e}")
+                return None
+
+        def _get_payments():
+            try:
+                return self.exchange.sapi_get_fiat_payments(params)
+            except Exception as e:
+                print(f"Error fetching Binance sapi_get_fiat_payments: {e}")
+                return None
+
+        # Sequential calls: shared ccxt exchange instance is not guaranteed thread-safe.
+        resp_orders = _get_orders()
+        resp_payments = _get_payments()
+
+        out: List[Dict[str, Any]] = []
+        seen: set[str] = set()
+        for label, resp in (
+            ("fiat/orders", resp_orders),
+            ("fiat/payments", resp_payments),
+        ):
+            for item in _data_rows(resp, label):
+                if not isinstance(item, dict):
+                    continue
+                row = _normalize_row(item)
+                if not row:
+                    continue
+                oid = row["external_order_id"]
+                if oid in seen:
+                    continue
+                seen.add(oid)
+                out.append(row)
+        return out
 

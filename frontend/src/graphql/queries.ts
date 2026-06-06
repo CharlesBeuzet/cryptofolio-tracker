@@ -106,3 +106,33 @@ export const GET_DAILY_PNL_HISTORY = gql`
   }
 `
 
+export const GET_FIAT_DEPOSITS_SUMMARY = gql`
+  query GetFiatDepositsSummary {
+    fiatDepositsSummary {
+      includedRecordCount
+      totalsByCurrency {
+        currency
+        totalAmount
+      }
+    }
+  }
+`
+
+export const GET_FIAT_DEPOSITS = gql`
+  query GetFiatDeposits($limit: Int!) {
+    fiatDeposits(limit: $limit) {
+      id
+      exchange
+      externalOrderId
+      currency
+      amount
+      fee
+      status
+      method
+      source
+      depositedAt
+      createdAt
+    }
+  }
+`
+

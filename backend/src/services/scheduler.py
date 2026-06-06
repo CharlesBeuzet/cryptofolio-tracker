@@ -11,9 +11,15 @@ from sqlalchemy.orm import Session
 from ..models.database import SessionLocal, PortfolioSnapshot, Asset
 from ..connectors.base import BaseConnector
 from ..connectors.binance import BinanceConnector
-from ..connectors.coinbase import CoinbaseConnector
-from ..connectors.hot_wallet import HotWalletConnector
+from .fiat_deposits import FiatDepositService
 from .portfolio import PortfolioService
+
+# TODO : remove when we have a way to get prices for all symbols
+def _apply_stablecoin_usd_prices(prices: Dict[str, float], symbols):
+    """Treat USD-pegged stables as ~1 USD when ticker fetch misses."""
+    for sym in symbols:
+        if sym in ("USDT", "USDC"):
+            prices.setdefault(sym, 1.0)
 
 
 class DataUpdateScheduler:
@@ -47,81 +53,77 @@ class DataUpdateScheduler:
             except Exception as e:
                 print(f"Failed to initialize Binance connector: {e}")
 
-        # Initialize Coinbase connector
-        if config.get("coinbase"):
-            try:
-                self.connectors.append(CoinbaseConnector(config["coinbase"]))
-                print("Coinbase connector initialized")
-            except Exception as e:
-                print(f"Failed to initialize Coinbase connector: {e}")
-
-        # Initialize Hot Wallet connector
-        if config.get("hot_wallets"):
-            try:
-                self.connectors.append(HotWalletConnector(config["hot_wallets"]))
-                print("Hot Wallet connector initialized")
-            except Exception as e:
-                print(f"Failed to initialize Hot Wallet connector: {e}")
-
     async def update_portfolio_data(self):
         """Update portfolio data from all connectors."""
         print("Starting portfolio data update...")
         db = SessionLocal()
         try:
-            # Collect all balances from all connectors
-            all_balances = []
-            all_symbols = set()
+            # # Collect all balances from all connectors
+            # all_balances = []
+            # all_symbols = set()
 
+            # for connector in self.connectors:
+            #     try:
+            #         balances = await connector.fetch_balances()
+            #         all_balances.extend(balances)
+            #         all_symbols.update([b["symbol"] for b in balances])
+            #     except Exception as e:
+            #         print(f"Error fetching balances from {connector.name}: {e}")
+
+            # # Fetch prices for all symbols
+            # # Use first available connector that supports price fetching
+            # prices = {}
+            # for connector in self.connectors:
+            #     if hasattr(connector, "fetch_prices") and connector.name == "binance":
+            #         try:
+            #             prices = await connector.fetch_prices(list(all_symbols))
+            #             break
+            #         except Exception as e:
+            #             print(f"Error fetching prices from {connector.name}: {e}")
+
+            # _apply_stablecoin_usd_prices(prices, all_symbols)
+
+            # # Update positions
+            # portfolio_service = PortfolioService(db)
+            # for balance in all_balances:
+            #     symbol = balance["symbol"]
+            #     quantity = balance["quantity"]
+            #     exchange = balance["exchange"]
+            #     price = prices.get(symbol)
+
+            #     # Update or create asset
+            #     asset = db.query(Asset).filter(Asset.symbol == symbol).first()
+            #     if not asset:
+            #         asset = Asset(symbol=symbol, name=symbol)
+            #         db.add(asset)
+            #         db.flush()
+
+            #     if price:
+            #         asset.current_price = price
+            #         asset.last_updated = datetime.utcnow()
+
+            #     # Update position
+            #     portfolio_service.update_position_from_balance(
+            #         symbol, quantity, exchange, price
+            #     )
+
+            # # Create portfolio snapshot
+            # total_value = portfolio_service.get_portfolio_value()
+            # snapshot = PortfolioSnapshot(total_value=total_value, timestamp=datetime.utcnow())
+            # db.add(snapshot)
+            # db.commit()
+
+            # print(f"Portfolio data updated. Total value: ${total_value:.2f}")
+
+            fiat_svc = FiatDepositService(db)
             for connector in self.connectors:
                 try:
-                    balances = await connector.fetch_balances()
-                    all_balances.extend(balances)
-                    all_symbols.update([b["symbol"] for b in balances])
+                    n = fiat_svc.sync_deposits_from_connector(connector)
+                    if n:
+                        print(f"Synced {n} new fiat deposit record(s) from {connector.name}.")
                 except Exception as e:
-                    print(f"Error fetching balances from {connector.name}: {e}")
-
-            # Fetch prices for all symbols
-            # Use first available connector that supports price fetching
-            prices = {}
-            for connector in self.connectors:
-                if hasattr(connector, "fetch_prices") and connector.name in ["binance", "coinbase"]:
-                    try:
-                        prices = await connector.fetch_prices(list(all_symbols))
-                        break
-                    except Exception as e:
-                        print(f"Error fetching prices from {connector.name}: {e}")
-
-            # Update positions
-            portfolio_service = PortfolioService(db)
-            for balance in all_balances:
-                symbol = balance["symbol"]
-                quantity = balance["quantity"]
-                exchange = balance["exchange"]
-                price = prices.get(symbol)
-
-                # Update or create asset
-                asset = db.query(Asset).filter(Asset.symbol == symbol).first()
-                if not asset:
-                    asset = Asset(symbol=symbol, name=symbol)
-                    db.add(asset)
-                    db.flush()
-
-                if price:
-                    asset.current_price = price
-                    asset.last_updated = datetime.utcnow()
-
-                # Update position
-                portfolio_service.update_position_from_balance(
-                    symbol, quantity, exchange, price
-                )
-
-            # Create portfolio snapshot
-            total_value = portfolio_service.get_portfolio_value()
-            snapshot = PortfolioSnapshot(total_value=total_value, timestamp=datetime.utcnow())
-            db.add(snapshot)
-            db.commit()
-
-            print(f"Portfolio data updated. Total value: ${total_value:.2f}")
+                    print(f"Error syncing fiat deposits from {connector.name}: {e}")
+                    db.rollback()
 
         except Exception as e:
             print(f"Error updating portfolio data: {e}")

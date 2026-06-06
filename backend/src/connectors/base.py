@@ -1,8 +1,6 @@
 """Base connector interface for data providers."""
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional
-
-from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 
 class BaseConnector(ABC):
@@ -63,4 +61,20 @@ class BaseConnector(ABC):
             True if connection is successful, False otherwise
         """
         pass
+
+    def fetch_fiat_deposit_orders_sync(self, rows: int = 100) -> List[Dict[str, Any]]:
+        """
+        Recent fiat deposit (on-ramp) orders from this provider, if supported.
+
+        Sync HTTP/API calls are acceptable here (used from the scheduler, not FastAPI handlers).
+
+        Args:
+            rows: Provider-specific maximum number of recent orders to return.
+
+        Returns:
+            Normalized rows with keys: external_order_id (str), currency (str), amount (float),
+            optional fee (float), status (str), method (str), deposited_at (datetime).
+            Providers without fiat rails return an empty list.
+        """
+        return []
 

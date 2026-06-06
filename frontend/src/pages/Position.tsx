@@ -4,7 +4,6 @@ import { GET_POSITION } from '../graphql/queries'
 import PositionChart from '../components/charts/PositionChart'
 import PositionMetrics from '../components/portfolio/PositionMetrics'
 import OrderHistory from '../components/portfolio/OrderHistory'
-import { format } from 'date-fns'
 
 export default function Position() {
   const { id } = useParams<{ id: string }>()
