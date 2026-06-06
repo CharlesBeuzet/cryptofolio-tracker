@@ -44,12 +44,12 @@ class Position(Base):
     symbol = Column(String(20), nullable=False, index=True)
     quantity = Column(Float, nullable=False, default=0.0)
     avg_entry_price = Column(Float, nullable=False)
-    current_price = Column(Float, nullable=True)
     pnl = Column(Float, nullable=True, default=0.0)
     pnl_percent = Column(Float, nullable=True, default=0.0)
     first_bought_at = Column(DateTime, nullable=False)
     last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     exchange = Column(String(50), nullable=True)  # binance, coinbase, wallet, etc.
+    status = Column(String(10), nullable=False, default="open")  # open | closed
 
     asset = relationship("Asset", back_populates="positions")
     orders = relationship("Order", back_populates="position", cascade="all, delete-orphan")

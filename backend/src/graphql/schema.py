@@ -43,6 +43,7 @@ class PositionType:
     pnl_percent: Optional[float]
     first_bought_at: datetime
     exchange: Optional[str]
+    status: str
     orders: List[OrderType]
 
     @strawberry.field
@@ -57,6 +58,36 @@ class PositionType:
         """Calculate position duration in days."""
         delta = datetime.utcnow() - self.first_bought_at
         return delta.days
+
+
+def _position_to_type(pos: Position) -> PositionType:
+    """Map a Position ORM object to GraphQL type."""
+    asset_price = pos.asset.current_price if pos.asset else None
+    orders = [
+        OrderType(
+            id=o.id,
+            symbol=o.symbol,
+            type=o.type,
+            quantity=o.quantity,
+            price=o.price,
+            executed_at=o.executed_at,
+            exchange=o.exchange,
+        )
+        for o in pos.orders
+    ]
+    return PositionType(
+        id=pos.id,
+        symbol=pos.symbol,
+        quantity=pos.quantity,
+        avg_entry_price=pos.avg_entry_price,
+        current_price=asset_price,
+        pnl=pos.pnl,
+        pnl_percent=pos.pnl_percent,
+        first_bought_at=pos.first_bought_at,
+        exchange=pos.exchange,
+        status=pos.status,
+        orders=orders,
+    )
 
 
 @strawberry.type
@@ -138,35 +169,7 @@ class Query:
             pnl_data = service.get_todays_pnl()
             positions = service.get_positions()
 
-            # Convert positions to GraphQL types
-            position_types = []
-            for pos in positions:
-                orders = [
-                    OrderType(
-                        id=o.id,
-                        symbol=o.symbol,
-                        type=o.type,
-                        quantity=o.quantity,
-                        price=o.price,
-                        executed_at=o.executed_at,
-                        exchange=o.exchange,
-                    )
-                    for o in pos.orders
-                ]
-                position_types.append(
-                    PositionType(
-                        id=pos.id,
-                        symbol=pos.symbol,
-                        quantity=pos.quantity,
-                        avg_entry_price=pos.avg_entry_price,
-                        current_price=pos.current_price,
-                        pnl=pos.pnl,
-                        pnl_percent=pos.pnl_percent,
-                        first_bought_at=pos.first_bought_at,
-                        exchange=pos.exchange,
-                        orders=orders,
-                    )
-                )
+            position_types = [_position_to_type(pos) for pos in positions]
 
             return PortfolioType(
                 total_value=pnl_data["value"],
@@ -184,37 +187,7 @@ class Query:
         try:
             service = PortfolioService(db)
             positions = service.get_positions()
-
-            position_types = []
-            for pos in positions:
-                orders = [
-                    OrderType(
-                        id=o.id,
-                        symbol=o.symbol,
-                        type=o.type,
-                        quantity=o.quantity,
-                        price=o.price,
-                        executed_at=o.executed_at,
-                        exchange=o.exchange,
-                    )
-                    for o in pos.orders
-                ]
-                position_types.append(
-                    PositionType(
-                        id=pos.id,
-                        symbol=pos.symbol,
-                        quantity=pos.quantity,
-                        avg_entry_price=pos.avg_entry_price,
-                        current_price=pos.current_price,
-                        pnl=pos.pnl,
-                        pnl_percent=pos.pnl_percent,
-                        first_bought_at=pos.first_bought_at,
-                        exchange=pos.exchange,
-                        orders=orders,
-                    )
-                )
-
-            return position_types
+            return [_position_to_type(pos) for pos in positions]
         finally:
             db.close()
 
@@ -228,31 +201,7 @@ class Query:
             if not pos:
                 return None
 
-            orders = [
-                OrderType(
-                    id=o.id,
-                    symbol=o.symbol,
-                    type=o.type,
-                    quantity=o.quantity,
-                    price=o.price,
-                    executed_at=o.executed_at,
-                    exchange=o.exchange,
-                )
-                for o in pos.orders
-            ]
-
-            return PositionType(
-                id=pos.id,
-                symbol=pos.symbol,
-                quantity=pos.quantity,
-                avg_entry_price=pos.avg_entry_price,
-                current_price=pos.current_price,
-                pnl=pos.pnl,
-                pnl_percent=pos.pnl_percent,
-                first_bought_at=pos.first_bought_at,
-                exchange=pos.exchange,
-                orders=orders,
-            )
+            return _position_to_type(pos)
         finally:
             db.close()
 
