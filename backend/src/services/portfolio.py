@@ -1,8 +1,8 @@
 """Portfolio service for aggregating and calculating portfolio data."""
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
-from sqlalchemy.orm import Session
-from sqlalchemy import func, and_
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import and_
 
 from ..models.database import (
     Asset,
@@ -19,13 +19,21 @@ class PortfolioService:
     def __init__(self, db: Session):
         self.db = db
 
+    def _open_positions_query(self):
+        return (
+            self.db.query(Position)
+            .options(joinedload(Position.asset), joinedload(Position.orders))
+            .filter(Position.status == "open")
+        )
+
     def get_portfolio_value(self) -> float:
         """Calculate total portfolio value."""
-        positions = self.db.query(Position).filter(Position.quantity > 0).all()
+        positions = self._open_positions_query().all()
         total_value = 0.0
         for position in positions:
-            if position.current_price:
-                total_value += position.quantity * position.current_price
+            price = position.asset.current_price if position.asset else None
+            if price:
+                total_value += position.quantity * price
         return total_value
 
     def get_todays_pnl(self) -> Dict[str, float]:
@@ -33,10 +41,8 @@ class PortfolioService:
         today = datetime.utcnow().date()
         today_start = datetime.combine(today, datetime.min.time())
 
-        # Get portfolio value now
         current_value = self.get_portfolio_value()
 
-        # Get portfolio value at start of today
         snapshot = (
             self.db.query(PortfolioSnapshot)
             .filter(PortfolioSnapshot.timestamp >= today_start)
@@ -48,8 +54,7 @@ class PortfolioService:
             pnl = current_value - snapshot.total_value
             pnl_percent = (pnl / snapshot.total_value * 100) if snapshot.total_value > 0 else 0
         else:
-            # If no snapshot for today, calculate from positions
-            positions = self.db.query(Position).filter(Position.quantity > 0).all()
+            positions = self._open_positions_query().all()
             pnl = sum(p.pnl or 0 for p in positions)
             pnl_percent = (
                 (pnl / (current_value - pnl) * 100) if (current_value - pnl) > 0 else 0
@@ -58,15 +63,20 @@ class PortfolioService:
         return {"pnl": pnl, "pnl_percent": pnl_percent, "value": current_value}
 
     def get_positions(self, limit: Optional[int] = None) -> List[Position]:
-        """Get all positions, optionally limited."""
-        query = self.db.query(Position).filter(Position.quantity > 0)
+        """Get all open positions, optionally limited."""
+        query = self._open_positions_query()
         if limit:
             query = query.limit(limit)
         return query.all()
 
     def get_position_by_id(self, position_id: int) -> Optional[Position]:
         """Get a specific position by ID."""
-        return self.db.query(Position).filter(Position.id == position_id).first()
+        return (
+            self.db.query(Position)
+            .options(joinedload(Position.asset), joinedload(Position.orders))
+            .filter(Position.id == position_id)
+            .first()
+        )
 
     def get_portfolio_history(
         self, days: int = 180
@@ -112,21 +122,28 @@ class PortfolioService:
         return daily_pnl
 
     def update_position_from_balance(
-        self, symbol: str, quantity: float, exchange: str, current_price: Optional[float] = None
+        self, symbol: str, quantity: float, exchange: str
     ):
-        """Update or create position from balance data."""
-        # Find existing position for this symbol and exchange
+        """Update or create an open position from balance data."""
         position = (
             self.db.query(Position)
+            .options(joinedload(Position.asset))
             .filter(and_(Position.symbol == symbol, Position.exchange == exchange))
             .first()
         )
 
+        asset = self.db.query(Asset).filter(Asset.symbol == symbol).first()
+        if not asset:
+            asset = Asset(symbol=symbol, name=symbol)
+            self.db.add(asset)
+            self.db.flush()
+
+        current_price = asset.current_price
+
         if position:
-            # Update existing position
             position.quantity = quantity
+            position.status = "open"
             if current_price:
-                position.current_price = current_price
                 position.pnl = (current_price - position.avg_entry_price) * quantity
                 position.pnl_percent = (
                     ((current_price - position.avg_entry_price) / position.avg_entry_price * 100)
@@ -135,24 +152,19 @@ class PortfolioService:
                 )
             position.last_updated = datetime.utcnow()
         else:
-            # Create new position (will need to calculate avg_entry_price from orders later)
-            asset = self.db.query(Asset).filter(Asset.symbol == symbol).first()
-            if not asset:
-                asset = Asset(symbol=symbol, current_price=current_price)
-                self.db.add(asset)
-                self.db.flush()
-
             position = Position(
                 asset_id=asset.id,
                 symbol=symbol,
                 quantity=quantity,
                 avg_entry_price=current_price or 0.0,
-                current_price=current_price,
                 first_bought_at=datetime.utcnow(),
                 exchange=exchange,
+                status="open",
             )
+            if current_price:
+                position.pnl = 0.0
+                position.pnl_percent = 0.0
             self.db.add(position)
 
         self.db.commit()
         return position
-

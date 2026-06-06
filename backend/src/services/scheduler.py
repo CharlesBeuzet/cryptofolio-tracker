@@ -1,25 +1,15 @@
 """Scheduler service for periodic data updates."""
-import asyncio
 import yaml
-from datetime import datetime
 from pathlib import Path
-from typing import Dict, List
+from typing import List
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from sqlalchemy.orm import Session
 
-from ..models.database import SessionLocal, PortfolioSnapshot, Asset
+from ..models.database import SessionLocal
 from ..connectors.base import BaseConnector
 from ..connectors.binance import BinanceConnector
 from .fiat_deposits import FiatDepositService
-from .portfolio import PortfolioService
-
-# TODO : remove when we have a way to get prices for all symbols
-def _apply_stablecoin_usd_prices(prices: Dict[str, float], symbols):
-    """Treat USD-pegged stables as ~1 USD when ticker fetch misses."""
-    for sym in symbols:
-        if sym in ("USDT", "USDC"):
-            prices.setdefault(sym, 1.0)
+from .assets import AssetsService
 
 
 class DataUpdateScheduler:
@@ -27,7 +17,6 @@ class DataUpdateScheduler:
 
     def __init__(self, config_path: str = None):
         if config_path is None:
-            # Get project root directory
             BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
             config_path = str(BASE_DIR / "settings" / "config.yaml")
         self.config_path = config_path
@@ -45,7 +34,6 @@ class DataUpdateScheduler:
         with open(config_file, "r") as f:
             config = yaml.safe_load(f)
 
-        # Initialize Binance connector
         if config.get("binance"):
             try:
                 self.connectors.append(BinanceConnector(config["binance"]))
@@ -58,62 +46,20 @@ class DataUpdateScheduler:
         print("Starting portfolio data update...")
         db = SessionLocal()
         try:
-            # # Collect all balances from all connectors
-            # all_balances = []
-            # all_symbols = set()
-
-            # for connector in self.connectors:
-            #     try:
-            #         balances = await connector.fetch_balances()
-            #         all_balances.extend(balances)
-            #         all_symbols.update([b["symbol"] for b in balances])
-            #     except Exception as e:
-            #         print(f"Error fetching balances from {connector.name}: {e}")
-
-            # # Fetch prices for all symbols
-            # # Use first available connector that supports price fetching
-            # prices = {}
-            # for connector in self.connectors:
-            #     if hasattr(connector, "fetch_prices") and connector.name == "binance":
-            #         try:
-            #             prices = await connector.fetch_prices(list(all_symbols))
-            #             break
-            #         except Exception as e:
-            #             print(f"Error fetching prices from {connector.name}: {e}")
-
-            # _apply_stablecoin_usd_prices(prices, all_symbols)
-
-            # # Update positions
-            # portfolio_service = PortfolioService(db)
-            # for balance in all_balances:
-            #     symbol = balance["symbol"]
-            #     quantity = balance["quantity"]
-            #     exchange = balance["exchange"]
-            #     price = prices.get(symbol)
-
-            #     # Update or create asset
-            #     asset = db.query(Asset).filter(Asset.symbol == symbol).first()
-            #     if not asset:
-            #         asset = Asset(symbol=symbol, name=symbol)
-            #         db.add(asset)
-            #         db.flush()
-
-            #     if price:
-            #         asset.current_price = price
-            #         asset.last_updated = datetime.utcnow()
-
-            #     # Update position
-            #     portfolio_service.update_position_from_balance(
-            #         symbol, quantity, exchange, price
-            #     )
-
-            # # Create portfolio snapshot
-            # total_value = portfolio_service.get_portfolio_value()
-            # snapshot = PortfolioSnapshot(total_value=total_value, timestamp=datetime.utcnow())
-            # db.add(snapshot)
-            # db.commit()
-
-            # print(f"Portfolio data updated. Total value: ${total_value:.2f}")
+            assets_svc = AssetsService(db)
+            for connector in self.connectors:
+                try:
+                    result = await assets_svc.sync_from_connector(connector)
+                    if any(result.values()):
+                        print(
+                            f"Synced from {connector.name}: "
+                            f"{result['assets_updated']} asset(s), "
+                            f"{result['positions_opened']} opened, "
+                            f"{result['positions_closed']} closed."
+                        )
+                except Exception as e:
+                    print(f"Error syncing assets from {connector.name}: {e}")
+                    db.rollback()
 
             fiat_svc = FiatDepositService(db)
             for connector in self.connectors:
@@ -133,10 +79,9 @@ class DataUpdateScheduler:
 
     def start(self):
         """Start the scheduler."""
-        # Schedule hourly updates
         self.scheduler.add_job(
             self.update_portfolio_data,
-            trigger=CronTrigger(minute=30),  # Run at the top of every hour
+            trigger=CronTrigger(minute=30),
             id="update_portfolio",
             name="Update portfolio data",
             replace_existing=True,
@@ -147,4 +92,3 @@ class DataUpdateScheduler:
     def stop(self):
         """Stop the scheduler."""
         self.scheduler.shutdown()
-
