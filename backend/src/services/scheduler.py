@@ -11,6 +11,7 @@ from ..connectors.binance import BinanceConnector
 from .fiat_deposits import FiatDepositService
 from .assets import AssetsService
 from .orders import OrderService
+from .analyzer import PositionAnalyzerService
 
 
 class DataUpdateScheduler:
@@ -87,6 +88,23 @@ class DataUpdateScheduler:
                             f"Error syncing orders for {symbol} from {connector.name}: {e}"
                         )
                         db.rollback()
+
+            analyzer = PositionAnalyzerService(db)
+            try:
+                backfilled = analyzer.backfill_if_missing()
+                if backfilled:
+                    print(f"Backfilled metrics for {backfilled} position(s).")
+            except Exception as e:
+                print(f"Error backfilling position metrics: {e}")
+                db.rollback()
+
+            try:
+                refreshed = analyzer.refresh_all_open_prices()
+                if refreshed:
+                    print(f"Refreshed market metrics for {refreshed} open position(s).")
+            except Exception as e:
+                print(f"Error refreshing position market metrics: {e}")
+                db.rollback()
 
         except Exception as e:
             print(f"Error updating portfolio data: {e}")
