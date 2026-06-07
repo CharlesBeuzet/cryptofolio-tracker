@@ -125,23 +125,9 @@ engine = create_engine(
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
-def _migrate_orders_table() -> None:
-    """Add columns/indexes to orders on existing SQLite databases."""
-    from sqlalchemy import inspect, text
-
-    inspector = inspect(engine)
-    if "orders" not in inspector.get_table_names():
-        return
-    cols = {c["name"] for c in inspector.get_columns("orders")}
-    if "external_order_id" not in cols:
-        with engine.begin() as conn:
-            conn.execute(text("ALTER TABLE orders ADD COLUMN external_order_id VARCHAR(64)"))
-
-
 def init_db():
     """Initialize the database by creating all tables."""
     Base.metadata.create_all(bind=engine)
-    _migrate_orders_table()
 
 
 def get_db():
