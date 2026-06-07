@@ -62,6 +62,29 @@ class BaseConnector(ABC):
         """
         pass
 
+    def fetch_orders_sync(
+        self,
+        market_pair: str,
+        since_ms: Optional[int],
+        *,
+        limit: int = 500,
+        paginate: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """
+        Executed (filled) spot orders for one market pair (scheduler-safe sync HTTP).
+
+        Args:
+            market_pair: Unified ccxt symbol (e.g. BTC/USDT).
+            since_ms: Earliest order timestamp in ms, or None for provider default (recent).
+            limit: Maximum orders per API page (provider cap applies).
+            paginate: When True, walk the full range (initial backfill).
+
+        Returns:
+            Normalized rows: external_order_id, symbol, type, quantity, price,
+            executed_at (datetime), exchange.
+        """
+        return []
+
     def fetch_fiat_deposit_orders_sync(self, rows: int = 100) -> List[Dict[str, Any]]:
         """
         Recent fiat deposit (on-ramp) orders from this provider, if supported.

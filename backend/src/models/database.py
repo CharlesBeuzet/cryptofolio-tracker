@@ -59,6 +59,9 @@ class Order(Base):
     """Trading orders (buy/sell)."""
 
     __tablename__ = "orders"
+    __table_args__ = (
+        UniqueConstraint("exchange", "external_order_id", name="uq_order_exchange_external"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     position_id = Column(Integer, ForeignKey("positions.id"), nullable=False)
@@ -68,6 +71,7 @@ class Order(Base):
     price = Column(Float, nullable=False)
     executed_at = Column(DateTime, nullable=False, index=True)
     exchange = Column(String(50), nullable=True)
+    external_order_id = Column(String(64), nullable=True, index=True)
 
     position = relationship("Position", back_populates="orders")
 
