@@ -1,42 +1,44 @@
 ---
-description: Référence le design HTML pour toute modification UI du frontend
+description: Reference the HTML design for any frontend UI change
 globs: frontend/**/*
 alwaysApply: false
 ---
 
-# Design de référence — Frontend
+# Frontend design reference
 
-## Source de vérité visuelle
+## Visual source of truth
 
-Avant toute modification UI, lire le fichier HTML dans `design-reference/`.
-C'est la référence officielle du design actuel de l'application.
+Before any UI change, read the HTML file in `design-reference/`.
+It is the official reference for the current application design.
 
-## Règle principale
+## Main rule
 
-| Situation | Comportement |
-|-----------|--------------|
-| La feature / page / composant **existe dans le design** | La reproduire **fidèlement** : structure, layout, couleurs, typo, espacements, états (hover, actif), hiérarchie visuelle |
-| La feature **n'existe pas dans le design** | S'appuyer sur le template HTML existant pour l'ajouter en respectant la charte et la cohérence globale |
+| Situation | Behavior |
+|-----------|----------|
+| The feature / page / component **exists in the design** | Reproduce it **faithfully**: structure, layout, colors, typography, spacing, states (hover, active), visual hierarchy |
+| The feature **does not exist in the design** | Extend the existing HTML template while keeping the same design language |
 
-## Charte à respecter (design + `tailwind.config.js`)
+## Design tokens (reference + `tailwind.config.js` + `src/index.css`)
 
-- Fond : `crypto-bg` (`#0a0e27`)
-- Cartes / surfaces : `crypto-card` (`#141b2d`), bordures `crypto-border` (`#1e293b`)
-- Positif / accent : `crypto-green` (`#00ff88`)
-- Négatif : `crypto-red` (`#ff4444`)
-- Texte principal : `text-gray-200` / `text-gray-300` ; secondaire : `text-gray-400` / `text-gray-500`
+- Background: radial gradient dark `#0a1413` / light `#F1ECDF`
+- Cards / surfaces: `--card`, borders `--line`
+- Positive / accent: `--green` (`#4FBE86` dark, `#1E5B3D` light)
+- Negative: `--down`
+- Secondary accent: `--accent`
+- Primary text: `--ink`; secondary: `--soft`
+- Fonts: Spectral (headings), IBM Plex Mono (labels, data)
 
-Réutiliser les patterns du design : cartes arrondies, navigation, tableaux, badges, graphiques, grilles responsive.
+Reuse design patterns: rounded panels, sidebar navigation, tables, chips, charts, responsive grids.
 
-## Implémentation React
+## React implementation
 
-- Traduire le HTML en composants React + Tailwind (pas de styles inline arbitraires)
-- Réutiliser `Layout` et les composants existants dans `frontend/src/components/` quand ils correspondent au design
-- Ne pas inventer une nouvelle esthétique : coller au design ou l'étendre de façon cohérente
+- Translate HTML into React components + Tailwind (avoid arbitrary inline styles)
+- Reuse `Layout` and existing components in `frontend/src/components/` when they match the design
+- Do not invent a new aesthetic: match the design or extend it consistently
 
 ## Workflow
 
-1. Lire `design-reference/*.html`
-2. Identifier la section correspondante à la tâche
-3. Si trouvée → implémenter à l'identique
-4. Si absente → choisir le bloc le plus proche (carte, liste, formulaire…) et l'adapter en gardant la même charte
+1. Read `design-reference/*.html`
+2. Identify the section that matches the task
+3. If found → implement it faithfully
+4. If missing → pick the closest block (panel, list, form, etc.) and adapt it with the same design language
