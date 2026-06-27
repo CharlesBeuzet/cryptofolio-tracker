@@ -181,9 +181,9 @@ portfolio.db
 *.db
 *.db-journal
 
-# cursor
-.cursor/
-
 # node modules
 */node_modules/*
 node_modules/
+
+# design reference (HTML mockup, local only)
+design-reference/

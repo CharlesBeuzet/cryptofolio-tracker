@@ -1,0 +1,42 @@
+---
+description: Référence le design HTML pour toute modification UI du frontend
+globs: frontend/**/*
+alwaysApply: false
+---
+
+# Design de référence — Frontend
+
+## Source de vérité visuelle
+
+Avant toute modification UI, lire le fichier HTML dans `design-reference/`.
+C'est la référence officielle du design actuel de l'application.
+
+## Règle principale
+
+| Situation | Comportement |
+|-----------|--------------|
+| La feature / page / composant **existe dans le design** | La reproduire **fidèlement** : structure, layout, couleurs, typo, espacements, états (hover, actif), hiérarchie visuelle |
+| La feature **n'existe pas dans le design** | S'appuyer sur le template HTML existant pour l'ajouter en respectant la charte et la cohérence globale |
+
+## Charte à respecter (design + `tailwind.config.js`)
+
+- Fond : `crypto-bg` (`#0a0e27`)
+- Cartes / surfaces : `crypto-card` (`#141b2d`), bordures `crypto-border` (`#1e293b`)
+- Positif / accent : `crypto-green` (`#00ff88`)
+- Négatif : `crypto-red` (`#ff4444`)
+- Texte principal : `text-gray-200` / `text-gray-300` ; secondaire : `text-gray-400` / `text-gray-500`
+
+Réutiliser les patterns du design : cartes arrondies, navigation, tableaux, badges, graphiques, grilles responsive.
+
+## Implémentation React
+
+- Traduire le HTML en composants React + Tailwind (pas de styles inline arbitraires)
+- Réutiliser `Layout` et les composants existants dans `frontend/src/components/` quand ils correspondent au design
+- Ne pas inventer une nouvelle esthétique : coller au design ou l'étendre de façon cohérente
+
+## Workflow
+
+1. Lire `design-reference/*.html`
+2. Identifier la section correspondante à la tâche
+3. Si trouvée → implémenter à l'identique
+4. Si absente → choisir le bloc le plus proche (carte, liste, formulaire…) et l'adapter en gardant la même charte
