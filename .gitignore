@@ -184,6 +184,3 @@ portfolio.db
 # node modules
 */node_modules/*
 node_modules/
-
-# design reference (HTML mockup, local only)
-design-reference/
