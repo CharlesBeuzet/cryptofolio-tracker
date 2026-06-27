@@ -1,3 +1,7 @@
-This folder contains all the details needed to get all the useful data.
-The content of this folder must not be pushed on github as it conteins api keys and ids.
-An example of structure of the required file will be provided
+# Settings
+
+This folder holds configuration required to fetch portfolio data from exchanges and wallets.
+
+**Do not commit real credentials to Git.** Copy `config.example.yaml` to `config.yaml` and fill in your keys locally.
+
+`config.yaml` is gitignored. An example structure is provided in `config.example.yaml`.
