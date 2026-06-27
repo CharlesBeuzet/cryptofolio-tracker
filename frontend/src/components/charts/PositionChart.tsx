@@ -20,65 +20,80 @@ interface PositionChartProps {
 }
 
 export default function PositionChart({ position }: PositionChartProps) {
-  // Generate price data points (simplified - in real app, fetch historical price data)
-  // For V0, we'll create a simple chart showing buy/sell markers
   const orders = position.orders || []
-  
-  // Create chart data from orders
+
   const chartData = orders
     .map((order) => ({
-      date: format(new Date(order.executedAt), 'MMM dd, yyyy'),
+      date: format(new Date(order.executedAt), 'MMM dd'),
       price: order.price,
       type: order.type,
     }))
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
-  // Add current price point
   if (position.currentPrice) {
     chartData.push({
-      date: format(new Date(), 'MMM dd, yyyy'),
+      date: format(new Date(), 'MMM dd'),
       price: position.currentPrice,
       type: 'current',
     })
   }
 
+  if (chartData.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-[300px] text-sillage-soft text-sm">
+        No price data available
+      </div>
+    )
+  }
+
   return (
-    <ResponsiveContainer width="100%" height={400}>
+    <ResponsiveContainer width="100%" height={300}>
       <LineChart data={chartData}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+        <CartesianGrid stroke="var(--line)" strokeDasharray="0" vertical={false} />
         <XAxis
           dataKey="date"
-          stroke="#64748b"
-          style={{ fontSize: '12px' }}
+          tick={{ fill: 'var(--soft)', fontSize: 9, fontFamily: 'IBM Plex Mono, monospace' }}
+          axisLine={false}
+          tickLine={false}
         />
         <YAxis
-          stroke="#64748b"
-          style={{ fontSize: '12px' }}
+          tick={{ fill: 'var(--soft)', fontSize: 9, fontFamily: 'IBM Plex Mono, monospace' }}
+          axisLine={false}
+          tickLine={false}
           domain={['auto', 'auto']}
+          width={60}
         />
         <Tooltip
           contentStyle={{
-            backgroundColor: '#141b2d',
-            border: '1px solid #1e293b',
+            backgroundColor: 'var(--card)',
+            border: '1px solid var(--line)',
             borderRadius: '8px',
+            fontFamily: 'IBM Plex Mono, monospace',
+            fontSize: '11px',
           }}
           formatter={(value: number) => `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
         />
         <ReferenceLine
           y={position.avgEntryPrice}
-          stroke="#8b5cf6"
+          stroke="var(--accent)"
           strokeDasharray="3 3"
-          label={{ value: 'Avg Entry', position: 'right', fill: '#8b5cf6' }}
+          label={{ value: 'Avg', position: 'right', fill: 'var(--soft)', fontSize: 9 }}
         />
         <Line
           type="monotone"
           dataKey="price"
-          stroke="#00ff88"
-          strokeWidth={2}
-          dot={(props: any) => {
+          stroke="var(--green)"
+          strokeWidth={1.8}
+          dot={(props: { cx?: number; cy?: number; payload?: { type: string } }) => {
             const { cx, cy, payload } = props
-            const color = payload.type === 'buy' ? '#00ff88' : payload.type === 'sell' ? '#ef4444' : '#3b82f6'
-            return <circle cx={cx} cy={cy} r={4} fill={color} />
+            if (cx == null || cy == null) return <></>
+            const color =
+              payload?.type === 'buy'
+                ? 'var(--green)'
+                : payload?.type === 'sell'
+                  ? 'var(--accent)'
+                  : 'var(--soft)'
+            return <circle cx={cx} cy={cy} r={5} fill={color} />
           }}
           name="Price"
         />
@@ -86,4 +101,3 @@ export default function PositionChart({ position }: PositionChartProps) {
     </ResponsiveContainer>
   )
 }
-

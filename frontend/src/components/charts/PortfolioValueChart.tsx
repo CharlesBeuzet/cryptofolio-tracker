@@ -1,65 +1,71 @@
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import { useMemo } from 'react'
+import { Area, AreaChart, ResponsiveContainer, Tooltip, YAxis } from 'recharts'
 import { format } from 'date-fns'
 
 interface PortfolioValueChartProps {
   data: Array<{ timestamp: string; totalValue: number }>
   compareBtc?: boolean
+  height?: number
+  overlay?: React.ReactNode
 }
 
-export default function PortfolioValueChart({ data, compareBtc = false }: PortfolioValueChartProps) {
-  // Format data for chart
-  const chartData = data.map((item) => ({
-    date: format(new Date(item.timestamp), 'MMM dd'),
-    timestamp: item.timestamp,
-    portfolio: item.totalValue,
-    // TODO: Add BTC comparison data when API supports it
-    btc: compareBtc ? item.totalValue * 0.95 : undefined, // Placeholder
-  }))
+export default function PortfolioValueChart({
+  data,
+  height = 250,
+  overlay,
+}: PortfolioValueChartProps) {
+  const chartData = useMemo(
+    () =>
+      data.map((item) => ({
+        date: format(new Date(item.timestamp), 'MMM dd'),
+        value: item.totalValue,
+      })),
+    [data],
+  )
+
+  if (chartData.length === 0) {
+    return (
+      <div className="flex items-center justify-center text-sillage-soft text-sm" style={{ height }}>
+        No history data
+      </div>
+    )
+  }
 
   return (
-    <ResponsiveContainer width="100%" height={300}>
-      <LineChart data={chartData}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-        <XAxis
-          dataKey="date"
-          stroke="#64748b"
-          style={{ fontSize: '12px' }}
-        />
-        <YAxis
-          stroke="#64748b"
-          style={{ fontSize: '12px' }}
-          tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
-        />
-        <Tooltip
-          contentStyle={{
-            backgroundColor: '#141b2d',
-            border: '1px solid #1e293b',
-            borderRadius: '8px',
-          }}
-          formatter={(value: number) => `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-        />
-        <Legend />
-        <Line
-          type="monotone"
-          dataKey="portfolio"
-          stroke="#00ff88"
-          strokeWidth={2}
-          dot={false}
-          name="Portfolio"
-        />
-        {compareBtc && (
-          <Line
-            type="monotone"
-            dataKey="btc"
-            stroke="#f7931a"
-            strokeWidth={2}
-            strokeDasharray="5 5"
-            dot={false}
-            name="BTC"
+    <div className="relative" style={{ height }}>
+      {overlay}
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          <defs>
+            <linearGradient id="navFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--green)" stopOpacity={0.18} />
+              <stop offset="100%" stopColor="var(--green)" stopOpacity={0.02} />
+            </linearGradient>
+          </defs>
+          <YAxis hide domain={['auto', 'auto']} />
+          <Tooltip
+            contentStyle={{
+              backgroundColor: 'var(--card)',
+              border: '1px solid var(--line)',
+              borderRadius: '8px',
+              fontFamily: 'IBM Plex Mono, monospace',
+              fontSize: '11px',
+            }}
+            formatter={(value: number) => [
+              `$${value.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,
+              'NAV',
+            ]}
           />
-        )}
-      </LineChart>
-    </ResponsiveContainer>
+          <Area
+            type="monotone"
+            dataKey="value"
+            stroke="var(--green)"
+            strokeWidth={1.8}
+            fill="url(#navFill)"
+            dot={false}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
   )
 }
-
