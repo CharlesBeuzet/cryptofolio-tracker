@@ -8,6 +8,7 @@ from apscheduler.triggers.cron import CronTrigger
 from ..models.database import SessionLocal
 from ..connectors.base import BaseConnector
 from ..connectors.binance import BinanceConnector
+from ..connectors.okx import OkxConnector
 from .fiat_deposits import FiatDepositService
 from .assets import AssetsService
 from .orders import OrderService
@@ -42,6 +43,13 @@ class DataUpdateScheduler:
                 print("Binance connector initialized")
             except Exception as e:
                 print(f"Failed to initialize Binance connector: {e}")
+
+        if config.get("okx"):
+            try:
+                self.connectors.append(OkxConnector(config["okx"]))
+                print("OKX connector initialized")
+            except Exception as e:
+                print(f"Failed to initialize OKX connector: {e}")
 
     async def update_portfolio_data(self):
         """Update portfolio data from all connectors."""

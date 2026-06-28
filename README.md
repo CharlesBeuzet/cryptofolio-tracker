@@ -1,13 +1,13 @@
 # Crypto Portfolio Tracker
 
-A lightweight crypto portfolio tracking application designed to run on Raspberry Pi 5. Track your positions across multiple exchanges (Binance, Coinbase) and hot wallets.
+A lightweight crypto portfolio tracking application designed to run on Raspberry Pi 5. Track your positions across multiple exchanges (Binance, OKX, Coinbase) and hot wallets.
 
 ## Features
 
 - **Portfolio Overview**: View total portfolio value, today's P&L, asset distribution, and position rankings
 - **Performance Analysis**: Track portfolio value evolution over time with BTC comparison
 - **Position Details**: In-depth analysis of individual positions with order history
-- **Multi-Source Tracking**: Aggregate data from Binance, Coinbase, and hot wallets
+- **Multi-Source Tracking**: Aggregate data from Binance, OKX, Coinbase, and hot wallets
 - **Hourly Updates**: Automatic data synchronization every hour
 
 ## Technology Stack
@@ -92,6 +92,7 @@ The frontend will run on `http://localhost:5173`
 Edit `settings/config.yaml` (create from `config.example.yaml`) to configure:
 
 - **Binance**: API key and secret
+- **OKX**: API key, secret, and passphrase
 - **Coinbase**: API key, secret, and passphrase
 - **Hot Wallets**: Ethereum addresses and token contracts to track
 
