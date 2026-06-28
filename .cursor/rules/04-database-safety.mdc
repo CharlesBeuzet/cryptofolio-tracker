@@ -1,0 +1,54 @@
+---
+description: Protect local portfolio data — never run destructive or test commands against portfolio.db
+alwaysApply: true
+---
+# Database safety (portfolio.db)
+
+This project stores live portfolio data in SQLite at **`portfolio.db`** (project root, gitignored). Treat it as **production-local data**: loss is not recoverable from git.
+
+## Hard rules
+
+1. **Never delete, truncate, or bulk-modify data** in `portfolio.db` (or any user database) unless the user **explicitly** asks for that operation in the current message.
+2. **Never run ad-hoc shell/Python one-liners** that call `init_db()`, migrations, `SessionLocal()`, or SQLAlchemy `delete()` / raw `DELETE` against the project database to “verify” or “test” code.
+3. **Never wipe tables** (`query(...).delete()`, `DROP TABLE`, `TRUNCATE`) as part of agent-driven sanity checks.
+4. **Do not run migrations** (`init_db()`, `migrate_position_metrics_schema()`, `create_all`) against the user’s existing DB unless the user explicitly requested migration or you warned them and they confirmed.
+
+## Safe verification patterns
+
+When tests or manual checks are needed, use an **isolated** database — never `portfolio.db`:
+
+```python
+# In-memory (preferred for unit checks)
+engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+
+# Or a disposable temp file (must delete after)
+import tempfile
+db_path = tempfile.mktemp(suffix=".db")
+engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
+```
+
+- Put automated tests under a test runner with a fixture that always uses `:memory:` or `tmp_path`.
+- If the app must be exercised end-to-end, ask the user before touching `portfolio.db`, or instruct them to back up the file first.
+
+## Before any command that might touch the DB
+
+Ask yourself:
+
+| Question | If “yes” → stop |
+|----------|------------------|
+| Does this write to `portfolio.db`? | Use isolated DB or ask user |
+| Does this call `init_db()` / migrations? | Ask user unless they requested it |
+| Does this delete or overwrite rows? | Forbidden without explicit user request |
+| Is this “just a quick check”? | Still use `:memory:` — no exceptions |
+
+## When user explicitly wants DB work
+
+If the user asks to migrate, seed, reset, or test against real data:
+
+1. **Recommend a backup**: copy `portfolio.db` to `portfolio.db.bak` (or similar).
+2. State clearly what will be modified.
+3. Proceed only after that instruction is in the current request.
+
+## Incident this rule prevents
+
+Running verification scripts against the real `portfolio.db` deleted all `orders`, `positions`, and `assets` rows and replaced them with fake test data. **Always isolate test data from the project database.**

@@ -1,0 +1,81 @@
+---
+description: Git commit and PR automation workflow
+alwaysApply: false
+---
+# Automated Git workflow
+
+## Trigger
+Apply this workflow ONLY when the user explicitly says:
+- "commit", "push", "create a PR", "ship the changes", "looks good"
+
+NEVER commit without explicit user approval.
+
+## Steps in order
+
+1. Pre-flight check
+```bash
+git status
+git diff --stat
+```
+Show the summary to the user before proceeding.
+
+2. Commit message format (Conventional Commits)
+<type>(<scope>): <short description in English>
+
+[optional body: what changed and why]
+
+[footer: Breaking change or related issue]
+
+Allowed types:
+- feat     → new feature
+- fix      → bug fix
+- refactor → restructuring without behavior change
+- test     → adding or updating tests
+- docs     → documentation
+- chore    → config, deps, CI
+
+Examples:
+feat(auth): add JWT authentication
+fix(user): correct email validation
+refactor(payment): split PaymentService into sub-modules
+
+3. Git commands
+```bash
+git add -A
+git commit -m "<generated message>"
+git push origin HEAD
+```
+
+4. PR creation (GitHub CLI)
+Before creating the PR, generate a **detailed description** that reflects **ALL changes** between the base branch and the PR branch (not just the latest commit).
+
+Run:
+```bash
+git fetch origin
+git log --reverse --oneline origin/<base>..HEAD
+git diff --name-status origin/<base>...HEAD
+git diff --stat origin/<base>...HEAD
+```
+
+Then write a PR body that includes (at minimum):
+- **Summary**: 1–2 sentences describing the intent/outcome.
+- **Key changes**: grouped bullets by area (pipeline, CLI, storage, config, docs, etc.).
+- **File-level overview**: highlight adds/modifies/removals at a high level (use `--name-status` + `--stat`).
+- **Test plan**: concrete commands and any required env/config.
+
+Prefer a self-contained body (do not rely solely on the PR template).
+
+```bash
+gh pr create \
+  --title "<type>(<scope>): <description>" \
+  --body "<generated detailed body>" \
+  --draft
+```
+
+The PR is created as a draft by default.
+Ask the user if they want to mark it as "ready for review".
+
+## Additional rules
+- Never merge on your own.
+- If tests fail (pytest), report it before committing.
+- Current branch = working branch, never push directly to main/master.
