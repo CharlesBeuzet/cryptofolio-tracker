@@ -172,3 +172,15 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# settings
+settings/config.yaml
+
+# Database
+portfolio.db
+*.db
+*.db-journal
+
+# node modules
+*/node_modules/*
+node_modules/

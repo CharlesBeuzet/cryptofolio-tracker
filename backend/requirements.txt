@@ -1,0 +1,12 @@
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+strawberry-graphql[fastapi]==0.213.0
+sqlalchemy==2.0.23
+alembic==1.12.1
+python-multipart==0.0.6
+pyyaml==6.0.1
+ccxt==4.5.40
+web3==6.11.3
+apscheduler==3.10.4
+python-dateutil==2.8.2
+

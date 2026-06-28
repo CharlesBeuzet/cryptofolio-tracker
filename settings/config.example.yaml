@@ -1,0 +1,52 @@
+# Crypto Portfolio Tracker Configuration
+# Copy this file to config.yaml and fill in your actual credentials
+# config.yaml is gitignored and will not be committed to the repository
+
+# Binance Exchange Configuration
+binance:
+  api_key: "your_binance_api_key_here"
+  api_secret: "your_binance_api_secret_here"
+  # Optional: enable testnet
+  # sandbox: false
+
+# Coinbase Exchange Configuration
+coinbase:
+  api_key: "your_coinbase_api_key_here"
+  api_secret: "your_coinbase_api_secret_here"
+  passphrase: "your_coinbase_passphrase_here"
+  # Optional: enable sandbox
+  # sandbox: false
+
+# Hot Wallets Configuration
+hot_wallets:
+  # Default RPC endpoint (used if chain-specific RPC not provided)
+  default_rpc: "https://eth.llamarpc.com"
+  
+  # Chain-specific RPC URLs (optional, falls back to default_rpc)
+  rpc_urls:
+    ethereum: "https://eth.llamarpc.com"
+    # polygon: "https://polygon-rpc.com"
+    # bsc: "https://bsc-dataseed.binance.org"
+  
+  # List of wallet addresses to track
+  addresses:
+    - address: "0xYourEthereumAddressHere"
+      chain: "ethereum"
+      # Optional: List of ERC-20 tokens to track on this address
+      tokens:
+        - address: "0xTokenContractAddress"
+          symbol: "USDC"
+          decimals: 6
+        - address: "0xAnotherTokenContractAddress"
+          symbol: "DAI"
+          decimals: 18
+    # Add more addresses as needed
+    # - address: "0xAnotherAddress"
+    #   chain: "ethereum"
+    #   tokens: []
+
+# Notes:
+# - For exchanges: Only provide API keys with read-only permissions for security
+# - For hot wallets: Only public addresses are needed (no private keys required)
+# - RPC endpoints: Free public RPCs are used by default, but you can use your own for better reliability
+
