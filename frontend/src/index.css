@@ -2,23 +2,136 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  background-color: #0a0e27;
-  color: #e2e8f0;
+:root,
+[data-theme='dark'] {
+  --bg: radial-gradient(135% 95% at 50% -20%, #143430, #0a1413);
+  --card: #0f1f1d;
+  --card2: #0c1817;
+  --ink: #e9e5d7;
+  --soft: #86988e;
+  --line: rgba(170, 200, 188, 0.14);
+  --green: #4fbe86;
+  --down: #d98a6a;
+  --accent: #e0a35e;
+  --gsoft: rgba(79, 190, 134, 0.13);
+  --mkink: #0a1413;
 }
 
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+[data-theme='light'] {
+  --bg: #f1ecdf;
+  --card: #fbf8ef;
+  --card2: #f5f0e4;
+  --ink: #23241e;
+  --soft: #7a7867;
+  --line: rgba(35, 36, 30, 0.16);
+  --green: #1e5b3d;
+  --down: #b0543f;
+  --accent: #a8543a;
+  --gsoft: rgba(30, 91, 61, 0.09);
+  --mkink: #fbf8ef;
+}
+
+body {
+  margin: 0;
+  font-family: 'Spectral', Georgia, serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 14px;
 }
 
 * {
   box-sizing: border-box;
 }
 
+@layer components {
+  .lbl {
+    @apply font-mono text-[10px] tracking-[0.16em] uppercase text-sillage-soft;
+  }
+
+  .panel {
+    @apply bg-sillage-card border border-sillage-line rounded-panel px-6 py-5;
+  }
+
+  .cap {
+    @apply italic text-[12.5px] text-sillage-soft;
+  }
+
+  .chip {
+    @apply inline-block font-mono text-[9px] tracking-[0.1em] uppercase px-[7px] py-0.5 rounded border border-sillage-line text-sillage-soft leading-normal whitespace-nowrap;
+  }
+
+  .tk {
+    @apply font-mono font-semibold text-[13px];
+  }
+
+  .rule {
+    @apply h-px w-full bg-sillage-line;
+  }
+
+  .seg {
+    @apply inline-flex border border-sillage-line rounded-lg overflow-hidden;
+  }
+
+  .segb {
+    @apply px-3 py-[5px] font-mono text-[11px] text-sillage-soft cursor-pointer border-r border-sillage-line last:border-r-0;
+  }
+
+  .segb.on {
+    @apply bg-sillage-gsoft text-sillage-ink;
+  }
+
+  .navi {
+    @apply flex items-center gap-[11px] px-3 py-[9px] rounded-[7px] text-sillage-soft cursor-pointer font-mono text-xs tracking-wide border border-transparent transition-colors;
+  }
+
+  .navi:hover {
+    @apply text-sillage-ink;
+  }
+
+  .navi.on {
+    @apply bg-sillage-card text-sillage-ink border-sillage-line;
+  }
+
+  .hrow {
+    @apply flex items-center gap-3.5 py-[11px] px-1 border-t border-sillage-line cursor-pointer transition-colors;
+  }
+
+  .hrow:hover {
+    background: var(--gsoft);
+  }
+
+  .trow {
+    @apply flex items-center gap-3 py-2.5 px-1 border-t border-sillage-line;
+  }
+
+  .wbar {
+    @apply h-[5px] bg-sillage-line rounded-sm overflow-hidden;
+  }
+
+  .wfill {
+    @apply h-full bg-sillage-green rounded-sm;
+  }
+
+  .sw {
+    @apply w-[9px] h-[9px] rounded-sm inline-block flex-shrink-0;
+  }
+
+  .iconbtn {
+    @apply w-8 h-[30px] border border-sillage-line rounded-[7px] flex items-center justify-center cursor-pointer text-sillage-soft text-sm bg-sillage-card;
+  }
+
+  .iconbtn:hover {
+    @apply text-sillage-ink;
+  }
+
+  .atab {
+    @apply px-[13px] py-[7px] border border-sillage-line rounded-lg cursor-pointer font-mono text-xs text-sillage-soft flex items-center gap-[7px];
+  }
+
+  .atab.on {
+    @apply bg-sillage-card text-sillage-ink;
+    border-color: var(--green);
+  }
+}

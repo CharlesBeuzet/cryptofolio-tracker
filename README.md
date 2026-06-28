@@ -22,7 +22,7 @@ A lightweight crypto portfolio tracking application designed to run on Raspberry
 ### Frontend
 - React 18 with TypeScript
 - Vite build tool
-- Tailwind CSS for styling
+- Tailwind CSS for styling (SILLAGE design system)
 - Apollo Client for GraphQL
 - Recharts for data visualization
 

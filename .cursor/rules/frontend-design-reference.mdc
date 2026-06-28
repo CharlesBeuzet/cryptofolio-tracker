@@ -1,0 +1,44 @@
+---
+description: Reference the HTML design for any frontend UI change
+globs: frontend/**/*
+alwaysApply: false
+---
+
+# Frontend design reference
+
+## Visual source of truth
+
+Before any UI change, read the HTML file in `design-reference/`.
+It is the official reference for the current application design.
+
+## Main rule
+
+| Situation | Behavior |
+|-----------|----------|
+| The feature / page / component **exists in the design** | Reproduce it **faithfully**: structure, layout, colors, typography, spacing, states (hover, active), visual hierarchy |
+| The feature **does not exist in the design** | Extend the existing HTML template while keeping the same design language |
+
+## Design tokens (reference + `tailwind.config.js` + `src/index.css`)
+
+- Background: radial gradient dark `#0a1413` / light `#F1ECDF`
+- Cards / surfaces: `--card`, borders `--line`
+- Positive / accent: `--green` (`#4FBE86` dark, `#1E5B3D` light)
+- Negative: `--down`
+- Secondary accent: `--accent`
+- Primary text: `--ink`; secondary: `--soft`
+- Fonts: Spectral (headings), IBM Plex Mono (labels, data)
+
+Reuse design patterns: rounded panels, sidebar navigation, tables, chips, charts, responsive grids.
+
+## React implementation
+
+- Translate HTML into React components + Tailwind (avoid arbitrary inline styles)
+- Reuse `Layout` and existing components in `frontend/src/components/` when they match the design
+- Do not invent a new aesthetic: match the design or extend it consistently
+
+## Workflow
+
+1. Read `design-reference/*.html`
+2. Identify the section that matches the task
+3. If found → implement it faithfully
+4. If missing → pick the closest block (panel, list, form, etc.) and adapt it with the same design language
