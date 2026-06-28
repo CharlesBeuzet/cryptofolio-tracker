@@ -1,7 +1,5 @@
 """Database models for the crypto portfolio tracker."""
 from datetime import datetime
-from decimal import Decimal
-from typing import Optional
 
 from sqlalchemy import (
     Column,
@@ -10,7 +8,6 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
-    Text,
     UniqueConstraint,
     create_engine,
 )
@@ -35,7 +32,7 @@ class Asset(Base):
 
 
 class Position(Base):
-    """Portfolio positions."""
+    """Exchange-mirrored portfolio position (balance sync). Analytics live in PositionMetrics."""
 
     __tablename__ = "positions"
 
@@ -43,9 +40,6 @@ class Position(Base):
     asset_id = Column(Integer, ForeignKey("assets.id"), nullable=False)
     symbol = Column(String(20), nullable=False, index=True)
     quantity = Column(Float, nullable=False, default=0.0)
-    avg_entry_price = Column(Float, nullable=False)
-    pnl = Column(Float, nullable=True, default=0.0)
-    pnl_percent = Column(Float, nullable=True, default=0.0)
     first_bought_at = Column(DateTime, nullable=False)
     last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     exchange = Column(String(50), nullable=True)  # binance, coinbase, wallet, etc.
@@ -53,6 +47,46 @@ class Position(Base):
 
     asset = relationship("Asset", back_populates="positions")
     orders = relationship("Order", back_populates="position", cascade="all, delete-orphan")
+    metrics = relationship(
+        "PositionMetrics",
+        back_populates="position",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+
+
+class PositionMetrics(Base):
+    """Order-derived analytics for a position (average-cost method)."""
+
+    __tablename__ = "position_metrics"
+
+    id = Column(Integer, primary_key=True, index=True)
+    position_id = Column(Integer, ForeignKey("positions.id"), unique=True, nullable=False)
+
+    avg_entry_price = Column(Float, nullable=False, default=0.0)
+    avg_exit_price = Column(Float, nullable=True)
+    break_even_price = Column(Float, nullable=False, default=0.0)
+
+    realised_pnl = Column(Float, nullable=False, default=0.0)
+    realised_pnl_percent = Column(Float, nullable=False, default=0.0)
+    unrealised_pnl = Column(Float, nullable=False, default=0.0)
+    unrealised_pnl_percent = Column(Float, nullable=False, default=0.0)
+    total_pnl = Column(Float, nullable=False, default=0.0)
+    total_pnl_percent = Column(Float, nullable=False, default=0.0)
+
+    holding_value = Column(Float, nullable=False, default=0.0)
+    order_derived_qty = Column(Float, nullable=False, default=0.0)
+    total_buy_qty = Column(Float, nullable=False, default=0.0)
+    total_buy_cost = Column(Float, nullable=False, default=0.0)
+    total_sell_qty = Column(Float, nullable=False, default=0.0)
+    total_sell_proceeds = Column(Float, nullable=False, default=0.0)
+
+    last_processed_order_id = Column(Integer, nullable=True)
+    metrics_updated_at = Column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    position = relationship("Position", back_populates="metrics")
 
 
 class Order(Base):
@@ -108,7 +142,6 @@ class FiatDeposit(Base):
 
 
 # Database setup
-import os
 from pathlib import Path
 
 # Get the project root directory (two levels up from this file)

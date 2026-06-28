@@ -4,9 +4,10 @@ from typing import List, Optional
 import strawberry
 from strawberry.fastapi import GraphQLRouter
 
-from ..models.database import Position, Order, PortfolioSnapshot, Asset, SessionLocal
+from ..models.database import Position, Order, PortfolioSnapshot, Asset, PositionMetrics, SessionLocal
 from ..services.portfolio import PortfolioService
 from ..services.fiat_deposits import FiatDepositService
+from ..services.metrics_helpers import cost_basis, cash_in_trade
 
 
 @strawberry.type
@@ -32,6 +33,28 @@ class OrderType:
 
 
 @strawberry.type
+class PositionMetricsType:
+    """Order-derived position analytics."""
+
+    avg_entry_price: float
+    avg_exit_price: Optional[float]
+    break_even_price: float
+    realised_pnl: float
+    realised_pnl_percent: float
+    unrealised_pnl: float
+    unrealised_pnl_percent: float
+    total_pnl: float
+    total_pnl_percent: float
+    holding_value: float
+    order_derived_qty: float
+    total_buy_cost: float
+    total_sell_proceeds: float
+    cost_basis: float
+    cash_in_trade: float
+    metrics_updated_at: datetime
+
+
+@strawberry.type
 class PositionType:
     """Position GraphQL type."""
     id: int
@@ -45,6 +68,7 @@ class PositionType:
     exchange: Optional[str]
     status: str
     orders: List[OrderType]
+    metrics: Optional[PositionMetricsType]
 
     @strawberry.field
     def value(self) -> float:
@@ -60,9 +84,31 @@ class PositionType:
         return delta.days
 
 
+def _metrics_to_type(metrics: PositionMetrics) -> PositionMetricsType:
+    return PositionMetricsType(
+        avg_entry_price=metrics.avg_entry_price,
+        avg_exit_price=metrics.avg_exit_price,
+        break_even_price=metrics.break_even_price,
+        realised_pnl=metrics.realised_pnl,
+        realised_pnl_percent=metrics.realised_pnl_percent,
+        unrealised_pnl=metrics.unrealised_pnl,
+        unrealised_pnl_percent=metrics.unrealised_pnl_percent,
+        total_pnl=metrics.total_pnl,
+        total_pnl_percent=metrics.total_pnl_percent,
+        holding_value=metrics.holding_value,
+        order_derived_qty=metrics.order_derived_qty,
+        total_buy_cost=metrics.total_buy_cost,
+        total_sell_proceeds=metrics.total_sell_proceeds,
+        cost_basis=cost_basis(metrics),
+        cash_in_trade=cash_in_trade(metrics),
+        metrics_updated_at=metrics.metrics_updated_at,
+    )
+
+
 def _position_to_type(pos: Position) -> PositionType:
     """Map a Position ORM object to GraphQL type."""
     asset_price = pos.asset.current_price if pos.asset else None
+    metrics = pos.metrics
     orders = [
         OrderType(
             id=o.id,
@@ -79,14 +125,15 @@ def _position_to_type(pos: Position) -> PositionType:
         id=pos.id,
         symbol=pos.symbol,
         quantity=pos.quantity,
-        avg_entry_price=pos.avg_entry_price,
+        avg_entry_price=metrics.avg_entry_price if metrics else 0.0,
         current_price=asset_price,
-        pnl=pos.pnl,
-        pnl_percent=pos.pnl_percent,
+        pnl=metrics.unrealised_pnl if metrics else 0.0,
+        pnl_percent=metrics.unrealised_pnl_percent if metrics else 0.0,
         first_bought_at=pos.first_bought_at,
         exchange=pos.exchange,
         status=pos.status,
         orders=orders,
+        metrics=_metrics_to_type(metrics) if metrics else None,
     )
 
 

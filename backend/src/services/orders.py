@@ -3,9 +3,10 @@ from datetime import datetime, timedelta
 from typing import Any, List, Tuple
 
 from sqlalchemy import and_, func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from ..models.database import Order, Position
+from .analyzer import PositionAnalyzerService
 
 SYNC_OVERLAP_HOURS = 2
 QUOTE_CURRENCIES = ("USDT", "USDC")
@@ -119,4 +120,18 @@ class OrderService:
 
         if total_added:
             self.db.commit()
+            position = (
+                self.db.query(Position)
+                .options(joinedload(Position.asset))
+                .filter(
+                    Position.symbol == symbol,
+                    Position.exchange == exchange,
+                    Position.status == "open",
+                )
+                .first()
+            )
+            if position:
+                price = position.asset.current_price if position.asset else None
+                PositionAnalyzerService(self.db).apply_new_orders(position.id, price)
+
         return total_added

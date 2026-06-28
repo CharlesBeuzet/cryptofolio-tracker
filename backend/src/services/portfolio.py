@@ -7,9 +7,7 @@ from sqlalchemy import and_
 from ..models.database import (
     Asset,
     Position,
-    Order,
     PortfolioSnapshot,
-    SessionLocal,
 )
 
 
@@ -22,7 +20,11 @@ class PortfolioService:
     def _open_positions_query(self):
         return (
             self.db.query(Position)
-            .options(joinedload(Position.asset), joinedload(Position.orders))
+            .options(
+                joinedload(Position.asset),
+                joinedload(Position.orders),
+                joinedload(Position.metrics),
+            )
             .filter(Position.status == "open")
         )
 
@@ -55,7 +57,9 @@ class PortfolioService:
             pnl_percent = (pnl / snapshot.total_value * 100) if snapshot.total_value > 0 else 0
         else:
             positions = self._open_positions_query().all()
-            pnl = sum(p.pnl or 0 for p in positions)
+            pnl = sum(
+                (p.metrics.total_pnl if p.metrics else 0.0) for p in positions
+            )
             pnl_percent = (
                 (pnl / (current_value - pnl) * 100) if (current_value - pnl) > 0 else 0
             )
@@ -73,7 +77,11 @@ class PortfolioService:
         """Get a specific position by ID."""
         return (
             self.db.query(Position)
-            .options(joinedload(Position.asset), joinedload(Position.orders))
+            .options(
+                joinedload(Position.asset),
+                joinedload(Position.orders),
+                joinedload(Position.metrics),
+            )
             .filter(Position.id == position_id)
             .first()
         )
@@ -138,32 +146,19 @@ class PortfolioService:
             self.db.add(asset)
             self.db.flush()
 
-        current_price = asset.current_price
-
         if position:
             position.quantity = quantity
             position.status = "open"
-            if current_price:
-                position.pnl = (current_price - position.avg_entry_price) * quantity
-                position.pnl_percent = (
-                    ((current_price - position.avg_entry_price) / position.avg_entry_price * 100)
-                    if position.avg_entry_price > 0
-                    else 0
-                )
             position.last_updated = datetime.utcnow()
         else:
             position = Position(
                 asset_id=asset.id,
                 symbol=symbol,
                 quantity=quantity,
-                avg_entry_price=current_price or 0.0,
                 first_bought_at=datetime.utcnow(),
                 exchange=exchange,
                 status="open",
             )
-            if current_price:
-                position.pnl = 0.0
-                position.pnl_percent = 0.0
             self.db.add(position)
 
         self.db.commit()
