@@ -9,6 +9,8 @@ from .base import BaseConnector
 _SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
 # OKX caps closed-order page size at 100 (Binance allows up to 1000).
 _OKX_ORDER_PAGE_LIMIT = 100
+# OKX fiat deposit history page size cap.
+_OKX_FIAT_DEPOSIT_PAGE_LIMIT = 100
 
 
 class OkxConnector(BaseConnector):
@@ -200,3 +202,90 @@ class OkxConnector(BaseConnector):
         except Exception as e:
             print(f"OKX connection test failed: {e}")
             return False
+
+    def _private_get_fiat_deposit_order_history(
+        self, params: Dict[str, Any]
+    ) -> Any:
+        """
+        GET /api/v5/fiat/deposit-order-history via ccxt signing (not in ccxt.okx yet).
+        """
+        return self.exchange.request(
+            "fiat/deposit-order-history",
+            "private",
+            "GET",
+            params,
+        )
+
+    def _okx_response_rows(self, resp: Any, label: str) -> List[Dict[str, Any]]:
+        if resp is None:
+            return []
+        code = resp.get("code")
+        if code not in (None, "0", 0):
+            print(
+                f"OKX {label} returned code={code} message={resp.get('msg')}"
+            )
+            return []
+        raw = resp.get("data") or []
+        return raw if isinstance(raw, list) else []
+
+    def _normalize_fiat_deposit_row(
+        self, item: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        order_id = item.get("ordId")
+        if not order_id:
+            return None
+        try:
+            amount = float(item.get("amt") or 0)
+        except (TypeError, ValueError):
+            amount = 0.0
+        fee_raw = item.get("fee")
+        try:
+            fee = float(fee_raw) if fee_raw is not None else None
+        except (TypeError, ValueError):
+            fee = None
+        ts_ms = item.get("cTime") or item.get("uTime")
+        try:
+            ts_ms = int(ts_ms)
+            deposited_at = datetime.fromtimestamp(
+                ts_ms / 1000.0, tz=timezone.utc
+            ).replace(tzinfo=None)
+        except (TypeError, ValueError, OSError):
+            deposited_at = datetime.utcnow()
+        return {
+            "external_order_id": str(order_id),
+            "currency": str(item.get("ccy") or "").upper() or "UNKNOWN",
+            "amount": amount,
+            "fee": fee,
+            "status": item.get("state"),
+            "method": item.get("paymentMethod"),
+            "deposited_at": deposited_at,
+        }
+
+    def fetch_fiat_deposit_orders_sync(self, rows: int = 100) -> List[Dict[str, Any]]:
+        """
+        OKX fiat deposit order history (GET /api/v5/fiat/deposit-order-history).
+        Implements BaseConnector.fetch_fiat_deposit_orders_sync.
+        """
+        n = min(max(rows, 1), _OKX_FIAT_DEPOSIT_PAGE_LIMIT)
+        params = {"limit": str(n)}
+
+        try:
+            resp = self._private_get_fiat_deposit_order_history(params)
+        except Exception as e:
+            print(f"Error fetching OKX fiat/deposit-order-history: {e}")
+            return []
+
+        out: List[Dict[str, Any]] = []
+        seen: set[str] = set()
+        for item in self._okx_response_rows(resp, "fiat/deposit-order-history"):
+            if not isinstance(item, dict):
+                continue
+            row = self._normalize_fiat_deposit_row(item)
+            if not row:
+                continue
+            oid = row["external_order_id"]
+            if oid in seen:
+                continue
+            seen.add(oid)
+            out.append(row)
+        return out
