@@ -96,7 +96,7 @@ class BaseConnector(ABC):
         """
         Historical market prices for one spot pair (scheduler-safe sync HTTP).
 
-        Candle resolution by range: 24h → 1h, 7d → 4h, 30d → 8h, 90d → 1d, 1Y → 1w.
+        Candle resolution by range: 24h → 1h, 7d → 4h, 30d → 12h, 90d → 1d, 1Y → 1w.
         Returns normalized rows: timestamp (datetime UTC), open, high, low, close,
         and price (alias of close for backward compatibility).
         """
@@ -109,7 +109,7 @@ class BaseConnector(ABC):
         elif days <= 7:
             timeframe = "4h"
         elif days <= 30:
-            timeframe = "8h"
+            timeframe = "12h"
         elif days <= 90:
             timeframe = "1d"
         else:
