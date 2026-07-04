@@ -66,11 +66,9 @@ coingecko:
   cache_ttl_seconds: 300
   # Set true to serve synthetic price data (useful for demos / video testing)
   mock: false
-  # Optional symbol → CoinGecko coin id overrides (portfolio symbols are uppercase)
-  symbol_ids:
-    BTC: "bitcoin"
-    ETH: "ethereum"
-    SOL: "solana"
+  # Optional disambiguation overrides when a ticker maps to multiple CoinGecko assets
+  # symbol_ids:
+  #   CAT: "catcoin"
 
 # Notes:
 # - For exchanges: Only provide API keys with read-only permissions for security
