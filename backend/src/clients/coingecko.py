@@ -180,7 +180,7 @@ async def fetch_market_chart(symbol: str, days: int) -> MarketChartResult:
             ambiguity_message="Symbol is required.",
         )
 
-    days = max(1, min(int(days), 365))
+    days = max(1, int(days))
     cache_key = (normalized, days)
     now = time.monotonic()
     cached = _cache.get(cache_key)
