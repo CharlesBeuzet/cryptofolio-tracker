@@ -1,5 +1,6 @@
 """OKX exchange connector."""
 import ccxt
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
@@ -11,6 +12,8 @@ _SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
 _OKX_ORDER_PAGE_LIMIT = 100
 # OKX fiat deposit history page size cap.
 _OKX_FIAT_DEPOSIT_PAGE_LIMIT = 100
+# OKX wallet types for balance fetch (ccxt params.type).
+_OKX_BALANCE_ACCOUNT_TYPES = ("trading", "funding")
 
 
 class OkxConnector(BaseConnector):
@@ -35,10 +38,10 @@ class OkxConnector(BaseConnector):
         if config.get("sandbox"):
             self.exchange.set_sandbox_mode(True)
 
-    async def fetch_balances(self) -> List[Dict]:
-        """Fetch balances from OKX trading account."""
+    def _fetch_account_balances(self, account_type: str) -> List[Dict]:
+        """Fetch non-zero balances from one OKX wallet (trading or funding)."""
         try:
-            balance = self.exchange.fetch_balance()
+            balance = self.exchange.fetch_balance({"type": account_type})
             balances = []
             for symbol, amount in balance["total"].items():
                 if amount > 0:
@@ -51,8 +54,20 @@ class OkxConnector(BaseConnector):
                     )
             return balances
         except Exception as e:
-            print(f"Error fetching OKX balances: {e}")
+            print(f"Error fetching OKX {account_type} balances: {e}")
             return []
+
+    async def fetch_balances(self) -> List[Dict]:
+        """Fetch balances from OKX trading and funding accounts (aggregated per symbol)."""
+        totals: Dict[str, float] = defaultdict(float)
+        for account_type in _OKX_BALANCE_ACCOUNT_TYPES:
+            for row in self._fetch_account_balances(account_type):
+                totals[row["symbol"]] += row["quantity"]
+        return [
+            {"symbol": sym, "quantity": qty, "exchange": self.name}
+            for sym, qty in sorted(totals.items())
+            if qty > 0
+        ]
 
     def _normalize_executed_order(
         self, order: Dict[str, Any], market_pair: str
