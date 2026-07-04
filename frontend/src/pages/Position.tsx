@@ -97,13 +97,21 @@ export default function Position() {
         <div className="panel flex-1 min-w-0">
           <div className="flex justify-between items-center mb-3.5">
             <div className="lbl">Fig 2 · Price · order markers</div>
-            <div className="font-mono text-[11px] flex gap-4">
+            <div className="font-mono text-[11px] flex gap-4 flex-wrap justify-end">
               <span>
-                <span className="text-sillage-green">●</span> buy
+                <span className="text-sillage-green font-bold">B</span> buy
               </span>
               <span>
-                <span className="text-sillage-accent">●</span> sell
+                <span className="text-sillage-accent font-bold">S</span> sell
               </span>
+              <span className="text-sillage-soft">
+                <span className="text-sillage-green">—</span> avg entry
+              </span>
+              {position.metrics?.avgExitPrice != null && (
+                <span className="text-sillage-soft">
+                  <span className="text-sillage-accent">—</span> avg sell
+                </span>
+              )}
               {position.currentPrice && (
                 <span className="text-sillage-soft">
                   last {formatUsdPrecise(position.currentPrice)}
@@ -116,6 +124,7 @@ export default function Position() {
             priceHistory={priceHistory}
             orders={ordersInRange}
             avgEntryPrice={position.avgEntryPrice}
+            avgExitPrice={position.metrics?.avgExitPrice}
             isMock={isMock}
             loading={priceLoading}
           />
@@ -136,6 +145,9 @@ export default function Position() {
               ['Market value', formatUsdPrecise(position.value)],
               ['Cost basis', formatUsdPrecise(costBasis)],
               ['Avg entry', formatUsdPrecise(position.avgEntryPrice)],
+              ...(position.metrics?.avgExitPrice != null
+                ? [['Avg sell', formatUsdPrecise(position.metrics.avgExitPrice)] as const]
+                : []),
               ['Holdings', position.quantity.toLocaleString(undefined, { maximumFractionDigits: 8 })],
               ['Duration', `${position.durationDays} days`],
             ].map(([label, val], idx, arr) => (

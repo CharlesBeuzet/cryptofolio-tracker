@@ -64,6 +64,9 @@ export const GET_POSITION = gql`
       firstBoughtAt
       exchange
       durationDays
+      metrics {
+        avgExitPrice
+      }
       orders {
         id
         symbol
