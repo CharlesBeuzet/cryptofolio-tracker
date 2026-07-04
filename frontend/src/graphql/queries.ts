@@ -64,6 +64,9 @@ export const GET_POSITION = gql`
       firstBoughtAt
       exchange
       durationDays
+      metrics {
+        avgExitPrice
+      }
       orders {
         id
         symbol
@@ -102,6 +105,27 @@ export const GET_DAILY_PNL_HISTORY = gql`
       date
       pnl
       pnlPercent
+    }
+  }
+`
+
+export const GET_ASSET_PRICE_HISTORY = gql`
+  query GetAssetPriceHistory($symbol: String!, $days: Int!) {
+    assetPriceHistory(symbol: $symbol, days: $days) {
+      symbol
+      days
+      isMock
+      resolutionStatus
+      ambiguityMessage
+      candidates {
+        id
+        name
+        symbol
+      }
+      points {
+        timestamp
+        price
+      }
     }
   }
 `

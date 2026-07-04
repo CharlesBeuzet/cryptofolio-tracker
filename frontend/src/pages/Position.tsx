@@ -1,10 +1,10 @@
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@apollo/client'
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { format } from 'date-fns'
-import { GET_POSITION, GET_PORTFOLIO } from '../graphql/queries'
-import PositionChart from '../components/charts/PositionChart'
-import RangeSegment, { type RangeKey } from '../components/common/RangeSegment'
+import { GET_POSITION, GET_PORTFOLIO, GET_ASSET_PRICE_HISTORY } from '../graphql/queries'
+import AssetPriceChart from '../components/charts/AssetPriceChart'
+import RangeSegment, { type RangeKey, rangeToDays } from '../components/common/RangeSegment'
 import { assetColor, formatPct, formatUsdPrecise, pnlColorClass } from '../utils/format'
 
 export default function Position() {
@@ -16,6 +16,31 @@ export default function Position() {
   const { data, loading, error } = useQuery(GET_POSITION, {
     variables: { id: parseInt(id || '0') },
   })
+
+  const positionSymbol = data?.position?.symbol
+  const days = rangeToDays(range)
+
+  const { data: priceData, loading: priceLoading } = useQuery(GET_ASSET_PRICE_HISTORY, {
+    variables: { symbol: positionSymbol || '', days },
+    skip: !positionSymbol,
+  })
+
+  const priceHistory = priceData?.assetPriceHistory?.points || []
+  const isMock = priceData?.assetPriceHistory?.isMock || false
+  const resolutionStatus = priceData?.assetPriceHistory?.resolutionStatus || 'resolved'
+  const ambiguityMessage = priceData?.assetPriceHistory?.ambiguityMessage
+  const candidates = priceData?.assetPriceHistory?.candidates || []
+
+  const ordersInRange = useMemo(() => {
+    const positionOrders = data?.position?.orders || []
+    if (priceHistory.length === 0) return positionOrders
+    const start = new Date(priceHistory[0].timestamp).getTime()
+    const end = new Date(priceHistory[priceHistory.length - 1].timestamp).getTime()
+    return positionOrders.filter((order: { executedAt: string }) => {
+      const ts = new Date(order.executedAt).getTime()
+      return ts >= start && ts <= end
+    })
+  }, [data?.position?.orders, priceHistory])
 
   if (loading) {
     return (
@@ -75,13 +100,21 @@ export default function Position() {
         <div className="panel flex-1 min-w-0">
           <div className="flex justify-between items-center mb-3.5">
             <div className="lbl">Fig 2 · Price · order markers</div>
-            <div className="font-mono text-[11px] flex gap-4">
+            <div className="font-mono text-[11px] flex gap-4 flex-wrap justify-end">
               <span>
-                <span className="text-sillage-green">●</span> buy
+                <span className="text-sillage-green font-bold">B</span> buy
               </span>
               <span>
-                <span className="text-sillage-accent">●</span> sell
+                <span className="text-sillage-accent font-bold">S</span> sell
               </span>
+              <span className="text-sillage-soft">
+                <span className="text-sillage-green">—</span> avg entry
+              </span>
+              {position.metrics?.avgExitPrice != null && (
+                <span className="text-sillage-soft">
+                  <span className="text-sillage-accent">—</span> avg sell
+                </span>
+              )}
               {position.currentPrice && (
                 <span className="text-sillage-soft">
                   last {formatUsdPrecise(position.currentPrice)}
@@ -89,7 +122,18 @@ export default function Position() {
               )}
             </div>
           </div>
-          <PositionChart position={position} />
+          <AssetPriceChart
+            symbol={position.symbol}
+            priceHistory={priceHistory}
+            orders={ordersInRange}
+            avgEntryPrice={position.avgEntryPrice}
+            avgExitPrice={position.metrics?.avgExitPrice}
+            isMock={isMock}
+            loading={priceLoading}
+            resolutionStatus={resolutionStatus}
+            ambiguityMessage={ambiguityMessage}
+            candidates={candidates}
+          />
         </div>
 
         <div className="panel w-full lg:w-[286px] flex-shrink-0">
@@ -107,6 +151,9 @@ export default function Position() {
               ['Market value', formatUsdPrecise(position.value)],
               ['Cost basis', formatUsdPrecise(costBasis)],
               ['Avg entry', formatUsdPrecise(position.avgEntryPrice)],
+              ...(position.metrics?.avgExitPrice != null
+                ? [['Avg sell', formatUsdPrecise(position.metrics.avgExitPrice)] as const]
+                : []),
               ['Holdings', position.quantity.toLocaleString(undefined, { maximumFractionDigits: 8 })],
               ['Duration', `${position.durationDays} days`],
             ].map(([label, val], idx, arr) => (
