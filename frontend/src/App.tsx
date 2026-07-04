@@ -3,6 +3,7 @@ import Home from './pages/Home'
 import Performance from './pages/Performance'
 import Position from './pages/Position'
 import FiatDeposits from './pages/FiatDeposits'
+import ChartComparison from './pages/ChartComparison'
 import Layout from './components/common/Layout'
 
 function App() {
@@ -14,6 +15,7 @@ function App() {
           <Route path="/performance" element={<Performance />} />
           <Route path="/fiat-deposits" element={<FiatDeposits />} />
           <Route path="/position/:id" element={<Position />} />
+          <Route path="/chart-comparison" element={<ChartComparison />} />
         </Routes>
       </Layout>
     </Router>
