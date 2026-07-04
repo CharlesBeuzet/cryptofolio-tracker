@@ -9,6 +9,17 @@ binance:
   # Optional: enable testnet
   # sandbox: false
 
+# OKX Exchange Configuration
+okx:
+  api_key: "your_okx_api_key_here"
+  api_secret: "your_okx_api_secret_here"
+  passphrase: "your_okx_passphrase_here"
+  # Optional: REST API hostname where the API key was created (ccxt default: www.okx.com)
+  # Examples: openapi.okx.com (global), my.okx.com (EEA), us.okx.com (US)
+  # hostname: "openapi.okx.com"
+  # Optional: enable demo trading (sandbox)
+  # sandbox: false
+
 # Coinbase Exchange Configuration
 coinbase:
   api_key: "your_coinbase_api_key_here"
