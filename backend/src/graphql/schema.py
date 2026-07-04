@@ -7,7 +7,38 @@ from strawberry.fastapi import GraphQLRouter
 from ..models.database import Position, Order, PortfolioSnapshot, Asset, PositionMetrics, SessionLocal
 from ..services.portfolio import PortfolioService
 from ..services.fiat_deposits import FiatDepositService
+from ..services.price_history import PriceHistoryService
 from ..services.metrics_helpers import cost_basis, cash_in_trade
+
+
+@strawberry.type
+class CoinGeckoCandidateType:
+    """One CoinGecko listing that shares a ticker symbol."""
+
+    id: str
+    name: str
+    symbol: str
+
+
+@strawberry.type
+class PricePointType:
+    """Single USD price observation."""
+
+    timestamp: datetime
+    price: float
+
+
+@strawberry.type
+class AssetPriceHistoryType:
+    """Market price history for one asset (not persisted)."""
+
+    symbol: str
+    days: int
+    is_mock: bool
+    resolution_status: str
+    ambiguity_message: Optional[str]
+    candidates: List[CoinGeckoCandidateType]
+    points: List[PricePointType]
 
 
 @strawberry.type
@@ -345,6 +376,27 @@ class Query:
             ]
         finally:
             db.close()
+
+    @strawberry.field
+    async def asset_price_history(self, symbol: str, days: int = 90) -> AssetPriceHistoryType:
+        """Fetch USD price history from CoinGecko (in-memory cache only)."""
+        service = PriceHistoryService()
+        result = await service.fetch(symbol, days)
+        return AssetPriceHistoryType(
+            symbol=symbol.upper(),
+            days=days,
+            is_mock=result.is_mock,
+            resolution_status=result.resolution_status,
+            ambiguity_message=result.ambiguity_message,
+            candidates=[
+                CoinGeckoCandidateType(id=c.id, name=c.name, symbol=c.symbol)
+                for c in result.candidates
+            ],
+            points=[
+                PricePointType(timestamp=row["timestamp"], price=row["price"])
+                for row in result.points
+            ],
+        )
 
 
 schema = strawberry.Schema(query=Query)
