@@ -378,10 +378,15 @@ class Query:
             db.close()
 
     @strawberry.field
-    async def asset_price_history(self, symbol: str, days: int = 90) -> AssetPriceHistoryType:
-        """Fetch USD price history from CoinGecko (in-memory cache only)."""
+    async def asset_price_history(
+        self,
+        symbol: str,
+        days: int = 90,
+        exchange: Optional[str] = None,
+    ) -> AssetPriceHistoryType:
+        """Fetch USDT price history from the position's exchange (in-memory cache only)."""
         service = PriceHistoryService()
-        result = await service.fetch(symbol, days)
+        result = await service.fetch(symbol, days, exchange)
         return AssetPriceHistoryType(
             symbol=symbol.upper(),
             days=days,

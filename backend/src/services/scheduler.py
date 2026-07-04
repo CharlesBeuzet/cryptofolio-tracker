@@ -1,14 +1,10 @@
 """Scheduler service for periodic data updates."""
-import yaml
 from pathlib import Path
-from typing import List
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from ..models.database import SessionLocal
-from ..connectors.base import BaseConnector
-from ..connectors.binance import BinanceConnector
-from ..connectors.okx import OkxConnector
+from ..connectors.registry import load_connectors
 from .fiat_deposits import FiatDepositService
 from .assets import AssetsService
 from .orders import OrderService
@@ -24,32 +20,10 @@ class DataUpdateScheduler:
             config_path = str(BASE_DIR / "settings" / "config.yaml")
         self.config_path = config_path
         self.scheduler = AsyncIOScheduler()
-        self.connectors: List[BaseConnector] = []
-        self._load_connectors()
-
-    def _load_connectors(self):
-        """Load connectors from configuration."""
-        config_file = Path(self.config_path)
-        if not config_file.exists():
-            print(f"Warning: Config file {self.config_path} not found. Skipping connector setup.")
-            return
-
-        with open(config_file, "r") as f:
-            config = yaml.safe_load(f)
-
-        if config.get("binance"):
-            try:
-                self.connectors.append(BinanceConnector(config["binance"]))
-                print("Binance connector initialized")
-            except Exception as e:
-                print(f"Failed to initialize Binance connector: {e}")
-
-        if config.get("okx"):
-            try:
-                self.connectors.append(OkxConnector(config["okx"]))
-                print("OKX connector initialized")
-            except Exception as e:
-                print(f"Failed to initialize OKX connector: {e}")
+        self.connectors = load_connectors(self.config_path)
+        if self.connectors:
+            for connector in self.connectors:
+                print(f"{connector.name} connector initialized")
 
     async def update_portfolio_data(self):
         """Update portfolio data from all connectors."""

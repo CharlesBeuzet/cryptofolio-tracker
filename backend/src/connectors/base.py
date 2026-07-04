@@ -1,5 +1,6 @@
 """Base connector interface for data providers."""
 from abc import ABC, abstractmethod
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 
@@ -84,6 +85,78 @@ class BaseConnector(ABC):
             executed_at (datetime), exchange.
         """
         return []
+
+    def fetch_price_history_sync(
+        self,
+        market_pair: str,
+        since_ms: int,
+        *,
+        days: int,
+    ) -> List[Dict[str, Any]]:
+        """
+        Historical market prices for one spot pair (scheduler-safe sync HTTP).
+
+        Uses daily candles when ``days`` is over 90, otherwise hourly candles.
+        Returns normalized rows: timestamp (datetime UTC), price (float).
+        """
+        exchange = getattr(self, "exchange", None)
+        if exchange is None:
+            return []
+
+        timeframe = "1d" if days > 90 else "1h"
+        limit = 1000
+        now_ms = int(datetime.now(tz=timezone.utc).timestamp() * 1000)
+        since = since_ms
+        raw_candles: List[List[float]] = []
+
+        while since < now_ms:
+            try:
+                batch = exchange.fetch_ohlcv(
+                    market_pair,
+                    timeframe,
+                    since=since,
+                    limit=limit,
+                )
+            except Exception as exc:
+                print(
+                    f"Error fetching {timeframe} OHLCV for {market_pair} "
+                    f"from {self.name}: {exc}"
+                )
+                break
+            if not batch:
+                break
+            raw_candles.extend(batch)
+            last_ts = int(batch[-1][0])
+            if len(batch) < limit or last_ts >= now_ms:
+                break
+            since = last_ts + 1
+
+        points: List[Dict[str, Any]] = []
+        seen_ts: set[int] = set()
+        for candle in raw_candles:
+            if len(candle) < 5:
+                continue
+            ts_ms = int(candle[0])
+            if ts_ms in seen_ts:
+                continue
+            seen_ts.add(ts_ms)
+            try:
+                high = float(candle[2])
+                low = float(candle[3])
+                close = float(candle[4])
+            except (TypeError, ValueError):
+                continue
+            median = (high + low) / 2.0
+            price = median if median > 0 else close
+            points.append(
+                {
+                    "timestamp": datetime.fromtimestamp(
+                        ts_ms / 1000.0, tz=timezone.utc
+                    ),
+                    "price": price,
+                }
+            )
+        return points
 
     def fetch_fiat_deposit_orders_sync(self, rows: int = 100) -> List[Dict[str, Any]]:
         """

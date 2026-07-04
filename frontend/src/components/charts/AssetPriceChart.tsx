@@ -157,11 +157,11 @@ export default function AssetPriceChart({
           {resolutionStatus === 'ambiguous' ? 'Ambiguous symbol' : 'Symbol not found'}
         </div>
         <p className="font-mono text-xs text-sillage-soft leading-relaxed max-w-xl">
-          {ambiguityMessage || `Unable to load CoinGecko price history for ${symbol}.`}
+          {ambiguityMessage || `Unable to load price history for ${symbol}.`}
         </p>
         {candidates.length > 0 && (
           <div className="mt-4 border-t border-sillage-line pt-3">
-            <div className="lbl mb-2">Matching CoinGecko assets</div>
+            <div className="lbl mb-2">Matching assets</div>
             <div className="space-y-2 max-h-[140px] overflow-y-auto">
               {candidates.map((candidate) => (
                 <div

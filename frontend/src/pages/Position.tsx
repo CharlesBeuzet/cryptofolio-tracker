@@ -18,11 +18,12 @@ export default function Position() {
   })
 
   const positionSymbol = data?.position?.symbol
+  const positionExchange = data?.position?.exchange
   const days = rangeToDays(range)
 
   const { data: priceData, loading: priceLoading } = useQuery(GET_ASSET_PRICE_HISTORY, {
-    variables: { symbol: positionSymbol || '', days },
-    skip: !positionSymbol,
+    variables: { symbol: positionSymbol || '', days, exchange: positionExchange || null },
+    skip: !positionSymbol || !positionExchange,
   })
 
   const priceHistory = priceData?.assetPriceHistory?.points || []
