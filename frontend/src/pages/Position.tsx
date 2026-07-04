@@ -1,10 +1,10 @@
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@apollo/client'
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { format } from 'date-fns'
-import { GET_POSITION, GET_PORTFOLIO } from '../graphql/queries'
-import PositionChart from '../components/charts/PositionChart'
-import RangeSegment, { type RangeKey } from '../components/common/RangeSegment'
+import { GET_POSITION, GET_PORTFOLIO, GET_ASSET_PRICE_HISTORY } from '../graphql/queries'
+import AssetPriceChart from '../components/charts/AssetPriceChart'
+import RangeSegment, { type RangeKey, rangeToDays } from '../components/common/RangeSegment'
 import { assetColor, formatPct, formatUsdPrecise, pnlColorClass } from '../utils/format'
 
 export default function Position() {
@@ -16,6 +16,28 @@ export default function Position() {
   const { data, loading, error } = useQuery(GET_POSITION, {
     variables: { id: parseInt(id || '0') },
   })
+
+  const positionSymbol = data?.position?.symbol
+  const days = rangeToDays(range)
+
+  const { data: priceData, loading: priceLoading } = useQuery(GET_ASSET_PRICE_HISTORY, {
+    variables: { symbol: positionSymbol || '', days },
+    skip: !positionSymbol,
+  })
+
+  const priceHistory = priceData?.assetPriceHistory?.points || []
+  const isMock = priceData?.assetPriceHistory?.isMock || false
+
+  const ordersInRange = useMemo(() => {
+    const positionOrders = data?.position?.orders || []
+    if (priceHistory.length === 0) return positionOrders
+    const start = new Date(priceHistory[0].timestamp).getTime()
+    const end = new Date(priceHistory[priceHistory.length - 1].timestamp).getTime()
+    return positionOrders.filter((order: { executedAt: string }) => {
+      const ts = new Date(order.executedAt).getTime()
+      return ts >= start && ts <= end
+    })
+  }, [data?.position?.orders, priceHistory])
 
   if (loading) {
     return (
@@ -89,7 +111,14 @@ export default function Position() {
               )}
             </div>
           </div>
-          <PositionChart position={position} />
+          <AssetPriceChart
+            symbol={position.symbol}
+            priceHistory={priceHistory}
+            orders={ordersInRange}
+            avgEntryPrice={position.avgEntryPrice}
+            isMock={isMock}
+            loading={priceLoading}
+          />
         </div>
 
         <div className="panel w-full lg:w-[286px] flex-shrink-0">

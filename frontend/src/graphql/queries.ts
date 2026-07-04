@@ -106,6 +106,20 @@ export const GET_DAILY_PNL_HISTORY = gql`
   }
 `
 
+export const GET_ASSET_PRICE_HISTORY = gql`
+  query GetAssetPriceHistory($symbol: String!, $days: Int!) {
+    assetPriceHistory(symbol: $symbol, days: $days) {
+      symbol
+      days
+      isMock
+      points {
+        timestamp
+        price
+      }
+    }
+  }
+`
+
 export const GET_FIAT_DEPOSITS_SUMMARY = gql`
   query GetFiatDepositsSummary {
     fiatDepositsSummary {
