@@ -7,7 +7,26 @@ from strawberry.fastapi import GraphQLRouter
 from ..models.database import Position, Order, PortfolioSnapshot, Asset, PositionMetrics, SessionLocal
 from ..services.portfolio import PortfolioService
 from ..services.fiat_deposits import FiatDepositService
+from ..services.price_history import PriceHistoryService
 from ..services.metrics_helpers import cost_basis, cash_in_trade
+
+
+@strawberry.type
+class PricePointType:
+    """Single USD price observation."""
+
+    timestamp: datetime
+    price: float
+
+
+@strawberry.type
+class AssetPriceHistoryType:
+    """Market price history for one asset (not persisted)."""
+
+    symbol: str
+    days: int
+    is_mock: bool
+    points: List[PricePointType]
 
 
 @strawberry.type
@@ -345,6 +364,21 @@ class Query:
             ]
         finally:
             db.close()
+
+    @strawberry.field
+    async def asset_price_history(self, symbol: str, days: int = 90) -> AssetPriceHistoryType:
+        """Fetch USD price history from CoinGecko (in-memory cache only)."""
+        service = PriceHistoryService()
+        rows, is_mock = await service.fetch(symbol, days)
+        return AssetPriceHistoryType(
+            symbol=symbol.upper(),
+            days=days,
+            is_mock=is_mock,
+            points=[
+                PricePointType(timestamp=row["timestamp"], price=row["price"])
+                for row in rows
+            ],
+        )
 
 
 schema = strawberry.Schema(query=Query)

@@ -56,8 +56,25 @@ hot_wallets:
     #   chain: "ethereum"
     #   tokens: []
 
+# CoinGecko API Configuration (asset price history charts)
+coingecko:
+  # Public API base URL (use https://pro-api.coingecko.com/api/v3 with a Pro key)
+  base_url: "https://api.coingecko.com/api/v3"
+  # Optional: CoinGecko Demo/Pro API key (sent as x-cg-pro-api-key header)
+  api_key: "your_coingecko_api_key_here"
+  # In-memory cache TTL for price history responses (seconds)
+  cache_ttl_seconds: 300
+  # Set true to serve synthetic price data (useful for demos / video testing)
+  mock: false
+  # Optional symbol → CoinGecko coin id overrides (portfolio symbols are uppercase)
+  symbol_ids:
+    BTC: "bitcoin"
+    ETH: "ethereum"
+    SOL: "solana"
+
 # Notes:
 # - For exchanges: Only provide API keys with read-only permissions for security
 # - For hot wallets: Only public addresses are needed (no private keys required)
 # - RPC endpoints: Free public RPCs are used by default, but you can use your own for better reliability
+# - CoinGecko: price history is fetched on demand and never stored in portfolio.db
 
