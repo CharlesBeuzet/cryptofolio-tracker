@@ -22,9 +22,13 @@ class CoinGeckoCandidateType:
 
 @strawberry.type
 class PricePointType:
-    """Single USD price observation."""
+    """Single OHLC price candle."""
 
     timestamp: datetime
+    open: float
+    high: float
+    low: float
+    close: float
     price: float
 
 
@@ -398,7 +402,14 @@ class Query:
                 for c in result.candidates
             ],
             points=[
-                PricePointType(timestamp=row["timestamp"], price=row["price"])
+                PricePointType(
+                    timestamp=row["timestamp"],
+                    open=row["open"],
+                    high=row["high"],
+                    low=row["low"],
+                    close=row["close"],
+                    price=row["price"],
+                )
                 for row in result.points
             ],
         )

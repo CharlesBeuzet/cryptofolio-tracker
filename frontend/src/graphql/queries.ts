@@ -124,6 +124,10 @@ export const GET_ASSET_PRICE_HISTORY = gql`
       }
       points {
         timestamp
+        open
+        high
+        low
+        close
         price
       }
     }

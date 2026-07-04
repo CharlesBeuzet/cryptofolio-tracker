@@ -97,7 +97,8 @@ class BaseConnector(ABC):
         Historical market prices for one spot pair (scheduler-safe sync HTTP).
 
         Uses daily candles when ``days`` is over 90, otherwise hourly candles.
-        Returns normalized rows: timestamp (datetime UTC), price (float).
+        Returns normalized rows: timestamp (datetime UTC), open, high, low, close,
+        and price (alias of close for backward compatibility).
         """
         exchange = getattr(self, "exchange", None)
         if exchange is None:
@@ -141,19 +142,22 @@ class BaseConnector(ABC):
                 continue
             seen_ts.add(ts_ms)
             try:
+                open_ = float(candle[1])
                 high = float(candle[2])
                 low = float(candle[3])
                 close = float(candle[4])
             except (TypeError, ValueError):
                 continue
-            median = (high + low) / 2.0
-            price = median if median > 0 else close
             points.append(
                 {
                     "timestamp": datetime.fromtimestamp(
                         ts_ms / 1000.0, tz=timezone.utc
                     ),
-                    "price": price,
+                    "open": open_,
+                    "high": high,
+                    "low": low,
+                    "close": close,
+                    "price": close,
                 }
             )
         return points

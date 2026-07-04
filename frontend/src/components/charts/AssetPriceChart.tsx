@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import {
   CartesianGrid,
   ComposedChart,
+  Customized,
   Line,
   ReferenceLine,
   ResponsiveContainer,
@@ -16,6 +17,10 @@ import { formatUsdPrecise } from '../../utils/format'
 
 interface PricePoint {
   timestamp: string
+  open: number
+  high: number
+  low: number
+  close: number
   price: number
 }
 
@@ -45,6 +50,25 @@ interface AssetPriceChartProps {
   candidates?: CoinGeckoCandidate[]
 }
 
+interface CandleDatum {
+  timestamp: number
+  open: number
+  high: number
+  low: number
+  close: number
+}
+
+interface AxisMapEntry {
+  scale?: (value: number) => number
+}
+
+interface CandlestickLayerProps {
+  xAxisMap?: Record<string, AxisMapEntry>
+  yAxisMap?: Record<string, AxisMapEntry>
+  data?: CandleDatum[]
+  offset?: { left?: number; width?: number }
+}
+
 function buildDemoOrders(priceHistory: PricePoint[]): Order[] {
   if (priceHistory.length < 4) return []
 
@@ -60,10 +84,86 @@ function buildDemoOrders(priceHistory: PricePoint[]): Order[] {
     return {
       executedAt: point.timestamp,
       type: i % 3 === 2 ? 'sell' : 'buy',
-      price: point.price,
+      price: point.close,
       quantity: 0.5 + i * 0.25,
     }
   })
+}
+
+function computeYDomain(
+  candles: CandleDatum[],
+  orderPrices: number[],
+  avgEntryPrice: number,
+  avgExitPrice?: number | null,
+): [number, number] {
+  const values: number[] = []
+  for (const candle of candles) {
+    values.push(candle.low, candle.high)
+  }
+  values.push(...orderPrices)
+  if (avgEntryPrice > 0) values.push(avgEntryPrice)
+  if (avgExitPrice != null && avgExitPrice > 0) values.push(avgExitPrice)
+
+  if (values.length === 0) return [0, 1]
+
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  const span = max - min
+  const pad = span > 0 ? span * 0.06 : Math.max(Math.abs(min) * 0.01, 1)
+  return [min - pad, max + pad]
+}
+
+function CandlestickLayer({ xAxisMap, yAxisMap, data, offset }: CandlestickLayerProps) {
+  const xAxis = xAxisMap ? Object.values(xAxisMap)[0] : undefined
+  const yAxis = yAxisMap ? Object.values(yAxisMap)[0] : undefined
+  const xScale = xAxis?.scale
+  const yScale = yAxis?.scale
+
+  if (!xScale || !yScale || !data?.length) return null
+
+  const slot =
+    data.length > 1
+      ? Math.abs(xScale(data[1].timestamp) - xScale(data[0].timestamp))
+      : (offset?.width ?? 300) / Math.max(data.length, 1)
+  const bodyWidth = Math.max(2, slot * 0.62)
+
+  return (
+    <g className="candlestick-layer">
+      {data.map((candle) => {
+        const x = xScale(candle.timestamp)
+        const yHigh = yScale(candle.high)
+        const yLow = yScale(candle.low)
+        const yOpen = yScale(candle.open)
+        const yClose = yScale(candle.close)
+        const bullish = candle.close >= candle.open
+        const color = bullish ? 'var(--green)' : 'var(--accent)'
+        const bodyTop = Math.min(yOpen, yClose)
+        const bodyHeight = Math.max(Math.abs(yClose - yOpen), 1)
+
+        return (
+          <g key={candle.timestamp}>
+            <line
+              x1={x}
+              y1={yHigh}
+              x2={x}
+              y2={yLow}
+              stroke={color}
+              strokeWidth={1}
+            />
+            <rect
+              x={x - bodyWidth / 2}
+              y={bodyTop}
+              width={bodyWidth}
+              height={bodyHeight}
+              fill={color}
+              stroke={color}
+              strokeWidth={0.5}
+            />
+          </g>
+        )
+      })}
+    </g>
+  )
 }
 
 function OrderPin({
@@ -123,11 +223,14 @@ export default function AssetPriceChart({
     return []
   }, [orders, isMock, priceHistory])
 
-  const lineData = useMemo(
+  const candleData = useMemo<CandleDatum[]>(
     () =>
       priceHistory.map((point) => ({
         timestamp: new Date(point.timestamp).getTime(),
-        price: point.price,
+        open: point.open,
+        high: point.high,
+        low: point.low,
+        close: point.close,
       })),
     [priceHistory],
   )
@@ -140,6 +243,17 @@ export default function AssetPriceChart({
         type: order.type,
       })),
     [displayOrders],
+  )
+
+  const yDomain = useMemo(
+    () =>
+      computeYDomain(
+        candleData,
+        orderData.map((order) => order.price),
+        avgEntryPrice,
+        avgExitPrice,
+      ),
+    [candleData, orderData, avgEntryPrice, avgExitPrice],
   )
 
   if (loading) {
@@ -195,7 +309,7 @@ export default function AssetPriceChart({
         </div>
       )}
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={lineData} margin={{ top: 16, right: 12, left: 0, bottom: 0 }}>
+        <ComposedChart data={candleData} margin={{ top: 16, right: 12, left: 0, bottom: 0 }}>
           <CartesianGrid stroke="var(--line)" strokeDasharray="0" vertical={false} />
           <XAxis
             dataKey="timestamp"
@@ -210,7 +324,7 @@ export default function AssetPriceChart({
             tick={{ fill: 'var(--soft)', fontSize: 9, fontFamily: 'IBM Plex Mono, monospace' }}
             axisLine={false}
             tickLine={false}
-            domain={['auto', 'auto']}
+            domain={yDomain}
             width={60}
             tickFormatter={(value) => `$${Number(value).toLocaleString()}`}
           />
@@ -223,11 +337,16 @@ export default function AssetPriceChart({
               fontFamily: 'IBM Plex Mono, monospace',
               fontSize: '11px',
             }}
-            labelFormatter={(value) => format(new Date(value), 'MMM dd, yyyy')}
-            formatter={(value: number, name: string) => [
-              formatUsdPrecise(value),
-              name === 'price' ? `${symbol} price` : name,
-            ]}
+            labelFormatter={(value) => format(new Date(value), 'MMM dd, yyyy HH:mm')}
+            formatter={(value: number, name: string) => {
+              const labels: Record<string, string> = {
+                open: 'Open',
+                high: 'High',
+                low: 'Low',
+                close: 'Close',
+              }
+              return [formatUsdPrecise(value), labels[name] ?? name]
+            }}
           />
           {avgEntryPrice > 0 && (
             <ReferenceLine
@@ -257,13 +376,38 @@ export default function AssetPriceChart({
               }}
             />
           )}
+          <Customized component={CandlestickLayer} />
           <Line
             type="monotone"
-            dataKey="price"
-            stroke="var(--green)"
-            strokeWidth={1.8}
+            dataKey="close"
+            stroke="transparent"
             dot={false}
-            name="price"
+            activeDot={{ r: 3, fill: 'var(--green)', stroke: 'var(--card)' }}
+            name="close"
+          />
+          <Line
+            type="monotone"
+            dataKey="open"
+            stroke="transparent"
+            dot={false}
+            activeDot={false}
+            name="open"
+          />
+          <Line
+            type="monotone"
+            dataKey="high"
+            stroke="transparent"
+            dot={false}
+            activeDot={false}
+            name="high"
+          />
+          <Line
+            type="monotone"
+            dataKey="low"
+            stroke="transparent"
+            dot={false}
+            activeDot={false}
+            name="low"
           />
           <Scatter
             data={orderData}
