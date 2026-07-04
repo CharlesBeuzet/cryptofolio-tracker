@@ -1,6 +1,6 @@
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@apollo/client'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { format } from 'date-fns'
 import { GET_POSITION, GET_PORTFOLIO, GET_ASSET_PRICE_HISTORY } from '../graphql/queries'
 import AssetPriceChart from '../components/charts/AssetPriceChart'
@@ -11,6 +11,9 @@ export default function Position() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [range, setRange] = useState<RangeKey>('90d')
+  const [hoveredCandle, setHoveredCandle] = useState<{ timestamp: number; close: number } | null>(
+    null,
+  )
 
   const { data: portfolioData } = useQuery(GET_PORTFOLIO)
   const { data, loading, error } = useQuery(GET_POSITION, {
@@ -20,6 +23,10 @@ export default function Position() {
   const positionSymbol = data?.position?.symbol
   const positionExchange = data?.position?.exchange
   const days = rangeToDays(range)
+
+  useEffect(() => {
+    setHoveredCandle(null)
+  }, [range, positionSymbol])
 
   const { data: priceData, loading: priceLoading } = useQuery(GET_ASSET_PRICE_HISTORY, {
     variables: { symbol: positionSymbol || '', days, exchange: positionExchange || null },
@@ -116,10 +123,17 @@ export default function Position() {
                   <span className="text-sillage-accent">—</span> avg sell
                 </span>
               )}
-              {position.currentPrice && (
-                <span className="text-sillage-soft">
-                  last {formatUsdPrecise(position.currentPrice)}
+              {hoveredCandle ? (
+                <span className="text-sillage-ink tabular-nums">
+                  {format(new Date(hoveredCandle.timestamp), 'MMM dd, yyyy')} ·{' '}
+                  {formatUsdPrecise(hoveredCandle.close)}
                 </span>
+              ) : (
+                position.currentPrice && (
+                  <span className="text-sillage-soft">
+                    last {formatUsdPrecise(position.currentPrice)}
+                  </span>
+                )
               )}
             </div>
           </div>
@@ -134,6 +148,7 @@ export default function Position() {
             resolutionStatus={resolutionStatus}
             ambiguityMessage={ambiguityMessage}
             candidates={candidates}
+            onCandleHover={setHoveredCandle}
           />
         </div>
 
