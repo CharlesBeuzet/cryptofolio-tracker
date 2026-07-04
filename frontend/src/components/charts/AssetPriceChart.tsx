@@ -89,19 +89,11 @@ function buildDemoOrders(priceHistory: PricePoint[]): Order[] {
   })
 }
 
-function computeYDomain(
-  candles: CandleDatum[],
-  orderPrices: number[],
-  avgEntryPrice: number,
-  avgExitPrice?: number | null,
-): [number, number] {
+function computeYDomain(candles: CandleDatum[]): [number, number] {
   const values: number[] = []
   for (const candle of candles) {
     values.push(candle.low, candle.high)
   }
-  values.push(...orderPrices)
-  if (avgEntryPrice > 0) values.push(avgEntryPrice)
-  if (avgExitPrice != null && avgExitPrice > 0) values.push(avgExitPrice)
 
   if (values.length === 0) return [0, 1]
 
@@ -272,16 +264,7 @@ export default function AssetPriceChart({
     [displayOrders],
   )
 
-  const yDomain = useMemo(
-    () =>
-      computeYDomain(
-        candleData,
-        orderData.map((order) => order.price),
-        avgEntryPrice,
-        avgExitPrice,
-      ),
-    [candleData, orderData, avgEntryPrice, avgExitPrice],
-  )
+  const yDomain = useMemo(() => computeYDomain(candleData), [candleData])
 
   useEffect(() => {
     setActiveTimestamp(null)
