@@ -26,6 +26,12 @@ interface Order {
   quantity: number
 }
 
+interface CoinGeckoCandidate {
+  id: string
+  name: string
+  symbol: string
+}
+
 interface AssetPriceChartProps {
   symbol: string
   priceHistory: PricePoint[]
@@ -34,6 +40,9 @@ interface AssetPriceChartProps {
   avgExitPrice?: number | null
   isMock?: boolean
   loading?: boolean
+  resolutionStatus?: string
+  ambiguityMessage?: string | null
+  candidates?: CoinGeckoCandidate[]
 }
 
 function buildDemoOrders(priceHistory: PricePoint[]): Order[] {
@@ -104,6 +113,9 @@ export default function AssetPriceChart({
   avgExitPrice,
   isMock = false,
   loading = false,
+  resolutionStatus = 'resolved',
+  ambiguityMessage,
+  candidates = [],
 }: AssetPriceChartProps) {
   const displayOrders = useMemo(() => {
     if (orders.length > 0) return orders
@@ -134,6 +146,35 @@ export default function AssetPriceChart({
     return (
       <div className="flex items-center justify-center h-[300px] text-sillage-soft text-sm font-mono">
         Loading price history…
+      </div>
+    )
+  }
+
+  if (resolutionStatus === 'ambiguous' || resolutionStatus === 'not_found') {
+    return (
+      <div className="flex flex-col justify-center h-[300px] px-2">
+        <div className="lbl mb-2">
+          {resolutionStatus === 'ambiguous' ? 'Ambiguous symbol' : 'Symbol not found'}
+        </div>
+        <p className="font-mono text-xs text-sillage-soft leading-relaxed max-w-xl">
+          {ambiguityMessage || `Unable to load CoinGecko price history for ${symbol}.`}
+        </p>
+        {candidates.length > 0 && (
+          <div className="mt-4 border-t border-sillage-line pt-3">
+            <div className="lbl mb-2">Matching CoinGecko assets</div>
+            <div className="space-y-2 max-h-[140px] overflow-y-auto">
+              {candidates.map((candidate) => (
+                <div
+                  key={candidate.id}
+                  className="flex justify-between gap-3 font-mono text-[11px] border-b border-sillage-line pb-2 last:border-b-0"
+                >
+                  <span className="text-sillage-ink">{candidate.name}</span>
+                  <span className="text-sillage-soft shrink-0">{candidate.id}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     )
   }

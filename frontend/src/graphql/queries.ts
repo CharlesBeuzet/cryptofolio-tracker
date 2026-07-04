@@ -115,6 +115,13 @@ export const GET_ASSET_PRICE_HISTORY = gql`
       symbol
       days
       isMock
+      resolutionStatus
+      ambiguityMessage
+      candidates {
+        id
+        name
+        symbol
+      }
       points {
         timestamp
         price

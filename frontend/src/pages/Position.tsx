@@ -27,6 +27,9 @@ export default function Position() {
 
   const priceHistory = priceData?.assetPriceHistory?.points || []
   const isMock = priceData?.assetPriceHistory?.isMock || false
+  const resolutionStatus = priceData?.assetPriceHistory?.resolutionStatus || 'resolved'
+  const ambiguityMessage = priceData?.assetPriceHistory?.ambiguityMessage
+  const candidates = priceData?.assetPriceHistory?.candidates || []
 
   const ordersInRange = useMemo(() => {
     const positionOrders = data?.position?.orders || []
@@ -127,6 +130,9 @@ export default function Position() {
             avgExitPrice={position.metrics?.avgExitPrice}
             isMock={isMock}
             loading={priceLoading}
+            resolutionStatus={resolutionStatus}
+            ambiguityMessage={ambiguityMessage}
+            candidates={candidates}
           />
         </div>
 
