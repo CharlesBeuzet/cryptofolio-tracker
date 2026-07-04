@@ -21,15 +21,17 @@ class OkxConnector(BaseConnector):
         api_key = config.get("api_key", "")
         api_secret = config.get("api_secret", "")
         passphrase = config.get("passphrase", "")
-        self.exchange = ccxt.okx(
-            {
-                "apiKey": api_key,
-                "secret": api_secret,
-                "password": passphrase,
-                "enableRateLimit": True,
-                "options": {"defaultType": "spot"},
-            }
-        )
+        exchange_config: Dict[str, Any] = {
+            "apiKey": api_key,
+            "secret": api_secret,
+            "password": passphrase,
+            "enableRateLimit": True,
+            "options": {"defaultType": "spot"},
+        }
+        hostname = config.get("hostname")
+        if hostname:
+            exchange_config["hostname"] = hostname
+        self.exchange = ccxt.okx(exchange_config)
         if config.get("sandbox"):
             self.exchange.set_sandbox_mode(True)
 
