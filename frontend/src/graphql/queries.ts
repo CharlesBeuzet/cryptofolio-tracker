@@ -110,8 +110,8 @@ export const GET_DAILY_PNL_HISTORY = gql`
 `
 
 export const GET_ASSET_PRICE_HISTORY = gql`
-  query GetAssetPriceHistory($symbol: String!, $days: Int!) {
-    assetPriceHistory(symbol: $symbol, days: $days) {
+  query GetAssetPriceHistory($symbol: String!, $days: Int!, $exchange: String) {
+    assetPriceHistory(symbol: $symbol, days: $days, exchange: $exchange) {
       symbol
       days
       isMock
@@ -124,6 +124,10 @@ export const GET_ASSET_PRICE_HISTORY = gql`
       }
       points {
         timestamp
+        open
+        high
+        low
+        close
         price
       }
     }
