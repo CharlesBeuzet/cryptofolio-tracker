@@ -21,6 +21,7 @@ async def lifespan(app: FastAPI):
     scheduler.start()
     try:
         await scheduler.update_portfolio_data()
+        await scheduler.record_portfolio_snapshot()
     except Exception as e:
         print(f"Initial portfolio update failed: {e}")
     yield

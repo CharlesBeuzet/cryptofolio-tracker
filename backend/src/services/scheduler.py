@@ -9,6 +9,7 @@ from .fiat_deposits import FiatDepositService
 from .assets import AssetsService
 from .orders import OrderService
 from .analyzer import PositionAnalyzerService
+from .portfolio import PortfolioService
 
 
 class DataUpdateScheduler:
@@ -94,6 +95,37 @@ class DataUpdateScheduler:
         finally:
             db.close()
 
+    async def record_portfolio_snapshot(self):
+        """Refresh prices and persist a portfolio value snapshot."""
+        print("Recording portfolio snapshot...")
+        db = SessionLocal()
+        try:
+            analyzer = PositionAnalyzerService(db)
+            try:
+                refreshed = analyzer.refresh_all_open_prices()
+                if refreshed:
+                    print(
+                        f"Refreshed market metrics for {refreshed} open position(s) "
+                        "before snapshot."
+                    )
+            except Exception as e:
+                print(f"Error refreshing prices before snapshot: {e}")
+                db.rollback()
+
+            snapshot = PortfolioService(db).record_snapshot()
+            if snapshot:
+                print(
+                    f"Portfolio snapshot recorded: "
+                    f"${snapshot.total_value:,.2f} at {snapshot.timestamp.isoformat()}"
+                )
+            else:
+                print("Portfolio snapshot skipped (recent snapshot exists).")
+        except Exception as e:
+            print(f"Error recording portfolio snapshot: {e}")
+            db.rollback()
+        finally:
+            db.close()
+
     def start(self):
         """Start the scheduler."""
         self.scheduler.add_job(
@@ -103,8 +135,18 @@ class DataUpdateScheduler:
             name="Update portfolio data",
             replace_existing=True,
         )
+        self.scheduler.add_job(
+            self.record_portfolio_snapshot,
+            trigger=CronTrigger(minute=35, hour="0,6,12,18"),
+            id="portfolio_snapshot",
+            name="Record portfolio snapshot",
+            replace_existing=True,
+        )
         self.scheduler.start()
-        print("Scheduler started. Updates will run hourly.")
+        print(
+            "Scheduler started. Portfolio sync runs hourly; "
+            "snapshots run every 6 hours (00:35, 06:35, 12:35, 18:35 UTC)."
+        )
 
     def stop(self):
         """Stop the scheduler."""
