@@ -1,19 +1,16 @@
-import { useMemo } from 'react'
+import { useMemo, useState, useCallback, useEffect } from 'react'
 import {
   CartesianGrid,
   ComposedChart,
   Customized,
   Line,
+  ReferenceDot,
   ReferenceLine,
   ResponsiveContainer,
-  Scatter,
-  Tooltip,
   XAxis,
   YAxis,
-  ZAxis,
 } from 'recharts'
 import { format } from 'date-fns'
-import { formatUsdPrecise } from '../../utils/format'
 
 interface PricePoint {
   timestamp: string
@@ -48,6 +45,7 @@ interface AssetPriceChartProps {
   resolutionStatus?: string
   ambiguityMessage?: string | null
   candidates?: CoinGeckoCandidate[]
+  onCandleHover?: (payload: { timestamp: number; close: number } | null) => void
 }
 
 interface CandleDatum {
@@ -66,7 +64,8 @@ interface CandlestickLayerProps {
   xAxisMap?: Record<string, AxisMapEntry>
   yAxisMap?: Record<string, AxisMapEntry>
   data?: CandleDatum[]
-  offset?: { left?: number; width?: number }
+  offset?: { left?: number; width?: number; height?: number }
+  onCandleHover?: (payload: { timestamp: number; close: number } | null) => void
 }
 
 function buildDemoOrders(priceHistory: PricePoint[]): Order[] {
@@ -90,19 +89,11 @@ function buildDemoOrders(priceHistory: PricePoint[]): Order[] {
   })
 }
 
-function computeYDomain(
-  candles: CandleDatum[],
-  orderPrices: number[],
-  avgEntryPrice: number,
-  avgExitPrice?: number | null,
-): [number, number] {
+function computeYDomain(candles: CandleDatum[]): [number, number] {
   const values: number[] = []
   for (const candle of candles) {
     values.push(candle.low, candle.high)
   }
-  values.push(...orderPrices)
-  if (avgEntryPrice > 0) values.push(avgEntryPrice)
-  if (avgExitPrice != null && avgExitPrice > 0) values.push(avgExitPrice)
 
   if (values.length === 0) return [0, 1]
 
@@ -113,7 +104,7 @@ function computeYDomain(
   return [min - pad, max + pad]
 }
 
-function CandlestickLayer({ xAxisMap, yAxisMap, data, offset }: CandlestickLayerProps) {
+function CandlestickLayer({ xAxisMap, yAxisMap, data, offset, onCandleHover }: CandlestickLayerProps) {
   const xAxis = xAxisMap ? Object.values(xAxisMap)[0] : undefined
   const yAxis = yAxisMap ? Object.values(yAxisMap)[0] : undefined
   const xScale = xAxis?.scale
@@ -142,6 +133,16 @@ function CandlestickLayer({ xAxisMap, yAxisMap, data, offset }: CandlestickLayer
 
         return (
           <g key={candle.timestamp}>
+            <rect
+              x={x - slot / 2}
+              y={0}
+              width={slot}
+              height={offset?.height ?? 0}
+              fill="transparent"
+              onMouseEnter={() =>
+                onCandleHover?.({ timestamp: candle.timestamp, close: candle.close })
+              }
+            />
             <line
               x1={x}
               y1={yHigh}
@@ -149,6 +150,7 @@ function CandlestickLayer({ xAxisMap, yAxisMap, data, offset }: CandlestickLayer
               y2={yLow}
               stroke={color}
               strokeWidth={1}
+              pointerEvents="none"
             />
             <rect
               x={x - bodyWidth / 2}
@@ -158,6 +160,7 @@ function CandlestickLayer({ xAxisMap, yAxisMap, data, offset }: CandlestickLayer
               fill={color}
               stroke={color}
               strokeWidth={0.5}
+              pointerEvents="none"
             />
           </g>
         )
@@ -216,7 +219,23 @@ export default function AssetPriceChart({
   resolutionStatus = 'resolved',
   ambiguityMessage,
   candidates = [],
+  onCandleHover,
 }: AssetPriceChartProps) {
+  const [activeTimestamp, setActiveTimestamp] = useState<number | null>(null)
+
+  const handleCandleHover = useCallback(
+    (payload: { timestamp: number; close: number } | null) => {
+      setActiveTimestamp(payload?.timestamp ?? null)
+      onCandleHover?.(payload)
+    },
+    [onCandleHover],
+  )
+
+  const handleChartMouseLeave = useCallback(() => {
+    setActiveTimestamp(null)
+    onCandleHover?.(null)
+  }, [onCandleHover])
+
   const displayOrders = useMemo(() => {
     if (orders.length > 0) return orders
     if (isMock) return buildDemoOrders(priceHistory)
@@ -245,16 +264,11 @@ export default function AssetPriceChart({
     [displayOrders],
   )
 
-  const yDomain = useMemo(
-    () =>
-      computeYDomain(
-        candleData,
-        orderData.map((order) => order.price),
-        avgEntryPrice,
-        avgExitPrice,
-      ),
-    [candleData, orderData, avgEntryPrice, avgExitPrice],
-  )
+  const yDomain = useMemo(() => computeYDomain(candleData), [candleData])
+
+  useEffect(() => {
+    setActiveTimestamp(null)
+  }, [candleData])
 
   if (loading) {
     return (
@@ -302,7 +316,10 @@ export default function AssetPriceChart({
   }
 
   return (
-    <div className="relative h-[300px] w-full">
+    <div
+      className="relative h-[300px] w-full"
+      onMouseLeave={handleChartMouseLeave}
+    >
       {isMock && (
         <div className="absolute top-0 right-0 z-10 font-mono text-[9px] uppercase tracking-wider text-sillage-soft">
           demo data
@@ -314,6 +331,7 @@ export default function AssetPriceChart({
           <XAxis
             dataKey="timestamp"
             type="number"
+            scale="time"
             domain={['dataMin', 'dataMax']}
             tickFormatter={(value) => format(new Date(value), 'MMM dd')}
             tick={{ fill: 'var(--soft)', fontSize: 9, fontFamily: 'IBM Plex Mono, monospace' }}
@@ -327,26 +345,6 @@ export default function AssetPriceChart({
             domain={yDomain}
             width={60}
             tickFormatter={(value) => `$${Number(value).toLocaleString()}`}
-          />
-          <ZAxis range={[80, 80]} />
-          <Tooltip
-            contentStyle={{
-              backgroundColor: 'var(--card)',
-              border: '1px solid var(--line)',
-              borderRadius: '8px',
-              fontFamily: 'IBM Plex Mono, monospace',
-              fontSize: '11px',
-            }}
-            labelFormatter={(value) => format(new Date(value), 'MMM dd, yyyy HH:mm')}
-            formatter={(value: number, name: string) => {
-              const labels: Record<string, string> = {
-                open: 'Open',
-                high: 'High',
-                low: 'Low',
-                close: 'Close',
-              }
-              return [formatUsdPrecise(value), labels[name] ?? name]
-            }}
           />
           {avgEntryPrice > 0 && (
             <ReferenceLine
@@ -376,13 +374,27 @@ export default function AssetPriceChart({
               }}
             />
           )}
-          <Customized component={CandlestickLayer} />
+          <Customized
+            component={(props: CandlestickLayerProps) => (
+              <CandlestickLayer {...props} onCandleHover={handleCandleHover} />
+            )}
+          />
+          {activeTimestamp != null && (
+            <ReferenceLine
+              x={activeTimestamp}
+              stroke="var(--soft)"
+              strokeWidth={1}
+              strokeOpacity={0.55}
+              ifOverflow="extendDomain"
+            />
+          )}
           <Line
             type="monotone"
             dataKey="close"
             stroke="transparent"
             dot={false}
-            activeDot={{ r: 3, fill: 'var(--green)', stroke: 'var(--card)' }}
+            activeDot={false}
+            style={{ pointerEvents: 'none' }}
             name="close"
           />
           <Line
@@ -391,6 +403,7 @@ export default function AssetPriceChart({
             stroke="transparent"
             dot={false}
             activeDot={false}
+            style={{ pointerEvents: 'none' }}
             name="open"
           />
           <Line
@@ -399,6 +412,7 @@ export default function AssetPriceChart({
             stroke="transparent"
             dot={false}
             activeDot={false}
+            style={{ pointerEvents: 'none' }}
             name="high"
           />
           <Line
@@ -407,16 +421,20 @@ export default function AssetPriceChart({
             stroke="transparent"
             dot={false}
             activeDot={false}
+            style={{ pointerEvents: 'none' }}
             name="low"
           />
-          <Scatter
-            data={orderData}
-            dataKey="price"
-            name="orders"
-            shape={(props: { cx?: number; cy?: number; payload?: { type: string } }) => (
-              <OrderPin {...props} />
-            )}
-          />
+          {orderData.map((order, index) => (
+            <ReferenceDot
+              key={`${order.timestamp}-${order.type}-${index}`}
+              x={order.timestamp}
+              y={order.price}
+              isFront
+              shape={(props: { cx?: number; cy?: number }) => (
+                <OrderPin cx={props.cx} cy={props.cy} payload={{ type: order.type }} />
+              )}
+            />
+          ))}
         </ComposedChart>
       </ResponsiveContainer>
     </div>

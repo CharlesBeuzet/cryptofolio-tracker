@@ -96,7 +96,7 @@ class BaseConnector(ABC):
         """
         Historical market prices for one spot pair (scheduler-safe sync HTTP).
 
-        Uses daily candles when ``days`` is over 90, otherwise hourly candles.
+        Candle resolution by range: 24h → 1h, 7d → 4h, 30d → 12h, 90d → 1d, 1Y → 1w.
         Returns normalized rows: timestamp (datetime UTC), open, high, low, close,
         and price (alias of close for backward compatibility).
         """
@@ -104,7 +104,16 @@ class BaseConnector(ABC):
         if exchange is None:
             return []
 
-        timeframe = "1d" if days > 90 else "1h"
+        if days <= 1:
+            timeframe = "1h"
+        elif days <= 7:
+            timeframe = "4h"
+        elif days <= 30:
+            timeframe = "12h"
+        elif days <= 90:
+            timeframe = "1d"
+        else:
+            timeframe = "1w"
         limit = 1000
         now_ms = int(datetime.now(tz=timezone.utc).timestamp() * 1000)
         since = since_ms
