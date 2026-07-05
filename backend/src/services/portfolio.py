@@ -38,6 +38,30 @@ class PortfolioService:
                 total_value += position.quantity * price
         return total_value
 
+    def record_snapshot(self, min_interval_hours: float = 5.0) -> Optional[PortfolioSnapshot]:
+        """Persist the current portfolio total value as a historical snapshot.
+
+        Returns the new snapshot, or None if skipped because a recent one exists.
+        """
+        if min_interval_hours > 0:
+            cutoff = datetime.utcnow() - timedelta(hours=min_interval_hours)
+            recent = (
+                self.db.query(PortfolioSnapshot)
+                .filter(PortfolioSnapshot.timestamp >= cutoff)
+                .first()
+            )
+            if recent:
+                return None
+
+        snapshot = PortfolioSnapshot(
+            total_value=self.get_portfolio_value(),
+            timestamp=datetime.utcnow(),
+        )
+        self.db.add(snapshot)
+        self.db.commit()
+        self.db.refresh(snapshot)
+        return snapshot
+
     def get_todays_pnl(self) -> Dict[str, float]:
         """Calculate today's P&L."""
         today = datetime.utcnow().date()
