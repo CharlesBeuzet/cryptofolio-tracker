@@ -28,6 +28,7 @@ interface ThesisGroup {
 const VENUE_NOTES: Record<string, string> = {
   binance: 'Centralized exchange positions — liquid, actively rebalanced.',
   coinbase: 'Regulated venue holdings — lower counterparty risk profile.',
+  helius: 'Solana on-chain holdings — self-custody SPL tokens tracked via Helius.',
   wallet: 'Self-custody assets — full control, no exchange dependency.',
 }
 
