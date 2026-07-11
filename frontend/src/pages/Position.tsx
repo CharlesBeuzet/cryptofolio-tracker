@@ -5,7 +5,7 @@ import { format } from 'date-fns'
 import { GET_POSITION, GET_PORTFOLIO, GET_ASSET_PRICE_HISTORY } from '../graphql/queries'
 import AssetPriceChart from '../components/charts/AssetPriceChart'
 import RangeSegment, { type RangeKey, rangeToDays } from '../components/common/RangeSegment'
-import { assetColor, formatPct, formatUsdPrecise, pnlColorClass } from '../utils/format'
+import { assetColor, formatPct, formatTokenPrice, formatUsdPrecise, pnlColorClass } from '../utils/format'
 
 export default function Position() {
   const { id } = useParams<{ id: string }>()
@@ -126,12 +126,12 @@ export default function Position() {
               {hoveredCandle ? (
                 <span className="text-sillage-ink tabular-nums">
                   {format(new Date(hoveredCandle.timestamp), 'MMM dd, yyyy')} ·{' '}
-                  {formatUsdPrecise(hoveredCandle.close)}
+                  {formatTokenPrice(hoveredCandle.close)}
                 </span>
               ) : (
                 position.currentPrice && (
                   <span className="text-sillage-soft">
-                    last {formatUsdPrecise(position.currentPrice)}
+                    last {formatTokenPrice(position.currentPrice)}
                   </span>
                 )
               )}
@@ -166,9 +166,9 @@ export default function Position() {
             {[
               ['Market value', formatUsdPrecise(position.value)],
               ['Cost basis', formatUsdPrecise(costBasis)],
-              ['Avg entry', formatUsdPrecise(position.avgEntryPrice)],
+              ['Avg entry', formatTokenPrice(position.avgEntryPrice)],
               ...(position.metrics?.avgExitPrice != null
-                ? [['Avg sell', formatUsdPrecise(position.metrics.avgExitPrice)] as const]
+                ? [['Avg sell', formatTokenPrice(position.metrics.avgExitPrice)] as const]
                 : []),
               ['Holdings', position.quantity.toLocaleString(undefined, { maximumFractionDigits: 8 })],
               ['Duration', `${position.durationDays} days`],
@@ -223,7 +223,7 @@ export default function Position() {
                   {order.quantity.toLocaleString(undefined, { maximumFractionDigits: 8 })} {position.symbol}
                 </div>
                 <div className="w-24 text-right font-mono tabular-nums text-xs">
-                  {formatUsdPrecise(order.price)}
+                  {formatTokenPrice(order.price)}
                 </div>
                 <div className="w-24 text-right font-mono tabular-nums text-xs">
                   {formatUsdPrecise(total)}

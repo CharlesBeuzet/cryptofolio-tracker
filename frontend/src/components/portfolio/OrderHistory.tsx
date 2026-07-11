@@ -1,4 +1,5 @@
 import { format } from 'date-fns'
+import { formatTokenPrice } from '../../utils/format'
 
 interface Order {
   id: number
@@ -58,7 +59,7 @@ export default function OrderHistory({ orders }: OrderHistoryProps) {
               </div>
               <div className="text-sm text-gray-300">
                 <div>Qty: {order.quantity.toLocaleString(undefined, { maximumFractionDigits: 8 })}</div>
-                <div>Price: ${order.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                <div>Price: {formatTokenPrice(order.price)}</div>
                 <div className="text-white font-medium">
                   Total: ${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>

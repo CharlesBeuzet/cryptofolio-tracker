@@ -11,6 +11,7 @@ import {
   YAxis,
 } from 'recharts'
 import { format } from 'date-fns'
+import { formatTokenPrice } from '../../utils/format'
 
 interface PricePoint {
   timestamp: string
@@ -344,7 +345,7 @@ export default function AssetPriceChart({
             tickLine={false}
             domain={yDomain}
             width={60}
-            tickFormatter={(value) => `$${Number(value).toLocaleString()}`}
+            tickFormatter={(value) => formatTokenPrice(Number(value))}
           />
           {avgEntryPrice > 0 && (
             <ReferenceLine
