@@ -1,5 +1,8 @@
-const RANGES = ['24h', '7d', '30d', '90d', '1Y'] as const
+const RANGES = ['24h', '7d', '30d', '90d', '1Y', '2Y', 'Max'] as const
 export type RangeKey = (typeof RANGES)[number]
+
+/** Sentinel for Max: backend interprets 0 as all available history. */
+export const MAX_RANGE_DAYS = 0
 
 const RANGE_DAYS: Record<RangeKey, number> = {
   '24h': 1,
@@ -7,6 +10,8 @@ const RANGE_DAYS: Record<RangeKey, number> = {
   '30d': 30,
   '90d': 90,
   '1Y': 365,
+  '2Y': 730,
+  Max: MAX_RANGE_DAYS,
 }
 
 const RANGE_LABELS: Record<RangeKey, string> = {
@@ -15,6 +20,8 @@ const RANGE_LABELS: Record<RangeKey, string> = {
   '30d': 'trailing 30d',
   '90d': 'trailing 90d',
   '1Y': 'trailing 1Y',
+  '2Y': 'trailing 2Y',
+  Max: 'all available',
 }
 
 interface RangeSegmentProps {
