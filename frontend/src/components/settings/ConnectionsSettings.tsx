@@ -161,16 +161,14 @@ export default function ConnectionsSettings() {
       <div className="panel">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <div className="lbl">File</div>
-            <div className="font-serif text-[22px] leading-none mt-2">
-              {meta?.relativePath || 'settings/config.yaml'}
-            </div>
+            <div className="lbl">Connections</div>
+            <div className="font-serif text-[22px] leading-none mt-2">Connectors declaration</div>
             <p className="cap mt-3 max-w-2xl">
               Read-only exchange API keys and public wallet addresses. Secrets are masked in the UI;
               leave a secret field blank to keep the current value.
             </p>
           </div>
-          <span className="chip">{meta?.exists ? 'On disk' : 'Not created yet'}</span>
+          <span className="chip">{meta?.exists ? 'Configured' : 'Empty'}</span>
         </div>
       </div>
 
