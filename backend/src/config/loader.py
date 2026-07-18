@@ -6,14 +6,6 @@ import yaml
 
 _CONFIG_CACHE: Optional[Dict[str, Any]] = None
 
-# Friendly labels for known provider keys in settings/config.yaml.
-_VENUE_DISPLAY_NAMES = {
-    "binance": "Binance",
-    "okx": "OKX",
-    "coinbase": "Coinbase",
-    "hot_wallets": "Hot wallets",
-}
-
 # Top-level config keys treated as self-custody / wallet providers.
 _WALLET_VENUE_KEYS = frozenset({"hot_wallets", "wallets", "cold_wallets"})
 
@@ -50,10 +42,13 @@ def get_section(name: str) -> Dict[str, Any]:
 
 
 def venue_display_name(key: str) -> str:
-    """Human-readable label for a config provider key."""
-    if key in _VENUE_DISPLAY_NAMES:
-        return _VENUE_DISPLAY_NAMES[key]
-    return key.replace("_", " ").strip().title()
+    """
+    Human-readable label for a config provider key.
+
+    Generic transform: replace underscores with spaces and capitalize each word
+    (e.g. hot_wallets → Hot Wallets, my_exchange → My Exchange).
+    """
+    return " ".join(part.capitalize() for part in key.replace("_", " ").split())
 
 
 def list_configured_venues() -> List[Dict[str, str]]:
