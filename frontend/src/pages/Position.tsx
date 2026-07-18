@@ -85,6 +85,7 @@ export default function Position() {
           <div className="flex items-center gap-3 mt-2">
             <div className="font-serif text-[26px] leading-none">{position.symbol}</div>
             {position.exchange && <span className="chip">{position.exchange}</span>}
+            {position.tag?.name && <span className="chip">{position.tag.name}</span>}
           </div>
         </div>
         <RangeSegment value={range} onChange={setRange} />
@@ -184,10 +185,18 @@ export default function Position() {
           </div>
 
           <div className="mt-4 bg-sillage-gsoft border border-sillage-line rounded-lg px-[15px] py-3">
-            <div className="lbl mb-[7px]">Since · {position.exchange || 'unknown venue'}</div>
+            <div className="lbl mb-[7px]">
+              {position.tag?.name
+                ? `Thesis · ${position.tag.name}`
+                : `Since · ${position.exchange || 'unknown venue'}`}
+            </div>
             <div className="cap leading-relaxed">
-              First bought {format(new Date(position.firstBoughtAt), 'MMM dd, yyyy')}. Track conviction
-              tags in the Theses view.
+              First bought {format(new Date(position.firstBoughtAt), 'MMM dd, yyyy')}.
+              {position.tag?.description
+                ? ` ${position.tag.description}`
+                : position.tag
+                  ? ' Tagged for separate tracking on Theses.'
+                  : ' Assign a conviction tag in Settings to track this thesis separately.'}
             </div>
           </div>
         </div>

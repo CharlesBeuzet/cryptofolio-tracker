@@ -18,6 +18,13 @@ export const GET_PORTFOLIO = gql`
         firstBoughtAt
         exchange
         durationDays
+        tag {
+          id
+          name
+          color
+          description
+          sortOrder
+        }
       }
     }
   }
@@ -37,6 +44,13 @@ export const GET_POSITIONS = gql`
       firstBoughtAt
       exchange
       durationDays
+      tag {
+        id
+        name
+        color
+        description
+        sortOrder
+      }
       orders {
         id
         symbol
@@ -64,6 +78,13 @@ export const GET_POSITION = gql`
       firstBoughtAt
       exchange
       durationDays
+      tag {
+        id
+        name
+        color
+        description
+        sortOrder
+      }
       metrics {
         avgExitPrice
       }
@@ -76,6 +97,18 @@ export const GET_POSITION = gql`
         executedAt
         exchange
       }
+    }
+  }
+`
+
+export const GET_TAGS = gql`
+  query GetTags {
+    tags {
+      id
+      name
+      color
+      description
+      sortOrder
     }
   }
 `
@@ -163,4 +196,3 @@ export const GET_FIAT_DEPOSITS = gql`
     }
   }
 `
-

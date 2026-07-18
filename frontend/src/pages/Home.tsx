@@ -75,6 +75,7 @@ export default function Home() {
               const share = totalBook > 0 ? (position.value / totalBook) * 100 : 0
               const pnlVal = position.pnl || 0
               const exchange = position.exchange || '—'
+              const tagName = position.tag?.name as string | undefined
 
               return (
                 <Link key={position.id} to={`/position/${position.id}`} className="hrow no-underline text-inherit">
@@ -83,6 +84,7 @@ export default function Home() {
                       <span className="sw" style={{ background: assetColor(i) }} />
                       <span className="tk">{position.symbol}</span>
                       <span className="chip">{exchange}</span>
+                      {tagName && <span className="chip">{tagName}</span>}
                     </div>
                     <div className="text-sillage-soft text-[11px] mt-[3px] ml-[18px] font-mono">
                       {position.quantity.toLocaleString(undefined, { maximumFractionDigits: 8 })}
@@ -109,7 +111,7 @@ export default function Home() {
 
           <div className="rule mt-3" />
           <div className="font-mono text-sillage-soft text-[11px] mt-3">
-            Grouped by exchange — every position shows its venue tag.
+            Venue chips stay; conviction tags appear when assigned in Settings.
           </div>
         </div>
 
