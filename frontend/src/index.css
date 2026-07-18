@@ -39,10 +39,20 @@ body {
   background: var(--bg);
   color: var(--ink);
   font-size: 14px;
+  overflow-x: hidden;
 }
 
 * {
   box-sizing: border-box;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
 }
 
 @layer components {
@@ -51,7 +61,7 @@ body {
   }
 
   .panel {
-    @apply bg-sillage-card border border-sillage-line rounded-panel px-6 py-5;
+    @apply bg-sillage-card border border-sillage-line rounded-panel px-4 py-4 sm:px-6 sm:py-5;
   }
 
   .cap {
@@ -71,11 +81,11 @@ body {
   }
 
   .seg {
-    @apply inline-flex border border-sillage-line rounded-lg overflow-hidden;
+    @apply inline-flex border border-sillage-line rounded-lg overflow-hidden max-w-full;
   }
 
   .segb {
-    @apply px-3 py-[5px] font-mono text-[11px] text-sillage-soft cursor-pointer border-r border-sillage-line last:border-r-0;
+    @apply px-2.5 sm:px-3 py-2 sm:py-[5px] min-h-[36px] sm:min-h-0 font-mono text-[11px] text-sillage-soft cursor-pointer border-r border-sillage-line last:border-r-0 flex items-center justify-center;
   }
 
   .segb.on {
@@ -83,7 +93,7 @@ body {
   }
 
   .navi {
-    @apply flex items-center gap-[11px] px-3 py-[9px] rounded-[7px] text-sillage-soft cursor-pointer font-mono text-xs tracking-wide border border-transparent transition-colors;
+    @apply flex items-center gap-[11px] px-3 py-3 sm:py-[9px] min-h-[44px] sm:min-h-0 rounded-[7px] text-sillage-soft cursor-pointer font-mono text-xs tracking-wide border border-transparent transition-colors;
   }
 
   .navi:hover {
@@ -95,7 +105,7 @@ body {
   }
 
   .hrow {
-    @apply flex items-center gap-3.5 py-[11px] px-1 border-t border-sillage-line cursor-pointer transition-colors;
+    @apply flex items-center gap-2.5 sm:gap-3.5 py-3 sm:py-[11px] px-1 border-t border-sillage-line cursor-pointer transition-colors min-h-[52px];
   }
 
   .hrow:hover {
@@ -103,7 +113,16 @@ body {
   }
 
   .trow {
-    @apply flex items-center gap-3 py-2.5 px-1 border-t border-sillage-line;
+    @apply flex items-center gap-2 sm:gap-3 py-2.5 px-1 border-t border-sillage-line;
+  }
+
+  .table-scroll {
+    @apply overflow-x-auto -mx-1 px-1;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .table-scroll-inner {
+    @apply min-w-[520px];
   }
 
   .wbar {
@@ -119,7 +138,7 @@ body {
   }
 
   .iconbtn {
-    @apply w-8 h-[30px] border border-sillage-line rounded-[7px] flex items-center justify-center cursor-pointer text-sillage-soft text-sm bg-sillage-card;
+    @apply w-10 h-10 sm:w-8 sm:h-[30px] border border-sillage-line rounded-[7px] flex items-center justify-center cursor-pointer text-sillage-soft text-sm bg-sillage-card flex-shrink-0;
   }
 
   .iconbtn:hover {
@@ -127,11 +146,19 @@ body {
   }
 
   .atab {
-    @apply px-[13px] py-[7px] border border-sillage-line rounded-lg cursor-pointer font-mono text-xs text-sillage-soft flex items-center gap-[7px];
+    @apply px-3 sm:px-[13px] py-2 sm:py-[7px] min-h-[40px] sm:min-h-0 border border-sillage-line rounded-lg cursor-pointer font-mono text-xs text-sillage-soft flex items-center gap-[7px];
   }
 
   .atab.on {
     @apply bg-sillage-card text-sillage-ink;
     border-color: var(--green);
+  }
+
+  .page-head {
+    @apply flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-end mb-[18px];
+  }
+
+  .page-title {
+    @apply font-serif text-[22px] sm:text-[26px] leading-none mt-[7px];
   }
 }

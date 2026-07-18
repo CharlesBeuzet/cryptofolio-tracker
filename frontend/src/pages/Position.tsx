@@ -79,18 +79,18 @@ export default function Position() {
 
   return (
     <div>
-      <div className="flex justify-between items-end mb-4">
+      <div className="page-head mb-4">
         <div>
           <div className="lbl">§2 · Position detail</div>
-          <div className="flex items-center gap-3 mt-2">
-            <div className="font-serif text-[26px] leading-none">{position.symbol}</div>
+          <div className="flex items-center gap-3 mt-2 flex-wrap">
+            <div className="page-title mt-0">{position.symbol}</div>
             {position.exchange && <span className="chip">{position.exchange}</span>}
           </div>
         </div>
         <RangeSegment value={range} onChange={setRange} />
       </div>
 
-      <div className="flex gap-2.5 flex-wrap mb-[18px]">
+      <div className="flex gap-2 flex-wrap mb-[18px] overflow-x-auto pb-0.5 -mx-0.5 px-0.5">
         {allPositions.map((p, i) => (
           <button
             key={p.id}
@@ -104,11 +104,11 @@ export default function Position() {
         ))}
       </div>
 
-      <div className="flex gap-5 items-stretch flex-col lg:flex-row">
+      <div className="flex gap-4 sm:gap-5 items-stretch flex-col lg:flex-row">
         <div className="panel flex-1 min-w-0">
-          <div className="flex justify-between items-center mb-3.5">
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-start mb-3.5">
             <div className="lbl">Fig 2 · Price · order markers</div>
-            <div className="font-mono text-[11px] flex gap-4 flex-wrap justify-end">
+            <div className="font-mono text-[11px] flex gap-x-3 gap-y-1.5 flex-wrap sm:justify-end">
               <span>
                 <span className="text-sillage-green font-bold">B</span> buy
               </span>
@@ -154,7 +154,7 @@ export default function Position() {
 
         <div className="panel w-full lg:w-[286px] flex-shrink-0">
           <div className="lbl mb-4">P&amp;L · since first entry</div>
-          <div className={`font-serif text-[30px] leading-none ${pnlColorClass(unrealized)}`}>
+          <div className={`font-serif text-[26px] sm:text-[30px] leading-none ${pnlColorClass(unrealized)}`}>
             {isPositive ? '+' : ''}
             {formatUsdPrecise(unrealized)}
           </div>
@@ -175,10 +175,10 @@ export default function Position() {
             ].map(([label, val], idx, arr) => (
               <div
                 key={label}
-                className={`flex justify-between py-2.5 ${idx < arr.length - 1 ? 'border-b border-sillage-line' : ''}`}
+                className={`flex justify-between gap-3 py-2.5 ${idx < arr.length - 1 ? 'border-b border-sillage-line' : ''}`}
               >
-                <span className="lbl">{label}</span>
-                <span className="font-mono tabular-nums text-xs">{val}</span>
+                <span className="lbl flex-shrink-0">{label}</span>
+                <span className="font-mono tabular-nums text-xs text-right break-all">{val}</span>
               </div>
             ))}
           </div>
@@ -193,48 +193,52 @@ export default function Position() {
         </div>
       </div>
 
-      <div className="panel mt-5">
+      <div className="panel mt-4 sm:mt-5">
         <div className="lbl mb-1">Table 2 · Order history</div>
-        <div className="trow text-sillage-soft border-t-0">
-          <div className="w-24 lbl text-[9px]">Date</div>
-          <div className="w-[54px] lbl text-[9px]">Side</div>
-          <div className="flex-1 lbl text-[9px]">Quantity</div>
-          <div className="w-24 text-right lbl text-[9px]">Price</div>
-          <div className="w-24 text-right lbl text-[9px]">Value</div>
-          <div className="w-24 text-right lbl text-[9px]">Venue</div>
+        <div className="table-scroll">
+          <div className="table-scroll-inner">
+            <div className="trow text-sillage-soft border-t-0">
+              <div className="w-24 lbl text-[9px]">Date</div>
+              <div className="w-[54px] lbl text-[9px]">Side</div>
+              <div className="flex-1 lbl text-[9px]">Quantity</div>
+              <div className="w-24 text-right lbl text-[9px]">Price</div>
+              <div className="w-24 text-right lbl text-[9px]">Value</div>
+              <div className="w-24 text-right lbl text-[9px]">Venue</div>
+            </div>
+            {orders.length === 0 ? (
+              <div className="text-center py-8 text-sillage-soft text-sm">No orders found</div>
+            ) : (
+              orders.map((order) => {
+                const isBuy = order.type === 'buy'
+                const total = order.quantity * order.price
+                return (
+                  <div key={order.id} className="trow">
+                    <div className="w-24 font-mono text-[11px] text-sillage-soft">
+                      {format(new Date(order.executedAt), 'MMM dd, yy')}
+                    </div>
+                    <div className="w-[54px]">
+                      <span className={`font-mono text-[11px] ${isBuy ? 'text-sillage-green' : 'text-sillage-accent'}`}>
+                        {isBuy ? 'BUY' : 'SELL'}
+                      </span>
+                    </div>
+                    <div className="flex-1 font-mono tabular-nums text-xs">
+                      {order.quantity.toLocaleString(undefined, { maximumFractionDigits: 8 })} {position.symbol}
+                    </div>
+                    <div className="w-24 text-right font-mono tabular-nums text-xs">
+                      {formatTokenPrice(order.price)}
+                    </div>
+                    <div className="w-24 text-right font-mono tabular-nums text-xs">
+                      {formatUsdPrecise(total)}
+                    </div>
+                    <div className="w-24 text-right font-mono text-[11px] text-sillage-soft">
+                      {order.exchange || '—'}
+                    </div>
+                  </div>
+                )
+              })
+            )}
+          </div>
         </div>
-        {orders.length === 0 ? (
-          <div className="text-center py-8 text-sillage-soft text-sm">No orders found</div>
-        ) : (
-          orders.map((order) => {
-            const isBuy = order.type === 'buy'
-            const total = order.quantity * order.price
-            return (
-              <div key={order.id} className="trow">
-                <div className="w-24 font-mono text-[11px] text-sillage-soft">
-                  {format(new Date(order.executedAt), 'MMM dd, yy')}
-                </div>
-                <div className="w-[54px]">
-                  <span className={`font-mono text-[11px] ${isBuy ? 'text-sillage-green' : 'text-sillage-accent'}`}>
-                    {isBuy ? 'BUY' : 'SELL'}
-                  </span>
-                </div>
-                <div className="flex-1 font-mono tabular-nums text-xs">
-                  {order.quantity.toLocaleString(undefined, { maximumFractionDigits: 8 })} {position.symbol}
-                </div>
-                <div className="w-24 text-right font-mono tabular-nums text-xs">
-                  {formatTokenPrice(order.price)}
-                </div>
-                <div className="w-24 text-right font-mono tabular-nums text-xs">
-                  {formatUsdPrecise(total)}
-                </div>
-                <div className="w-24 text-right font-mono text-[11px] text-sillage-soft">
-                  {order.exchange || '—'}
-                </div>
-              </div>
-            )
-          })
-        )}
       </div>
 
       {posIndex > 0 && (

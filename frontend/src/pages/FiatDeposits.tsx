@@ -77,53 +77,55 @@ export default function FiatDeposits() {
     <div>
       <div className="mb-[18px]">
         <div className="lbl">§3 · On-ramp</div>
-        <div className="font-serif text-[26px] leading-none mt-[7px]">Capital deployed from fiat</div>
+        <div className="page-title">Capital deployed from fiat</div>
       </div>
 
-      <div className="flex gap-5 items-stretch flex-col lg:flex-row">
+      <div className="flex gap-4 sm:gap-5 items-stretch flex-col lg:flex-row">
         <div className="panel flex-1 min-w-0">
           <div className="lbl mb-3">Fig 3 · Cumulative on-ramp vs net asset value</div>
           {chartData.length === 0 ? (
-            <div className="h-[220px] flex items-center justify-center text-sillage-soft text-sm">
+            <div className="h-[180px] sm:h-[220px] flex items-center justify-center text-sillage-soft text-sm">
               No chart data yet
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height={220}>
-              <ComposedChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                <YAxis hide domain={['auto', 'auto']} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'var(--card)',
-                    border: '1px solid var(--line)',
-                    borderRadius: '8px',
-                    fontFamily: 'IBM Plex Mono, monospace',
-                    fontSize: '11px',
-                  }}
-                  formatter={(value: number, name: string) => [
-                    formatUsd(value),
-                    name === 'nav' ? 'Net asset value' : 'Cumulative on-ramp',
-                  ]}
-                  labelFormatter={(label) => String(label)}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="nav"
-                  stroke="var(--green)"
-                  strokeWidth={1.8}
-                  dot={false}
-                />
-                <Line
-                  type="stepAfter"
-                  dataKey="deposits"
-                  stroke="var(--accent)"
-                  strokeWidth={1.6}
-                  strokeDasharray="4 3"
-                  dot={false}
-                />
-              </ComposedChart>
-            </ResponsiveContainer>
+            <div className="h-[180px] sm:h-[220px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <YAxis hide domain={['auto', 'auto']} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'var(--card)',
+                      border: '1px solid var(--line)',
+                      borderRadius: '8px',
+                      fontFamily: 'IBM Plex Mono, monospace',
+                      fontSize: '11px',
+                    }}
+                    formatter={(value: number, name: string) => [
+                      formatUsd(value),
+                      name === 'nav' ? 'Net asset value' : 'Cumulative on-ramp',
+                    ]}
+                    labelFormatter={(label) => String(label)}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="nav"
+                    stroke="var(--green)"
+                    strokeWidth={1.8}
+                    dot={false}
+                  />
+                  <Line
+                    type="stepAfter"
+                    dataKey="deposits"
+                    stroke="var(--accent)"
+                    strokeWidth={1.6}
+                    strokeDasharray="4 3"
+                    dot={false}
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
           )}
-          <div className="font-mono text-[11px] flex gap-[18px] mt-3">
+          <div className="font-mono text-[11px] flex flex-wrap gap-x-[18px] gap-y-1 mt-3">
             <span>
               <span className="text-sillage-green">━</span> net asset value
             </span>
@@ -135,7 +137,9 @@ export default function FiatDeposits() {
 
         <div className="panel w-full lg:w-[280px] flex-shrink-0">
           <div className="lbl">Total on-ramped</div>
-          <div className="font-serif text-[30px] leading-none mt-[7px]">{formatUsd(totalOnRamped)}</div>
+          <div className="font-serif text-[26px] sm:text-[30px] leading-none mt-[7px]">
+            {formatUsd(totalOnRamped)}
+          </div>
           <div className="border-t border-sillage-line mt-[18px]">
             {[
               ['Deposits', String(depositCount)],
@@ -148,11 +152,11 @@ export default function FiatDeposits() {
             ].map(([label, val], idx, arr) => (
               <div
                 key={label}
-                className={`flex justify-between py-2.5 ${idx < arr.length - 1 ? 'border-b border-sillage-line' : ''}`}
+                className={`flex justify-between gap-3 py-2.5 ${idx < arr.length - 1 ? 'border-b border-sillage-line' : ''}`}
               >
-                <span className="lbl">{label}</span>
+                <span className="lbl flex-shrink-0">{label}</span>
                 <span
-                  className={`font-mono tabular-nums text-xs ${label === 'Net multiple' && netMultiple > 1 ? 'text-sillage-green' : ''}`}
+                  className={`font-mono tabular-nums text-xs text-right ${label === 'Net multiple' && netMultiple > 1 ? 'text-sillage-green' : ''}`}
                 >
                   {val}
                 </span>
@@ -166,31 +170,35 @@ export default function FiatDeposits() {
         </div>
       </div>
 
-      <div className="panel mt-5">
+      <div className="panel mt-4 sm:mt-5">
         <div className="lbl mb-1">Table 3 · Deposit ledger</div>
-        <div className="trow text-sillage-soft border-t-0">
-          <div className="w-[104px] lbl text-[9px]">Date</div>
-          <div className="flex-1 lbl text-[9px]">Method · venue</div>
-          <div className="w-[110px] text-right lbl text-[9px]">Amount</div>
-          <div className="w-[120px] text-right lbl text-[9px]">Cumulative</div>
-        </div>
-        {ledger.length === 0 ? (
-          <div className="text-center py-8 text-sillage-soft text-sm">No fiat deposit rows stored.</div>
-        ) : (
-          ledger.map((r) => (
-            <div key={r.id} className="trow">
-              <div className="w-[104px] font-mono text-[11px] text-sillage-soft">{r.label}</div>
-              <div className="flex-1 text-[13px]">{r.methodLabel}</div>
-              <div className="w-[110px] text-right font-mono tabular-nums text-xs">
-                {r.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
-                {r.currency}
-              </div>
-              <div className="w-[120px] text-right font-mono tabular-nums text-xs text-sillage-soft">
-                {r.cumulative.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
+        <div className="table-scroll">
+          <div className="min-w-[440px]">
+            <div className="trow text-sillage-soft border-t-0">
+              <div className="w-[104px] lbl text-[9px]">Date</div>
+              <div className="flex-1 lbl text-[9px]">Method · venue</div>
+              <div className="w-[110px] text-right lbl text-[9px]">Amount</div>
+              <div className="w-[120px] text-right lbl text-[9px]">Cumulative</div>
             </div>
-          ))
-        )}
+            {ledger.length === 0 ? (
+              <div className="text-center py-8 text-sillage-soft text-sm">No fiat deposit rows stored.</div>
+            ) : (
+              ledger.map((r) => (
+                <div key={r.id} className="trow">
+                  <div className="w-[104px] font-mono text-[11px] text-sillage-soft">{r.label}</div>
+                  <div className="flex-1 text-[13px] min-w-0 truncate pr-2">{r.methodLabel}</div>
+                  <div className="w-[110px] text-right font-mono tabular-nums text-xs">
+                    {r.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{' '}
+                    {r.currency}
+                  </div>
+                  <div className="w-[120px] text-right font-mono tabular-nums text-xs text-sillage-soft">
+                    {r.cumulative.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )
