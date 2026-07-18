@@ -1,15 +1,9 @@
 import { useQuery } from '@apollo/client'
 import { useMemo } from 'react'
-import {
-  Area,
-  ComposedChart,
-  Line,
-  ResponsiveContainer,
-  Tooltip,
-  YAxis,
-} from 'recharts'
+import { ComposedChart, Line, ResponsiveContainer, Tooltip, YAxis } from 'recharts'
 import { GET_FIAT_DEPOSITS, GET_FIAT_DEPOSITS_SUMMARY, GET_PORTFOLIO_HISTORY } from '../graphql/queries'
 import { formatUsd, formatUsdPrecise } from '../utils/format'
+import { buildOnRampChartData } from '../utils/onRampChart'
 import { format } from 'date-fns'
 
 interface FiatDepositRow {
@@ -36,25 +30,10 @@ export default function FiatDeposits() {
     [rows],
   )
 
-  const chartData = useMemo(() => {
-    const navHistory = historyData?.portfolioHistory || []
-    if (navHistory.length === 0) return []
-    return navHistory.map((h: { timestamp: string; totalValue: number }, i: number) => {
-      const depIdx = Math.min(
-        Math.floor((i / navHistory.length) * Math.max(sorted.length, 1)),
-        sorted.length - 1,
-      )
-      const cumDep =
-        depIdx >= 0 && sorted.length > 0
-          ? sorted.slice(0, depIdx + 1).reduce((s, r) => s + r.amount, 0)
-          : 0
-      return {
-        date: format(new Date(h.timestamp), 'MMM dd'),
-        nav: h.totalValue,
-        deposits: cumDep,
-      }
-    })
-  }, [historyData, sorted])
+  const chartData = useMemo(
+    () => buildOnRampChartData(historyData?.portfolioHistory || [], sorted),
+    [historyData, sorted],
+  )
 
   if (loading) {
     return (
@@ -111,12 +90,6 @@ export default function FiatDeposits() {
           ) : (
             <ResponsiveContainer width="100%" height={220}>
               <ComposedChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="cashNavFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--green)" stopOpacity={0.11} />
-                    <stop offset="100%" stopColor="var(--green)" stopOpacity={0.02} />
-                  </linearGradient>
-                </defs>
                 <YAxis hide domain={['auto', 'auto']} />
                 <Tooltip
                   contentStyle={{
@@ -126,10 +99,21 @@ export default function FiatDeposits() {
                     fontFamily: 'IBM Plex Mono, monospace',
                     fontSize: '11px',
                   }}
+                  formatter={(value: number, name: string) => [
+                    formatUsd(value),
+                    name === 'nav' ? 'Net asset value' : 'Cumulative on-ramp',
+                  ]}
+                  labelFormatter={(label) => String(label)}
                 />
-                <Area type="monotone" dataKey="nav" stroke="var(--green)" strokeWidth={1.8} fill="url(#cashNavFill)" dot={false} />
                 <Line
                   type="monotone"
+                  dataKey="nav"
+                  stroke="var(--green)"
+                  strokeWidth={1.8}
+                  dot={false}
+                />
+                <Line
+                  type="stepAfter"
                   dataKey="deposits"
                   stroke="var(--accent)"
                   strokeWidth={1.6}
