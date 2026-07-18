@@ -26,7 +26,44 @@ A lightweight crypto portfolio tracking application designed to run on Raspberry
 - Apollo Client for GraphQL
 - Recharts for data visualization
 
-## Setup Instructions
+## Deploy on Raspberry Pi (Docker)
+
+Single container (nginx + FastAPI) for **linux/arm64** (Pi 4/5). Only port **8080** is published; the API listens on loopback inside the container and is reached via nginx (`/graphql`, `/health`).
+
+Prefer building **on the Pi** so you avoid slow QEMU cross-builds from x86/Windows.
+
+1. Clone the repo on the Pi and prepare host data (bind-mounted; survives image updates):
+
+```bash
+mkdir -p data
+cp settings/config.example.yaml data/config.yaml
+# Edit data/config.yaml with your credentials
+
+# Optional: reuse an existing database
+# cp /path/to/portfolio.db data/portfolio.db
+
+# If you have no DB yet, create an empty *file* so Docker does not mount a directory:
+touch data/portfolio.db
+```
+
+2. Build and start:
+
+```bash
+docker compose up -d --build
+```
+
+3. Open `http://<pi-ip>:8080`
+
+4. Update the app later without losing data:
+
+```bash
+git pull
+docker compose up -d --build
+```
+
+Host mounts: `./data/portfolio.db` → `/app/portfolio.db`, `./data/config.yaml` → `/app/settings/config.yaml`.
+
+## Setup Instructions (local development)
 
 ### Prerequisites
 
