@@ -27,6 +27,10 @@ export interface GroupedAsset {
   pnl: number
   /** Weighted unrealised % from consolidated cost basis (not an average of %). */
   pnlPercent: number
+  /** Σ(avg entry × qty) across venues that have an entry price. */
+  costBasis: number
+  /** costBasis / quantity when both are positive. */
+  avgEntryPrice: number
   venues: AssetVenue[]
   /** Largest venue by value — default drill-down target. */
   primaryId: number
@@ -91,6 +95,8 @@ export function groupPositionsByAsset(positions: PositionLike[]): GroupedAsset[]
         value: g.value,
         pnl: g.pnl,
         pnlPercent: g.costBasis > 0 ? (g.pnl / g.costBasis) * 100 : 0,
+        costBasis: g.costBasis,
+        avgEntryPrice: g.quantity > 0 && g.costBasis > 0 ? g.costBasis / g.quantity : 0,
         venues,
         primaryId: primary?.id ?? 0,
       }

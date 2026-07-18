@@ -4,6 +4,7 @@ import { useQuery } from '@apollo/client'
 import { GET_PORTFOLIO } from '../../graphql/queries'
 import { useTheme } from '../../context/ThemeContext'
 import { formatPct, formatUsd, pnlColorClass } from '../../utils/format'
+import { groupPositionsByAsset } from '../../utils/groupPositionsByAsset'
 import Logo from './Logo'
 
 interface LayoutProps {
@@ -12,7 +13,13 @@ interface LayoutProps {
 
 const NAV_ITEMS = [
   { path: '/', label: 'Overview', glyph: '◇', num: '§1', match: (p: string) => p === '/' },
-  { path: '/position', label: 'Positions', glyph: '▮', num: '§2', match: (p: string) => p.startsWith('/position') },
+  {
+    path: '/position',
+    label: 'Positions',
+    glyph: '▮',
+    num: '§2',
+    match: (p: string) => p.startsWith('/position') || p.startsWith('/asset'),
+  },
   { path: '/fiat-deposits', label: 'On-ramp', glyph: '$', num: '§3', match: (p: string) => p === '/fiat-deposits' },
   { path: '/performance', label: 'Theses', glyph: '§', num: '§4', match: (p: string) => p === '/performance' },
 ]
@@ -47,9 +54,11 @@ export default function Layout({ children }: LayoutProps) {
             return (
               <Link
                 key={item.path}
-                to={item.path === '/position' && portfolio?.positions?.[0]
-                  ? `/position/${portfolio.positions[0].id}`
-                  : item.path}
+                to={(() => {
+                  if (item.path !== '/position' || !portfolio?.positions?.length) return item.path
+                  const top = groupPositionsByAsset(portfolio.positions)[0]?.symbol
+                  return top ? `/asset/${encodeURIComponent(top)}` : item.path
+                })()}
                 className={`navi no-underline ${active ? 'on' : ''}`}
               >
                 <span className="w-[18px] text-center text-sillage-green text-[13px]">{item.glyph}</span>

@@ -79,7 +79,7 @@ export default function Home() {
               return (
                 <Link
                   key={asset.symbol}
-                  to={`/position/${asset.primaryId}`}
+                  to={`/asset/${encodeURIComponent(asset.symbol)}`}
                   className="hrow no-underline text-inherit"
                 >
                   <div className="flex-1 min-w-0">

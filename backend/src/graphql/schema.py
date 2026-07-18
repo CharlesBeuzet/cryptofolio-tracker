@@ -2,6 +2,7 @@
 from datetime import datetime
 from typing import List, Optional
 import strawberry
+from sqlalchemy import func
 from strawberry.fastapi import GraphQLRouter
 
 from ..models.database import Position, Order, PortfolioSnapshot, Asset, PositionMetrics, SessionLocal
@@ -144,18 +145,7 @@ def _position_to_type(pos: Position) -> PositionType:
     """Map a Position ORM object to GraphQL type."""
     asset_price = pos.asset.current_price if pos.asset else None
     metrics = pos.metrics
-    orders = [
-        OrderType(
-            id=o.id,
-            symbol=o.symbol,
-            type=o.type,
-            quantity=o.quantity,
-            price=o.price,
-            executed_at=o.executed_at,
-            exchange=o.exchange,
-        )
-        for o in pos.orders
-    ]
+    orders = [_order_to_type(o) for o in pos.orders]
     return PositionType(
         id=pos.id,
         symbol=pos.symbol,
@@ -169,6 +159,27 @@ def _position_to_type(pos: Position) -> PositionType:
         status=pos.status,
         orders=orders,
         metrics=_metrics_to_type(metrics) if metrics else None,
+    )
+
+
+@strawberry.type
+class AssetDetailType:
+    """Consolidated open venues + all orders for one asset symbol."""
+
+    symbol: str
+    positions: List[PositionType]
+    orders: List[OrderType]
+
+
+def _order_to_type(order: Order) -> OrderType:
+    return OrderType(
+        id=order.id,
+        symbol=order.symbol,
+        type=order.type,
+        quantity=order.quantity,
+        price=order.price,
+        executed_at=order.executed_at,
+        exchange=order.exchange,
     )
 
 
@@ -284,6 +295,38 @@ class Query:
                 return None
 
             return _position_to_type(pos)
+        finally:
+            db.close()
+
+    @strawberry.field
+    def asset(self, symbol: str) -> Optional[AssetDetailType]:
+        """Open venues and all historical orders for one asset symbol."""
+        symbol_key = (symbol or "").strip().upper()
+        if not symbol_key:
+            return None
+
+        db = SessionLocal()
+        try:
+            service = PortfolioService(db)
+            open_positions = [
+                pos
+                for pos in service.get_positions()
+                if (pos.symbol or "").upper() == symbol_key
+            ]
+            orders = (
+                db.query(Order)
+                .filter(func.upper(Order.symbol) == symbol_key)
+                .order_by(Order.executed_at.desc())
+                .all()
+            )
+            if not open_positions and not orders:
+                return None
+
+            return AssetDetailType(
+                symbol=symbol_key,
+                positions=[_position_to_type(pos) for pos in open_positions],
+                orders=[_order_to_type(o) for o in orders],
+            )
         finally:
             db.close()
 
