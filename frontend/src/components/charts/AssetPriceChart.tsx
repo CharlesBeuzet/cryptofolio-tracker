@@ -101,7 +101,8 @@ function computeYDomain(candles: CandleDatum[]): [number, number] {
   const min = Math.min(...values)
   const max = Math.max(...values)
   const span = max - min
-  const pad = span > 0 ? span * 0.06 : Math.max(Math.abs(min) * 0.01, 1)
+  // Extra headroom so buy/sell arrows (offset in px from the price) are not clipped.
+  const pad = span > 0 ? span * 0.1 : Math.max(Math.abs(min) * 0.01, 1)
   return [min - pad, max + pad]
 }
 
@@ -170,6 +171,11 @@ function CandlestickLayer({ xAxisMap, yAxisMap, data, offset, onCandleHover }: C
   )
 }
 
+/** Pixel gap between the candle price point and the arrow tip. */
+const ORDER_ARROW_GAP = 10
+const ORDER_ARROW_HALF_W = 6
+const ORDER_ARROW_HEIGHT = 11
+
 function OrderPin({
   cx,
   cy,
@@ -182,29 +188,35 @@ function OrderPin({
   if (cx == null || cy == null) return null
 
   const isBuy = payload?.type === 'buy'
-  const color = isBuy ? 'var(--green)' : 'var(--accent)'
-  const label = isBuy ? 'B' : 'S'
+  const color = isBuy ? 'var(--green)' : 'var(--down)'
 
+  // Buy sits below the candle (arrow ▲); sell sits above (arrow ▼).
+  // Tip points toward the price so the marker never overlaps the wick/body.
+  if (isBuy) {
+    const tipY = cy + ORDER_ARROW_GAP
+    return (
+      <g>
+        <path
+          d={`M${cx},${tipY} L${cx + ORDER_ARROW_HALF_W},${tipY + ORDER_ARROW_HEIGHT} L${cx - ORDER_ARROW_HALF_W},${tipY + ORDER_ARROW_HEIGHT} Z`}
+          fill={color}
+          stroke="var(--card)"
+          strokeWidth={1.2}
+          strokeLinejoin="round"
+        />
+      </g>
+    )
+  }
+
+  const tipY = cy - ORDER_ARROW_GAP
   return (
-    <g transform={`translate(${cx}, ${cy - 6})`}>
+    <g>
       <path
-        d="M0,-10 C5.5,-10 10,-5.5 10,0 C10,5.5 0,14 0,14 C0,14 -10,5.5 -10,0 C-10,-5.5 -5.5,-10 0,-10 Z"
+        d={`M${cx},${tipY} L${cx + ORDER_ARROW_HALF_W},${tipY - ORDER_ARROW_HEIGHT} L${cx - ORDER_ARROW_HALF_W},${tipY - ORDER_ARROW_HEIGHT} Z`}
         fill={color}
         stroke="var(--card)"
         strokeWidth={1.2}
+        strokeLinejoin="round"
       />
-      <text
-        x={0}
-        y={1}
-        textAnchor="middle"
-        dominantBaseline="middle"
-        fill="var(--mkink)"
-        fontSize={9}
-        fontWeight={700}
-        fontFamily="IBM Plex Mono, monospace"
-      >
-        {label}
-      </text>
     </g>
   )
 }
@@ -327,7 +339,7 @@ export default function AssetPriceChart({
         </div>
       )}
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={candleData} margin={{ top: 16, right: 12, left: 0, bottom: 0 }}>
+        <ComposedChart data={candleData} margin={{ top: 20, right: 12, left: 0, bottom: 12 }}>
           <CartesianGrid stroke="var(--line)" strokeDasharray="0" vertical={false} />
           <XAxis
             dataKey="timestamp"
