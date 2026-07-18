@@ -4,6 +4,7 @@ from typing import List, Optional
 import strawberry
 from strawberry.fastapi import GraphQLRouter
 
+from ..config.loader import list_configured_venues
 from ..models.database import Position, Order, PortfolioSnapshot, Asset, PositionMetrics, SessionLocal
 from ..services.portfolio import PortfolioService
 from ..services.fiat_deposits import FiatDepositService
@@ -239,8 +240,29 @@ class FiatDepositRecordType:
 
 
 @strawberry.type
+class VenueType:
+    """Configured data provider / venue from settings/config.yaml."""
+
+    key: str
+    display_name: str
+    kind: str
+
+
+@strawberry.type
 class Query:
     """GraphQL query root."""
+
+    @strawberry.field
+    def synced_venues(self) -> List[VenueType]:
+        """List data providers declared in settings/config.yaml (sidebar venues)."""
+        return [
+            VenueType(
+                key=venue["key"],
+                display_name=venue["display_name"],
+                kind=venue["kind"],
+            )
+            for venue in list_configured_venues()
+        ]
 
     @strawberry.field
     def portfolio(self) -> PortfolioType:

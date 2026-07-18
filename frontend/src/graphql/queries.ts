@@ -1,5 +1,15 @@
 import { gql } from '@apollo/client'
 
+export const GET_SYNCED_VENUES = gql`
+  query GetSyncedVenues {
+    syncedVenues {
+      key
+      displayName
+      kind
+    }
+  }
+`
+
 export const GET_PORTFOLIO = gql`
   query GetPortfolio {
     portfolio {
