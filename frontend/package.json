@@ -32,5 +32,9 @@
     "tailwindcss": "^3.3.5",
     "typescript": "^5.2.2",
     "vite": "^5.0.0"
+  },
+  "optionalDependencies": {
+    "@esbuild/linux-arm64": "0.21.5",
+    "@rollup/rollup-linux-arm64-gnu": "4.62.2"
   }
 }

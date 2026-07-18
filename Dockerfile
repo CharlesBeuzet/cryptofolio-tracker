@@ -3,6 +3,8 @@
 
 FROM --platform=linux/arm64 node:20-bookworm-slim AS frontend-build
 WORKDIR /frontend
+# Pin linux-arm64 Rollup/esbuild natives in package.json optionalDependencies so npm ci
+# installs them on Pi (lockfiles generated on x64 often omit other-platform optional deps).
 COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm ci
 COPY frontend/ ./
