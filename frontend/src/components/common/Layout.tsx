@@ -92,9 +92,11 @@ export default function Layout({ children }: LayoutProps) {
   )
 
   return (
-    <div className={`min-h-screen flex font-serif text-sillage-ink ${theme === 'dark' ? 'dark' : 'light'}`}>
-      {/* Desktop sidebar */}
-      <aside className="hidden lg:flex w-[212px] flex-shrink-0 border-r border-sillage-line px-4 py-5 flex-col bg-sillage-card2">
+    <div
+      className={`min-h-[100dvh] w-full max-w-full flex font-serif text-sillage-ink ${theme === 'dark' ? 'dark' : 'light'}`}
+    >
+      {/* Tablet / desktop sidebar */}
+      <aside className="hidden md:flex w-[212px] flex-shrink-0 border-r border-sillage-line px-4 py-5 flex-col bg-sillage-card2">
         <div className="flex items-center gap-2.5 px-1.5 pb-[22px]">
           <Logo />
           <div className="font-serif font-semibold text-base tracking-wide">SILLAGE</div>
@@ -102,16 +104,16 @@ export default function Layout({ children }: LayoutProps) {
         {navLinks}
       </aside>
 
-      {/* Mobile drawer */}
+      {/* Phone drawer */}
       {navOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="Navigation">
+        <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true" aria-label="Navigation">
           <button
             type="button"
             className="absolute inset-0 bg-black/45 border-0 cursor-pointer"
             aria-label="Close navigation"
             onClick={() => setNavOpen(false)}
           />
-          <aside className="absolute left-0 top-0 bottom-0 w-[min(280px,86vw)] flex flex-col border-r border-sillage-line px-4 py-5 bg-sillage-card2 shadow-xl animate-[slideIn_0.2s_ease-out]">
+          <aside className="absolute left-0 top-0 bottom-0 w-[min(300px,88vw)] flex flex-col border-r border-sillage-line px-4 py-5 bg-sillage-card2 shadow-xl animate-[slideIn_0.2s_ease-out]">
             <div className="flex items-center justify-between gap-2 px-1.5 pb-[22px]">
               <div className="flex items-center gap-2.5">
                 <Logo />
@@ -131,12 +133,12 @@ export default function Layout({ children }: LayoutProps) {
         </div>
       )}
 
-      <div className="flex-1 min-w-0 flex flex-col h-screen">
-        <header className="flex-shrink-0 border-b border-sillage-line px-3 sm:px-5 lg:px-[26px] min-h-[56px] lg:h-[60px] py-2 lg:py-0 flex flex-wrap justify-between items-center gap-x-3 gap-y-2 bg-sillage-card2">
+      <div className="flex-1 min-w-0 flex flex-col h-[100dvh] max-w-full">
+        <header className="flex-shrink-0 border-b border-sillage-line px-3 sm:px-5 md:px-[26px] min-h-[56px] md:h-[60px] py-2 md:py-0 flex flex-wrap justify-between items-center gap-x-3 gap-y-2 bg-sillage-card2">
           <div className="flex items-center gap-2.5 min-w-0">
             <button
               type="button"
-              className="iconbtn lg:hidden flex-shrink-0"
+              className="iconbtn md:hidden flex-shrink-0"
               aria-label="Open menu"
               aria-expanded={navOpen}
               onClick={() => setNavOpen(true)}
@@ -146,8 +148,8 @@ export default function Layout({ children }: LayoutProps) {
             <div className="font-mono text-[11px] text-sillage-soft flex items-center gap-2 sm:gap-3.5 min-w-0">
               <span className="text-sillage-green flex-shrink-0">◉</span>
               <span className="truncate">local instance</span>
-              <span className="opacity-40 hidden md:inline">·</span>
-              <span className="hidden md:inline whitespace-nowrap">
+              <span className="opacity-40 hidden lg:inline">·</span>
+              <span className="hidden lg:inline whitespace-nowrap">
                 {dateStr} · {timeStr}
               </span>
             </div>
@@ -170,7 +172,7 @@ export default function Layout({ children }: LayoutProps) {
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto px-3 sm:px-5 lg:px-[30px] py-4 sm:py-5 lg:py-[26px]">
+        <main className="flex-1 overflow-auto px-3 sm:px-5 md:px-6 lg:px-[30px] py-4 sm:py-5 lg:py-[26px] w-full max-w-full">
           {children}
         </main>
       </div>
