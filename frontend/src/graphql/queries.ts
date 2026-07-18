@@ -169,10 +169,19 @@ export const GET_APP_CONFIG = gql`
     appConfig {
       exists
       relativePath
+      availableConnectors {
+        name
+        label
+        supportsPassphrase
+        supportsHostname
+        requiredSecrets
+      }
       exchanges {
         name
+        label
         configured
         supportsPassphrase
+        supportsHostname
         sandbox
         hostname
         apiKey {
@@ -212,17 +221,31 @@ export const UPDATE_APP_CONFIG = gql`
   mutation UpdateAppConfig(
     $exchanges: [ExchangeConfigInput!]
     $hotWallets: HotWalletsConfigInput
+    $replaceExchanges: Boolean
   ) {
-    updateAppConfig(exchanges: $exchanges, hotWallets: $hotWallets) {
+    updateAppConfig(
+      exchanges: $exchanges
+      hotWallets: $hotWallets
+      replaceExchanges: $replaceExchanges
+    ) {
       success
       message
       config {
         exists
         relativePath
+        availableConnectors {
+          name
+          label
+          supportsPassphrase
+          supportsHostname
+          requiredSecrets
+        }
         exchanges {
           name
+          label
           configured
           supportsPassphrase
+          supportsHostname
           sandbox
           hostname
           apiKey {

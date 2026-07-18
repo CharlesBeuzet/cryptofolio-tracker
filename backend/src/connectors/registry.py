@@ -1,6 +1,6 @@
 """Load exchange connectors from settings/config.yaml."""
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import yaml
 
@@ -12,6 +12,44 @@ _CONNECTOR_FACTORIES = {
     "binance": BinanceConnector,
     "okx": OkxConnector,
 }
+
+# Field metadata for the Settings UI (must stay aligned with each connector __init__).
+_CONNECTOR_SPECS: Dict[str, Dict[str, Any]] = {
+    "binance": {
+        "label": "Binance",
+        "supports_passphrase": False,
+        "supports_hostname": False,
+        "required_secrets": ("api_key", "api_secret"),
+    },
+    "okx": {
+        "label": "OKX",
+        "supports_passphrase": True,
+        "supports_hostname": True,
+        "required_secrets": ("api_key", "api_secret", "passphrase"),
+    },
+}
+
+
+def available_connector_names() -> List[str]:
+    """Names of connectors implemented in this codebase."""
+    return list(_CONNECTOR_FACTORIES.keys())
+
+
+def list_available_connectors() -> List[Dict[str, Any]]:
+    """Return catalog entries for the Settings add-connector picker."""
+    catalog: List[Dict[str, Any]] = []
+    for name in available_connector_names():
+        spec = _CONNECTOR_SPECS.get(name, {})
+        catalog.append(
+            {
+                "name": name,
+                "label": spec.get("label") or name.title(),
+                "supports_passphrase": bool(spec.get("supports_passphrase")),
+                "supports_hostname": bool(spec.get("supports_hostname")),
+                "required_secrets": list(spec.get("required_secrets") or ("api_key", "api_secret")),
+            }
+        )
+    return catalog
 
 
 def _default_config_path() -> Path:

@@ -249,16 +249,29 @@ class SecretFieldType:
 
 @strawberry.type
 class ExchangeConfigType:
-    """One exchange block from settings/config.yaml."""
+    """One active connector block from settings/config.yaml."""
 
     name: str
+    label: str
     configured: bool
     api_key: SecretFieldType
     api_secret: SecretFieldType
     passphrase: SecretFieldType
     supports_passphrase: bool
+    supports_hostname: bool
     sandbox: Optional[bool]
     hostname: Optional[str]
+
+
+@strawberry.type
+class AvailableConnectorType:
+    """A connector implemented in this project that can be added in Settings."""
+
+    name: str
+    label: str
+    supports_passphrase: bool
+    supports_hostname: bool
+    required_secrets: List[str]
 
 
 @strawberry.type
@@ -302,6 +315,7 @@ class AppConfigType:
 
     exists: bool
     relative_path: str
+    available_connectors: List[AvailableConnectorType]
     exchanges: List[ExchangeConfigType]
     hot_wallets: HotWalletsConfigType
 
@@ -364,20 +378,33 @@ def _config_to_type(data: dict) -> AppConfigType:
     exchanges = [
         ExchangeConfigType(
             name=ex["name"],
+            label=ex.get("label") or ex["name"].title(),
             configured=ex["configured"],
             api_key=_secret_to_type(ex["api_key"]),
             api_secret=_secret_to_type(ex["api_secret"]),
             passphrase=_secret_to_type(ex["passphrase"]),
             supports_passphrase=ex["supports_passphrase"],
+            supports_hostname=bool(ex.get("supports_hostname")),
             sandbox=ex.get("sandbox"),
             hostname=ex.get("hostname"),
         )
         for ex in data["exchanges"]
     ]
+    available = [
+        AvailableConnectorType(
+            name=item["name"],
+            label=item["label"],
+            supports_passphrase=item["supports_passphrase"],
+            supports_hostname=item["supports_hostname"],
+            required_secrets=list(item.get("required_secrets") or []),
+        )
+        for item in data.get("available_connectors") or []
+    ]
     hw = data["hot_wallets"]
     return AppConfigType(
         exists=data["exists"],
         relative_path=data["relative_path"],
+        available_connectors=available,
         exchanges=exchanges,
         hot_wallets=HotWalletsConfigType(
             default_rpc=hw.get("default_rpc"),
@@ -592,6 +619,7 @@ class Mutation:
         self,
         exchanges: Optional[List[ExchangeConfigInput]] = None,
         hot_wallets: Optional[HotWalletsConfigInput] = None,
+        replace_exchanges: bool = False,
     ) -> UpdateConfigResultType:
         """Persist Settings changes to settings/config.yaml (secrets never echoed back)."""
         try:
@@ -637,6 +665,7 @@ class Mutation:
             updated = config_settings_service.update_config(
                 exchanges=exchange_payload,
                 hot_wallets=hot_wallets_payload,
+                replace_exchanges=replace_exchanges,
             )
             return UpdateConfigResultType(
                 success=True,
