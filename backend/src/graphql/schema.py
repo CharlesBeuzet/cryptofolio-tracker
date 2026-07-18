@@ -9,6 +9,7 @@ from ..services.portfolio import PortfolioService
 from ..services.fiat_deposits import FiatDepositService
 from ..services.price_history import PriceHistoryService
 from ..services.metrics_helpers import cost_basis, cash_in_trade
+from ..services import config_settings as config_settings_service
 
 
 @strawberry.type
@@ -239,6 +240,168 @@ class FiatDepositRecordType:
 
 
 @strawberry.type
+class SecretFieldType:
+    """Masked secret field for Settings (never returns the raw value)."""
+
+    is_set: bool
+    hint: Optional[str]
+
+
+@strawberry.type
+class ExchangeConfigType:
+    """One exchange block from settings/config.yaml."""
+
+    name: str
+    configured: bool
+    api_key: SecretFieldType
+    api_secret: SecretFieldType
+    passphrase: SecretFieldType
+    supports_passphrase: bool
+    sandbox: Optional[bool]
+    hostname: Optional[str]
+
+
+@strawberry.type
+class RpcUrlType:
+    """Chain → RPC URL pair."""
+
+    chain: str
+    url: str
+
+
+@strawberry.type
+class WalletTokenType:
+    """ERC-20 (or similar) token tracked on a wallet address."""
+
+    address: str
+    symbol: str
+    decimals: int
+
+
+@strawberry.type
+class WalletAddressType:
+    """Public wallet address to track."""
+
+    address: str
+    chain: str
+    tokens: List[WalletTokenType]
+
+
+@strawberry.type
+class HotWalletsConfigType:
+    """Hot wallets section of config.yaml."""
+
+    default_rpc: Optional[str]
+    rpc_urls: List[RpcUrlType]
+    addresses: List[WalletAddressType]
+
+
+@strawberry.type
+class AppConfigType:
+    """UI-safe view of settings/config.yaml."""
+
+    exists: bool
+    relative_path: str
+    exchanges: List[ExchangeConfigType]
+    hot_wallets: HotWalletsConfigType
+
+
+@strawberry.input
+class ExchangeConfigInput:
+    """Partial update for one exchange. Omit secrets (null) to keep current values."""
+
+    name: str
+    api_key: Optional[str] = None
+    api_secret: Optional[str] = None
+    passphrase: Optional[str] = None
+    sandbox: Optional[bool] = None
+    hostname: Optional[str] = None
+
+
+@strawberry.input
+class RpcUrlInput:
+    chain: str
+    url: str
+
+
+@strawberry.input
+class WalletTokenInput:
+    address: str
+    symbol: str = ""
+    decimals: int = 18
+
+
+@strawberry.input
+class WalletAddressInput:
+    address: str
+    chain: str = "ethereum"
+    tokens: Optional[List[WalletTokenInput]] = None
+
+
+@strawberry.input
+class HotWalletsConfigInput:
+    """Full replacement payload for the hot_wallets section."""
+
+    default_rpc: Optional[str] = None
+    rpc_urls: Optional[List[RpcUrlInput]] = None
+    addresses: Optional[List[WalletAddressInput]] = None
+
+
+@strawberry.type
+class UpdateConfigResultType:
+    """Result of saving config.yaml."""
+
+    success: bool
+    message: str
+    config: AppConfigType
+
+
+def _secret_to_type(data: dict) -> SecretFieldType:
+    return SecretFieldType(is_set=bool(data.get("is_set")), hint=data.get("hint"))
+
+
+def _config_to_type(data: dict) -> AppConfigType:
+    exchanges = [
+        ExchangeConfigType(
+            name=ex["name"],
+            configured=ex["configured"],
+            api_key=_secret_to_type(ex["api_key"]),
+            api_secret=_secret_to_type(ex["api_secret"]),
+            passphrase=_secret_to_type(ex["passphrase"]),
+            supports_passphrase=ex["supports_passphrase"],
+            sandbox=ex.get("sandbox"),
+            hostname=ex.get("hostname"),
+        )
+        for ex in data["exchanges"]
+    ]
+    hw = data["hot_wallets"]
+    return AppConfigType(
+        exists=data["exists"],
+        relative_path=data["relative_path"],
+        exchanges=exchanges,
+        hot_wallets=HotWalletsConfigType(
+            default_rpc=hw.get("default_rpc"),
+            rpc_urls=[RpcUrlType(chain=r["chain"], url=r["url"]) for r in hw.get("rpc_urls") or []],
+            addresses=[
+                WalletAddressType(
+                    address=a["address"],
+                    chain=a["chain"],
+                    tokens=[
+                        WalletTokenType(
+                            address=t["address"],
+                            symbol=t["symbol"],
+                            decimals=t["decimals"],
+                        )
+                        for t in a.get("tokens") or []
+                    ],
+                )
+                for a in hw.get("addresses") or []
+            ],
+        ),
+    )
+
+
+@strawberry.type
 class Query:
     """GraphQL query root."""
 
@@ -414,6 +577,85 @@ class Query:
             ],
         )
 
+    @strawberry.field
+    def app_config(self) -> AppConfigType:
+        """Return a masked view of settings/config.yaml for the Settings page."""
+        return _config_to_type(config_settings_service.get_public_config())
 
-schema = strawberry.Schema(query=Query)
+
+@strawberry.type
+class Mutation:
+    """GraphQL mutation root."""
+
+    @strawberry.mutation
+    def update_app_config(
+        self,
+        exchanges: Optional[List[ExchangeConfigInput]] = None,
+        hot_wallets: Optional[HotWalletsConfigInput] = None,
+    ) -> UpdateConfigResultType:
+        """Persist Settings changes to settings/config.yaml (secrets never echoed back)."""
+        try:
+            exchange_payload = None
+            if exchanges is not None:
+                exchange_payload = [
+                    {
+                        "name": ex.name,
+                        "api_key": ex.api_key,
+                        "api_secret": ex.api_secret,
+                        "passphrase": ex.passphrase,
+                        "sandbox": ex.sandbox,
+                        "hostname": ex.hostname,
+                    }
+                    for ex in exchanges
+                ]
+
+            hot_wallets_payload = None
+            if hot_wallets is not None:
+                hot_wallets_payload = {
+                    "default_rpc": hot_wallets.default_rpc,
+                    "rpc_urls": [
+                        {"chain": r.chain, "url": r.url}
+                        for r in (hot_wallets.rpc_urls or [])
+                    ],
+                    "addresses": [
+                        {
+                            "address": a.address,
+                            "chain": a.chain,
+                            "tokens": [
+                                {
+                                    "address": t.address,
+                                    "symbol": t.symbol,
+                                    "decimals": t.decimals,
+                                }
+                                for t in (a.tokens or [])
+                            ],
+                        }
+                        for a in (hot_wallets.addresses or [])
+                    ],
+                }
+
+            updated = config_settings_service.update_config(
+                exchanges=exchange_payload,
+                hot_wallets=hot_wallets_payload,
+            )
+            return UpdateConfigResultType(
+                success=True,
+                message="Configuration saved. Connectors reloaded.",
+                config=_config_to_type(updated),
+            )
+        except ValueError as exc:
+            return UpdateConfigResultType(
+                success=False,
+                message=str(exc),
+                config=_config_to_type(config_settings_service.get_public_config()),
+            )
+        except Exception as exc:
+            return UpdateConfigResultType(
+                success=False,
+                message=f"Failed to save configuration: {exc}",
+                config=_config_to_type(config_settings_service.get_public_config()),
+            )
+
+
+schema = strawberry.Schema(query=Query, mutation=Mutation)
 

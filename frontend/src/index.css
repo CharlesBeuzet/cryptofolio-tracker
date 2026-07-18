@@ -134,4 +134,33 @@ body {
     @apply bg-sillage-card text-sillage-ink;
     border-color: var(--green);
   }
+
+  .field {
+    @apply w-full bg-sillage-card2 border border-sillage-line rounded-[7px] px-3 py-2 font-mono text-[12px] text-sillage-ink outline-none transition-colors;
+  }
+
+  .field:focus {
+    border-color: var(--green);
+  }
+
+  .field::placeholder {
+    color: var(--soft);
+    opacity: 0.75;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center px-4 py-2 rounded-[8px] font-mono text-[11px] tracking-wide border border-sillage-green bg-sillage-gsoft text-sillage-ink cursor-pointer transition-opacity;
+  }
+
+  .btn-primary:disabled {
+    @apply opacity-50 cursor-not-allowed;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center px-2.5 py-1.5 rounded-[7px] font-mono text-[11px] tracking-wide border border-sillage-line text-sillage-soft cursor-pointer bg-transparent transition-colors;
+  }
+
+  .btn-ghost:hover {
+    @apply text-sillage-ink;
+  }
 }

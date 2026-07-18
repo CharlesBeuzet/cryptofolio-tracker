@@ -7,12 +7,14 @@ from strawberry.fastapi import GraphQLRouter
 
 from .graphql.schema import schema
 from .models.database import init_db
+from .runtime import register_reload_hook
 from .services.scheduler import DataUpdateScheduler
 
 # Initialize database
 init_db()
 
 scheduler = DataUpdateScheduler()
+register_reload_hook(scheduler.reload_connectors)
 
 
 @asynccontextmanager

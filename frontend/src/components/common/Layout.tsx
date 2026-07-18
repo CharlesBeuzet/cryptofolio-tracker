@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { path: '/position', label: 'Positions', glyph: '▮', num: '§2', match: (p: string) => p.startsWith('/position') },
   { path: '/fiat-deposits', label: 'On-ramp', glyph: '$', num: '§3', match: (p: string) => p === '/fiat-deposits' },
   { path: '/performance', label: 'Theses', glyph: '§', num: '§4', match: (p: string) => p === '/performance' },
+  { path: '/settings', label: 'Settings', glyph: '⚙', num: '§5', match: (p: string) => p.startsWith('/settings') },
 ]
 
 export default function Layout({ children }: LayoutProps) {

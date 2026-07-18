@@ -164,3 +164,98 @@ export const GET_FIAT_DEPOSITS = gql`
   }
 `
 
+export const GET_APP_CONFIG = gql`
+  query GetAppConfig {
+    appConfig {
+      exists
+      relativePath
+      exchanges {
+        name
+        configured
+        supportsPassphrase
+        sandbox
+        hostname
+        apiKey {
+          isSet
+          hint
+        }
+        apiSecret {
+          isSet
+          hint
+        }
+        passphrase {
+          isSet
+          hint
+        }
+      }
+      hotWallets {
+        defaultRpc
+        rpcUrls {
+          chain
+          url
+        }
+        addresses {
+          address
+          chain
+          tokens {
+            address
+            symbol
+            decimals
+          }
+        }
+      }
+    }
+  }
+`
+
+export const UPDATE_APP_CONFIG = gql`
+  mutation UpdateAppConfig(
+    $exchanges: [ExchangeConfigInput!]
+    $hotWallets: HotWalletsConfigInput
+  ) {
+    updateAppConfig(exchanges: $exchanges, hotWallets: $hotWallets) {
+      success
+      message
+      config {
+        exists
+        relativePath
+        exchanges {
+          name
+          configured
+          supportsPassphrase
+          sandbox
+          hostname
+          apiKey {
+            isSet
+            hint
+          }
+          apiSecret {
+            isSet
+            hint
+          }
+          passphrase {
+            isSet
+            hint
+          }
+        }
+        hotWallets {
+          defaultRpc
+          rpcUrls {
+            chain
+            url
+          }
+          addresses {
+            address
+            chain
+            tokens {
+              address
+              symbol
+              decimals
+            }
+          }
+        }
+      }
+    }
+  }
+`
+

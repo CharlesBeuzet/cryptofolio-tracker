@@ -21,10 +21,17 @@ class DataUpdateScheduler:
             config_path = str(BASE_DIR / "settings" / "config.yaml")
         self.config_path = config_path
         self.scheduler = AsyncIOScheduler()
+        self.connectors = []
+        self.reload_connectors()
+
+    def reload_connectors(self) -> None:
+        """Re-read config.yaml and rebuild connector instances."""
         self.connectors = load_connectors(self.config_path)
         if self.connectors:
             for connector in self.connectors:
                 print(f"{connector.name} connector initialized")
+        else:
+            print("No exchange connectors configured")
 
     async def update_portfolio_data(self):
         """Update portfolio data from all connectors."""
