@@ -190,8 +190,8 @@ function CandlestickLayer({ xAxisMap, yAxisMap, data, offset, onCandleHover }: C
 
 /** Pixel gap between the candle wick tip and the arrow tip. */
 const ORDER_ARROW_GAP = 18
-const ORDER_ARROW_HALF_W = 7
-const ORDER_ARROW_HEIGHT = 12
+const ORDER_ARROW_HALF_W = 10
+const ORDER_ARROW_HEIGHT = 20
 
 function OrderPin({
   cx,
@@ -206,34 +206,64 @@ function OrderPin({
 
   const isBuy = payload?.type === 'buy'
   const color = isBuy ? 'var(--green)' : 'var(--down)'
+  const label = isBuy ? 'B' : 'S'
 
   // Buy sits below the candle (arrow ▲); sell sits above (arrow ▼).
   // Tip points toward the price so the marker never overlaps the wick/body.
+  // Label sits in the wide base of the triangle.
   if (isBuy) {
     const tipY = cy + ORDER_ARROW_GAP
+    const baseY = tipY + ORDER_ARROW_HEIGHT
+    const labelY = tipY + ORDER_ARROW_HEIGHT * 0.68
     return (
       <g>
         <path
-          d={`M${cx},${tipY} L${cx + ORDER_ARROW_HALF_W},${tipY + ORDER_ARROW_HEIGHT} L${cx - ORDER_ARROW_HALF_W},${tipY + ORDER_ARROW_HEIGHT} Z`}
+          d={`M${cx},${tipY} L${cx + ORDER_ARROW_HALF_W},${baseY} L${cx - ORDER_ARROW_HALF_W},${baseY} Z`}
           fill={color}
           stroke="var(--card)"
           strokeWidth={1.2}
           strokeLinejoin="round"
         />
+        <text
+          x={cx}
+          y={labelY}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          fill="var(--mkink)"
+          fontSize={9}
+          fontWeight={700}
+          fontFamily="IBM Plex Mono, monospace"
+        >
+          {label}
+        </text>
       </g>
     )
   }
 
   const tipY = cy - ORDER_ARROW_GAP
+  const baseY = tipY - ORDER_ARROW_HEIGHT
+  const labelY = tipY - ORDER_ARROW_HEIGHT * 0.68
   return (
     <g>
       <path
-        d={`M${cx},${tipY} L${cx + ORDER_ARROW_HALF_W},${tipY - ORDER_ARROW_HEIGHT} L${cx - ORDER_ARROW_HALF_W},${tipY - ORDER_ARROW_HEIGHT} Z`}
+        d={`M${cx},${tipY} L${cx + ORDER_ARROW_HALF_W},${baseY} L${cx - ORDER_ARROW_HALF_W},${baseY} Z`}
         fill={color}
         stroke="var(--card)"
         strokeWidth={1.2}
         strokeLinejoin="round"
       />
+      <text
+        x={cx}
+        y={labelY}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fill="var(--mkink)"
+        fontSize={9}
+        fontWeight={700}
+        fontFamily="IBM Plex Mono, monospace"
+      >
+        {label}
+      </text>
     </g>
   )
 }
