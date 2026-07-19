@@ -1,11 +1,8 @@
 """OKX exchange connector."""
-import re
-import time
+import ccxt
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
-
-import ccxt
 
 from .base import BaseConnector
 
@@ -17,60 +14,6 @@ _OKX_ORDER_PAGE_LIMIT = 100
 _OKX_FIAT_DEPOSIT_PAGE_LIMIT = 100
 # OKX wallet types for balance fetch (ccxt params.type).
 _OKX_BALANCE_ACCOUNT_TYPES = ("trading", "funding")
-# Balance fetch retries for intermittent Pi/network failures.
-_BALANCE_FETCH_ATTEMPTS = 3
-_BALANCE_FETCH_BACKOFF_S = (0.5, 1.5, 3.0)
-_OKX_HTTP_TIMEOUT_MS = 30000
-# Bare ccxt transport errors look like: "okx GET https://host/path" with no JSON body.
-_BARE_OKX_HTTP_MSG = re.compile(
-    r"^okx\s+(GET|POST|PUT|DELETE)\s+https?://\S+$", re.IGNORECASE
-)
-
-
-def _format_okx_error(exc: BaseException) -> str:
-    """Compact diagnostic string for ccxt/OKX exceptions."""
-    parts = [f"{type(exc).__name__}: {exc}"]
-    for attr in ("http_status_code", "status", "url"):
-        if hasattr(exc, attr):
-            val = getattr(exc, attr)
-            if val is not None and val != "":
-                parts.append(f"{attr}={val}")
-    response = getattr(exc, "response", None)
-    if response is not None:
-        text = str(response)
-        if len(text) > 300:
-            text = text[:300] + "…"
-        parts.append(f"response={text}")
-    return " | ".join(parts)
-
-
-def _is_transient_okx_error(exc: BaseException) -> bool:
-    """True for retryable transport failures; false for auth/permission errors."""
-    if isinstance(exc, ccxt.AuthenticationError):
-        return False
-    if isinstance(
-        exc,
-        (ccxt.RequestTimeout, ccxt.NetworkError, ccxt.ExchangeNotAvailable),
-    ):
-        return True
-    # Message-only failures (no HTTP status / JSON body), e.g. dropped TLS reply.
-    if getattr(exc, "http_status_code", None) not in (None, 0, ""):
-        return False
-    response = getattr(exc, "response", None)
-    if isinstance(response, dict) and (
-        response.get("code") is not None or response.get("msg") is not None
-    ):
-        return False
-    msg = str(exc).strip()
-    return bool(_BARE_OKX_HTTP_MSG.match(msg))
-
-
-def _sleep_backoff(attempt: int) -> None:
-    """Sleep before retry; attempt is 0-based index of the failed try."""
-    delay = _BALANCE_FETCH_BACKOFF_S[
-        min(attempt, len(_BALANCE_FETCH_BACKOFF_S) - 1)
-    ]
-    time.sleep(delay)
 
 
 class OkxConnector(BaseConnector):
@@ -86,7 +29,6 @@ class OkxConnector(BaseConnector):
             "secret": api_secret,
             "password": passphrase,
             "enableRateLimit": True,
-            "timeout": _OKX_HTTP_TIMEOUT_MS,
             "options": {"defaultType": "spot"},
         }
         hostname = config.get("hostname")
@@ -97,78 +39,35 @@ class OkxConnector(BaseConnector):
             self.exchange.set_sandbox_mode(True)
 
     def _fetch_account_balances(self, account_type: str) -> List[Dict]:
-        """
-        Fetch non-zero balances from one OKX wallet (trading or funding).
-
-        Retries transient network errors. Re-raises on final failure so
-        fetch_balances does not merge a partial (funding-only) snapshot.
-        """
-        last_exc: Optional[BaseException] = None
-        for attempt in range(_BALANCE_FETCH_ATTEMPTS):
-            try:
-                print(
-                    f"Fetching OKX {account_type} balances "
-                    f"(attempt {attempt + 1}/{_BALANCE_FETCH_ATTEMPTS}) …"
-                )
-                balance = self.exchange.fetch_balance({"type": account_type})
-                balances = []
-                for symbol, amount in balance["total"].items():
-                    if amount > 0:
-                        balances.append(
-                            {
-                                "symbol": symbol,
-                                "quantity": float(amount),
-                                "exchange": self.name,
-                            }
-                        )
-                print(
-                    f"OKX {account_type} balances OK: "
-                    f"{len(balances)} non-zero symbol(s)"
-                )
-                return balances
-            except Exception as e:
-                last_exc = e
-                detail = _format_okx_error(e)
-                transient = _is_transient_okx_error(e)
-                if transient and attempt < _BALANCE_FETCH_ATTEMPTS - 1:
-                    print(
-                        f"WARNING: OKX {account_type} balances transient failure "
-                        f"(attempt {attempt + 1}/{_BALANCE_FETCH_ATTEMPTS}): {detail}; "
-                        f"retrying …"
+        """Fetch non-zero balances from one OKX wallet (trading or funding)."""
+        try:
+            balance = self.exchange.fetch_balance({"type": account_type})
+            balances = []
+            for symbol, amount in balance["total"].items():
+                if amount > 0:
+                    balances.append(
+                        {
+                            "symbol": symbol,
+                            "quantity": float(amount),
+                            "exchange": self.name,
+                        }
                     )
-                    _sleep_backoff(attempt)
-                    continue
-                print(
-                    f"ERROR: OKX {account_type} balances failed "
-                    f"(attempt {attempt + 1}/{_BALANCE_FETCH_ATTEMPTS}, "
-                    f"transient={transient}): {detail}"
-                )
-                raise
-        assert last_exc is not None
-        raise last_exc
+            return balances
+        except Exception as e:
+            print(f"Error fetching OKX {account_type} balances: {e}")
+            return []
 
     async def fetch_balances(self) -> List[Dict]:
-        """
-        Fetch balances from OKX trading and funding accounts (aggregated per symbol).
-
-        Both wallet types must succeed; a failure on either aborts the whole fetch
-        so callers do not sync incomplete holdings.
-        """
-        print(
-            "Fetching OKX balances for account types: "
-            + ", ".join(_OKX_BALANCE_ACCOUNT_TYPES)
-        )
+        """Fetch balances from OKX trading and funding accounts (aggregated per symbol)."""
         totals: Dict[str, float] = defaultdict(float)
         for account_type in _OKX_BALANCE_ACCOUNT_TYPES:
             for row in self._fetch_account_balances(account_type):
                 totals[row["symbol"]] += row["quantity"]
-        result = [
+        return [
             {"symbol": sym, "quantity": qty, "exchange": self.name}
             for sym, qty in sorted(totals.items())
             if qty > 0
         ]
-        print(f"OKX aggregated balances: {len(result)} non-zero symbol(s)")
-        return result
 
     def _normalize_executed_order(
         self, order: Dict[str, Any], market_pair: str
