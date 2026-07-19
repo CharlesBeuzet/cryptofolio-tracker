@@ -326,7 +326,7 @@ class Query:
 
     @strawberry.field
     def portfolio_history(self, days: int = 180) -> List[PortfolioSnapshotType]:
-        """Get portfolio value history."""
+        """Get portfolio value history (days <= 0 = Max / all snapshots)."""
         db = SessionLocal()
         try:
             service = PortfolioService(db)
@@ -410,7 +410,10 @@ class Query:
         days: int = 90,
         exchange: Optional[str] = None,
     ) -> AssetPriceHistoryType:
-        """Fetch USDT price history from the position's exchange (in-memory cache only)."""
+        """Fetch USDT price history from the position's exchange (in-memory cache only).
+
+        days <= 0 means Max (capped exchange lookback).
+        """
         service = PriceHistoryService()
         result = await service.fetch(symbol, days, exchange)
         return AssetPriceHistoryType(
