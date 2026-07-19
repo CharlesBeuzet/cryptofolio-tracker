@@ -1,15 +1,17 @@
 import { useQuery } from '@apollo/client'
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { GET_PORTFOLIO, GET_PORTFOLIO_HISTORY, GET_FIAT_DEPOSITS_SUMMARY } from '../graphql/queries'
 import PortfolioValueChart from '../components/charts/PortfolioValueChart'
 import AllocationDonut from '../components/charts/AllocationDonut'
 import RangeSegment, { rangeLabel, rangeToDays, type RangeKey } from '../components/common/RangeSegment'
 import { assetColor, formatPct, formatUsd, formatUsdPrecise, pnlColorClass } from '../utils/format'
+import { groupPositionsByAsset } from '../utils/groupPositionsByAsset'
 import { appendLiveNavPoint } from '../utils/portfolioChart'
 
 export default function Home() {
   const [range, setRange] = useState<RangeKey>('90d')
+  const navigate = useNavigate()
 
   const { data: portfolioData, loading: portfolioLoading } = useQuery(GET_PORTFOLIO)
   const { data: historyData, loading: historyLoading } = useQuery(GET_PORTFOLIO_HISTORY, {
@@ -29,6 +31,8 @@ export default function Home() {
   const history = historyData?.portfolioHistory || []
   const positions = portfolio?.positions || []
   const totalValue = portfolio?.totalValue || 0
+  const assets = groupPositionsByAsset(positions)
+  const totalBook = assets.reduce((s, a) => s + a.value, 0)
   const chartHistory =
     portfolio != null ? appendLiveNavPoint(history, portfolio.totalValue) : history
   const sorted = [...positions].sort((a, b) => b.value - a.value)
@@ -71,28 +75,51 @@ export default function Home() {
             <div className="cap">click a row to inspect ↗</div>
           </div>
 
-          {sorted.length === 0 ? (
+          {assets.length === 0 ? (
             <div className="text-center py-8 text-sillage-soft text-sm">No positions found</div>
           ) : (
-            sorted.map((position, i) => {
-              const share = totalBook > 0 ? (position.value / totalBook) * 100 : 0
-              const pnlVal = position.pnl || 0
-              const exchange = position.exchange || '—'
+            assets.map((asset, i) => {
+              const share = totalBook > 0 ? (asset.value / totalBook) * 100 : 0
 
               return (
-                <Link key={position.id} to={`/position/${position.id}`} className="hrow no-underline text-inherit">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
+                <Link
+                  key={asset.symbol}
+                  to={`/asset/${encodeURIComponent(asset.symbol)}`}
+                  className="hrow no-underline text-inherit"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="sw" style={{ background: assetColor(i) }} />
-                      <span className="tk">{position.symbol}</span>
-                      <span className="chip">{exchange}</span>
+                      <span className="tk">{asset.symbol}</span>
+                      {asset.venues.map((venue) => (
+                        <span
+                          key={venue.id}
+                          role="link"
+                          tabIndex={0}
+                          className="chip cl"
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            navigate(`/position/${venue.id}`)
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              navigate(`/position/${venue.id}`)
+                            }
+                          }}
+                        >
+                          {venue.exchange}
+                        </span>
+                      ))}
                     </div>
                     <div className="text-sillage-soft text-[11px] mt-[3px] ml-[18px] font-mono">
-                      {position.quantity.toLocaleString(undefined, { maximumFractionDigits: 8 })}
+                      {asset.quantity.toLocaleString(undefined, { maximumFractionDigits: 8 })}
                     </div>
                   </div>
                   <div className="w-24 text-right font-mono tabular-nums text-[13px]">
-                    {formatUsdPrecise(position.value)}
+                    {formatUsdPrecise(asset.value)}
                   </div>
                   <div className="w-20">
                     <div className="wbar">
@@ -102,8 +129,8 @@ export default function Home() {
                       {share.toFixed(1)}%
                     </div>
                   </div>
-                  <div className={`w-[74px] text-right font-mono text-xs tabular-nums ${pnlColorClass(pnlVal)}`}>
-                    {formatPct(position.pnlPercent || 0)}
+                  <div className={`w-[74px] text-right font-mono text-xs tabular-nums ${pnlColorClass(asset.pnl)}`}>
+                    {formatPct(asset.pnlPercent)}
                   </div>
                 </Link>
               )
@@ -112,13 +139,13 @@ export default function Home() {
 
           <div className="rule mt-3" />
           <div className="font-mono text-sillage-soft text-[11px] mt-3">
-            Grouped by exchange — every position shows its venue tag.
+            Grouped by asset — venue tags show every exchange holding the same coin.
           </div>
         </div>
 
         <div className="panel w-full lg:w-[280px] flex-shrink-0 flex flex-col items-center">
           <div className="lbl self-start mb-[18px]">Fig 1 · Allocation</div>
-          <AllocationDonut positions={positions} />
+          <AllocationDonut positions={assets} />
         </div>
       </div>
     </div>

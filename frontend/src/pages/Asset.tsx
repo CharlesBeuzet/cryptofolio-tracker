@@ -2,14 +2,25 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@apollo/client'
 import { useState, useMemo, useEffect } from 'react'
 import { format } from 'date-fns'
-import { GET_POSITION, GET_PORTFOLIO, GET_ASSET_PRICE_HISTORY } from '../graphql/queries'
+import { GET_ASSET, GET_PORTFOLIO, GET_ASSET_PRICE_HISTORY } from '../graphql/queries'
 import AssetPriceChart from '../components/charts/AssetPriceChart'
 import RangeSegment, { type RangeKey, rangeToDays } from '../components/common/RangeSegment'
 import { assetColor, formatPct, formatTokenPrice, formatUsdPrecise, pnlColorClass } from '../utils/format'
 import { groupPositionsByAsset } from '../utils/groupPositionsByAsset'
 
-export default function Position() {
-  const { id } = useParams<{ id: string }>()
+interface AssetOrder {
+  id: number
+  symbol: string
+  type: string
+  quantity: number
+  price: number
+  executedAt: string
+  exchange: string | null
+}
+
+export default function Asset() {
+  const { symbol: rawSymbol } = useParams<{ symbol: string }>()
+  const symbol = decodeURIComponent(rawSymbol || '').toUpperCase()
   const navigate = useNavigate()
   const [range, setRange] = useState<RangeKey>('90d')
   const [hoveredCandle, setHoveredCandle] = useState<{ timestamp: number; close: number } | null>(
@@ -17,21 +28,30 @@ export default function Position() {
   )
 
   const { data: portfolioData } = useQuery(GET_PORTFOLIO)
-  const { data, loading, error } = useQuery(GET_POSITION, {
-    variables: { id: parseInt(id || '0') },
+  const { data, loading, error } = useQuery(GET_ASSET, {
+    variables: { symbol },
+    skip: !symbol,
   })
 
-  const positionSymbol = data?.position?.symbol
-  const positionExchange = data?.position?.exchange
+  const assetData = data?.asset
+  const venues = assetData?.positions || []
+  const grouped = useMemo(() => groupPositionsByAsset(venues), [venues])
+  const asset = grouped[0]
+
+  const primaryExchange =
+    venues.find((p: { id: number }) => p.id === asset?.primaryId)?.exchange ||
+    venues[0]?.exchange ||
+    (assetData?.orders || []).find((o: { exchange?: string | null }) => o.exchange)?.exchange ||
+    null
   const days = rangeToDays(range)
 
   useEffect(() => {
     setHoveredCandle(null)
-  }, [range, positionSymbol])
+  }, [range, symbol])
 
   const { data: priceData, loading: priceLoading } = useQuery(GET_ASSET_PRICE_HISTORY, {
-    variables: { symbol: positionSymbol || '', days, exchange: positionExchange || null },
-    skip: !positionSymbol || !positionExchange,
+    variables: { symbol, days, exchange: primaryExchange },
+    skip: !symbol || !primaryExchange,
   })
 
   const priceHistory = priceData?.assetPriceHistory?.points || []
@@ -40,57 +60,119 @@ export default function Position() {
   const ambiguityMessage = priceData?.assetPriceHistory?.ambiguityMessage
   const candidates = priceData?.assetPriceHistory?.candidates || []
 
+  const allOrders: AssetOrder[] = useMemo(() => {
+    const orders = [...(assetData?.orders || [])] as AssetOrder[]
+    return orders.sort(
+      (a, b) => new Date(b.executedAt).getTime() - new Date(a.executedAt).getTime(),
+    )
+  }, [assetData?.orders])
+
   const ordersInRange = useMemo(() => {
-    const positionOrders = data?.position?.orders || []
-    if (priceHistory.length === 0) return positionOrders
+    if (priceHistory.length === 0) return allOrders
     const start = new Date(priceHistory[0].timestamp).getTime()
     const end = new Date(priceHistory[priceHistory.length - 1].timestamp).getTime()
-    return positionOrders.filter((order: { executedAt: string }) => {
+    return allOrders.filter((order) => {
       const ts = new Date(order.executedAt).getTime()
       return ts >= start && ts <= end
     })
-  }, [data?.position?.orders, priceHistory])
+  }, [allOrders, priceHistory])
+
+  const avgExitPrice = useMemo(() => {
+    const sells = allOrders.filter((o) => o.type === 'sell')
+    const qty = sells.reduce((s, o) => s + o.quantity, 0)
+    if (qty <= 0) return null
+    const proceeds = sells.reduce((s, o) => s + o.quantity * o.price, 0)
+    return proceeds / qty
+  }, [allOrders])
+
+  const assetTabs = useMemo(() => {
+    const positions = portfolioData?.portfolio?.positions || []
+    return groupPositionsByAsset(positions)
+  }, [portfolioData?.portfolio?.positions])
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-sillage-soft font-mono text-sm">Loading position data…</div>
+        <div className="text-sillage-soft font-mono text-sm">Loading asset data…</div>
       </div>
     )
   }
 
-  if (error || !data?.position) {
+  if (error || !assetData) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-sillage-down font-mono text-sm">Error loading position data</div>
+        <div className="text-sillage-down font-mono text-sm">Error loading asset data</div>
       </div>
     )
   }
 
-  const position = data.position
-  const assetTabs = groupPositionsByAsset(portfolioData?.portfolio?.positions || [])
-  const costBasis = position.avgEntryPrice * position.quantity
-  const unrealized = position.pnl || 0
+  const displaySymbol = asset?.symbol || assetData.symbol || symbol
+  const unrealized = asset?.pnl ?? 0
   const isPositive = unrealized >= 0
+  const currentPrice = venues[0]?.currentPrice as number | null | undefined
+  const firstBoughtAt = venues.reduce((earliest: string | null, p: { firstBoughtAt: string }) => {
+    if (!earliest || new Date(p.firstBoughtAt) < new Date(earliest)) return p.firstBoughtAt
+    return earliest
+  }, null as string | null)
+  const durationDays = firstBoughtAt
+    ? Math.max(
+        0,
+        Math.floor((Date.now() - new Date(firstBoughtAt).getTime()) / (1000 * 60 * 60 * 24)),
+      )
+    : Math.max(0, ...venues.map((p: { durationDays: number }) => p.durationDays || 0))
 
-  const orders = [...(position.orders || [])].sort(
-    (a, b) => new Date(b.executedAt).getTime() - new Date(a.executedAt).getTime(),
-  )
+  const venueChips = asset?.venues?.length
+    ? asset.venues
+    : Array.from(
+        new Map(
+          allOrders
+            .filter((o) => o.exchange)
+            .map((o) => [o.exchange!.toLowerCase(), { id: o.id, exchange: o.exchange! }]),
+        ).values(),
+      )
+
+  const venueLabel =
+    venueChips.length > 1
+      ? `${venueChips.length} venues`
+      : venueChips[0]?.exchange || 'unknown venue'
+
+  const avgEntryPrice = asset?.avgEntryPrice ?? 0
+  const costBasis = asset?.costBasis ?? 0
+  const marketValue = asset?.value ?? 0
+  const holdings = asset?.quantity ?? 0
 
   return (
     <div>
       <div className="flex justify-between items-end mb-4">
         <div>
-          <div className="lbl">§2 · Position detail</div>
-          <div className="flex items-center gap-3 mt-2">
-            <div className="font-serif text-[26px] leading-none">{position.symbol}</div>
-            {position.exchange && <span className="chip">{position.exchange}</span>}
-            <Link
-              to={`/asset/${encodeURIComponent(position.symbol)}`}
-              className="font-mono text-[11px] text-sillage-soft hover:text-sillage-ink no-underline"
-            >
-              all venues ↗
-            </Link>
+          <div className="lbl">§2 · Asset detail</div>
+          <div className="flex items-center gap-3 mt-2 flex-wrap">
+            <div className="font-serif text-[26px] leading-none">{displaySymbol}</div>
+            {venueChips.map((venue) => (
+              <span
+                key={venue.id}
+                role={asset ? 'link' : undefined}
+                tabIndex={asset ? 0 : undefined}
+                className={asset ? 'chip cl' : 'chip'}
+                onClick={
+                  asset
+                    ? () => navigate(`/position/${venue.id}`)
+                    : undefined
+                }
+                onKeyDown={
+                  asset
+                    ? (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          navigate(`/position/${venue.id}`)
+                        }
+                      }
+                    : undefined
+                }
+              >
+                {venue.exchange}
+              </span>
+            ))}
           </div>
         </div>
         <RangeSegment value={range} onChange={setRange} />
@@ -101,7 +183,7 @@ export default function Position() {
           <button
             key={tab.symbol}
             type="button"
-            className={`atab ${tab.symbol === position.symbol.toUpperCase() ? 'on' : ''}`}
+            className={`atab ${tab.symbol === displaySymbol ? 'on' : ''}`}
             onClick={() => navigate(`/asset/${encodeURIComponent(tab.symbol)}`)}
           >
             <span className="sw" style={{ background: assetColor(i) }} />
@@ -124,7 +206,7 @@ export default function Position() {
               <span className="text-sillage-soft">
                 <span className="text-sillage-green">—</span> avg entry
               </span>
-              {position.metrics?.avgExitPrice != null && (
+              {avgExitPrice != null && (
                 <span className="text-sillage-soft">
                   <span className="text-sillage-accent">—</span> avg sell
                 </span>
@@ -135,20 +217,18 @@ export default function Position() {
                   {formatTokenPrice(hoveredCandle.close)}
                 </span>
               ) : (
-                position.currentPrice && (
-                  <span className="text-sillage-soft">
-                    last {formatTokenPrice(position.currentPrice)}
-                  </span>
+                currentPrice != null && (
+                  <span className="text-sillage-soft">last {formatTokenPrice(currentPrice)}</span>
                 )
               )}
             </div>
           </div>
           <AssetPriceChart
-            symbol={position.symbol}
+            symbol={displaySymbol}
             priceHistory={priceHistory}
             orders={ordersInRange}
-            avgEntryPrice={position.avgEntryPrice}
-            avgExitPrice={position.metrics?.avgExitPrice}
+            avgEntryPrice={avgEntryPrice}
+            avgExitPrice={avgExitPrice}
             isMock={isMock}
             loading={priceLoading}
             resolutionStatus={resolutionStatus}
@@ -159,25 +239,28 @@ export default function Position() {
         </div>
 
         <div className="panel w-full lg:w-[286px] flex-shrink-0">
-          <div className="lbl mb-4">P&amp;L · since first entry</div>
+          <div className="lbl mb-4">P&amp;L · consolidated</div>
           <div className={`font-serif text-[30px] leading-none ${pnlColorClass(unrealized)}`}>
             {isPositive ? '+' : ''}
             {formatUsdPrecise(unrealized)}
           </div>
-          <div className={`font-mono text-xs mt-1.5 ${pnlColorClass(position.pnlPercent || 0)}`}>
-            {formatPct(position.pnlPercent || 0)} unrealized
+          <div className={`font-mono text-xs mt-1.5 ${pnlColorClass(asset?.pnlPercent ?? 0)}`}>
+            {formatPct(asset?.pnlPercent ?? 0)} unrealized
           </div>
 
           <div className="border-t border-sillage-line mt-[18px]">
             {[
-              ['Market value', formatUsdPrecise(position.value)],
+              ['Market value', formatUsdPrecise(marketValue)],
               ['Cost basis', formatUsdPrecise(costBasis)],
-              ['Avg entry', formatTokenPrice(position.avgEntryPrice)],
-              ...(position.metrics?.avgExitPrice != null
-                ? [['Avg sell', formatTokenPrice(position.metrics.avgExitPrice)] as const]
+              ['Avg entry', formatTokenPrice(avgEntryPrice)],
+              ...(avgExitPrice != null
+                ? [['Avg sell', formatTokenPrice(avgExitPrice)] as const]
                 : []),
-              ['Holdings', position.quantity.toLocaleString(undefined, { maximumFractionDigits: 8 })],
-              ['Duration', `${position.durationDays} days`],
+              [
+                'Holdings',
+                holdings.toLocaleString(undefined, { maximumFractionDigits: 8 }),
+              ],
+              ['Duration', `${durationDays} days`],
             ].map(([label, val], idx, arr) => (
               <div
                 key={label}
@@ -190,17 +273,20 @@ export default function Position() {
           </div>
 
           <div className="mt-4 bg-sillage-gsoft border border-sillage-line rounded-lg px-[15px] py-3">
-            <div className="lbl mb-[7px]">Since · {position.exchange || 'unknown venue'}</div>
+            <div className="lbl mb-[7px]">Across · {venueLabel}</div>
             <div className="cap leading-relaxed">
-              First bought {format(new Date(position.firstBoughtAt), 'MMM dd, yyyy')}. Track conviction
-              tags in the Theses view.
+              {firstBoughtAt
+                ? `First bought ${format(new Date(firstBoughtAt), 'MMM dd, yyyy')}. `
+                : ''}
+              Orders below include every venue that traded this asset. Click a venue tag for a
+              single-exchange view.
             </div>
           </div>
         </div>
       </div>
 
       <div className="panel mt-5">
-        <div className="lbl mb-1">Table 2 · Order history</div>
+        <div className="lbl mb-1">Table 2 · Consolidated order history</div>
         <div className="trow text-sillage-soft border-t-0">
           <div className="w-24 lbl text-[9px]">Date</div>
           <div className="w-[54px] lbl text-[9px]">Side</div>
@@ -209,10 +295,10 @@ export default function Position() {
           <div className="w-24 text-right lbl text-[9px]">Value</div>
           <div className="w-24 text-right lbl text-[9px]">Venue</div>
         </div>
-        {orders.length === 0 ? (
+        {allOrders.length === 0 ? (
           <div className="text-center py-8 text-sillage-soft text-sm">No orders found</div>
         ) : (
-          orders.map((order) => {
+          allOrders.map((order) => {
             const isBuy = order.type === 'buy'
             const total = order.quantity * order.price
             return (
@@ -221,12 +307,15 @@ export default function Position() {
                   {format(new Date(order.executedAt), 'MMM dd, yy')}
                 </div>
                 <div className="w-[54px]">
-                  <span className={`font-mono text-[11px] ${isBuy ? 'text-sillage-green' : 'text-sillage-accent'}`}>
+                  <span
+                    className={`font-mono text-[11px] ${isBuy ? 'text-sillage-green' : 'text-sillage-accent'}`}
+                  >
                     {isBuy ? 'BUY' : 'SELL'}
                   </span>
                 </div>
                 <div className="flex-1 font-mono tabular-nums text-xs">
-                  {order.quantity.toLocaleString(undefined, { maximumFractionDigits: 8 })} {position.symbol}
+                  {order.quantity.toLocaleString(undefined, { maximumFractionDigits: 8 })}{' '}
+                  {displaySymbol}
                 </div>
                 <div className="w-24 text-right font-mono tabular-nums text-xs">
                   {formatTokenPrice(order.price)}

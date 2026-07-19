@@ -62,6 +62,14 @@ body {
     @apply inline-block font-mono text-[9px] tracking-[0.1em] uppercase px-[7px] py-0.5 rounded border border-sillage-line text-sillage-soft leading-normal whitespace-nowrap;
   }
 
+  .chip.cl {
+    @apply cursor-pointer;
+  }
+
+  .chip.cl:hover {
+    @apply text-sillage-ink;
+  }
+
   .tk {
     @apply font-mono font-semibold text-[13px];
   }
