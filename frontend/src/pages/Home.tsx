@@ -35,8 +35,6 @@ export default function Home() {
   const totalBook = assets.reduce((s, a) => s + a.value, 0)
   const chartHistory =
     portfolio != null ? appendLiveNavPoint(history, portfolio.totalValue) : history
-  const sorted = [...positions].sort((a, b) => b.value - a.value)
-  const totalBook = sorted.reduce((s, p) => s + p.value, 0)
 
   const fiatTotal = (fiatSummaryData?.fiatDepositsSummary?.totalsByCurrency || []).reduce(
     (s: number, r: { totalAmount: number }) => s + r.totalAmount,

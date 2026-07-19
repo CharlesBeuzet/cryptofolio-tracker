@@ -96,7 +96,7 @@ export default function Position() {
         <RangeSegment value={range} onChange={setRange} />
       </div>
 
-      <div className=flex gap-2 flex-wrap mb-[18px] overflow-x-auto pb-0.5 -mx-0.5 px-0.5">
+      <div className="flex gap-2 flex-wrap mb-[18px] overflow-x-auto pb-0.5 -mx-0.5 px-0.5">
         {assetTabs.map((tab, i) => (
           <button
             key={tab.symbol}
