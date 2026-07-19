@@ -46,33 +46,37 @@ export default function Home() {
 
   return (
     <div>
-      <div className="flex justify-between items-end mb-[18px]">
+      <div className="page-head">
         <div>
           <div className="lbl">§1 · Overview</div>
-          <div className="font-serif text-[26px] leading-none mt-[7px]">Consolidated positions</div>
+          <div className="page-title">Consolidated positions</div>
         </div>
         <RangeSegment value={range} onChange={setRange} />
       </div>
 
       <div className="panel p-0 overflow-hidden relative">
-        <div className="absolute left-6 top-5 z-10 pointer-events-none">
+        <div className="px-4 pt-4 sm:px-6 sm:pt-5 lg:absolute lg:left-6 lg:top-5 lg:z-10 lg:pointer-events-none lg:px-0 lg:pt-0">
           <div className="lbl">Net asset value · {rangeLabel(range)}</div>
-          <div className="font-serif text-[46px] leading-none mt-1.5">{formatUsd(totalValue)}</div>
-          <div className="font-mono text-xs mt-[7px] text-sillage-soft">
+          <div className="font-serif text-[32px] sm:text-[40px] lg:text-[46px] leading-none mt-1.5">
+            {formatUsd(totalValue)}
+          </div>
+          <div className="font-mono text-[11px] sm:text-xs mt-[7px] text-sillage-soft break-words">
             NAV = deposits + P&amp;L ⟶{' '}
             <span className="tabular-nums">{formatUsd(totalValue)}</span> ={' '}
             <span className="tabular-nums">{formatUsd(fiatTotal)}</span> +{' '}
             <span className={`tabular-nums ${pnlColorClass(pnl)}`}>{formatUsd(pnl)}</span>
           </div>
         </div>
-        <PortfolioValueChart data={chartHistory} height={250} />
+        <div className="mt-2 lg:mt-0 h-[200px] sm:h-[250px]">
+          <PortfolioValueChart data={chartHistory} height="100%" />
+        </div>
       </div>
 
-      <div className="flex gap-5 mt-5 items-stretch flex-col lg:flex-row">
+      <div className="flex gap-4 sm:gap-5 mt-4 sm:mt-5 items-stretch flex-col lg:flex-row">
         <div className="panel flex-1 min-w-0">
-          <div className="flex justify-between items-baseline mb-1">
+          <div className="flex flex-col gap-1 sm:flex-row sm:justify-between sm:items-baseline mb-1">
             <div className="lbl">Table 1 · Positions by asset</div>
-            <div className="cap">click a row to inspect ↗</div>
+            <div className="cap">tap a row to inspect ↗</div>
           </div>
 
           {assets.length === 0 ? (
@@ -114,14 +118,14 @@ export default function Home() {
                         </span>
                       ))}
                     </div>
-                    <div className="text-sillage-soft text-[11px] mt-[3px] ml-[18px] font-mono">
+                    <div className="text-sillage-soft text-[11px] mt-[3px] ml-[18px] font-mono truncate">
                       {asset.quantity.toLocaleString(undefined, { maximumFractionDigits: 8 })}
                     </div>
                   </div>
-                  <div className="w-24 text-right font-mono tabular-nums text-[13px]">
+                  <div className="w-[72px] sm:w-24 text-right font-mono tabular-nums text-[12px] sm:text-[13px] flex-shrink-0">
                     {formatUsdPrecise(asset.value)}
                   </div>
-                  <div className="w-20">
+                  <div className="hidden sm:block w-20 flex-shrink-0">
                     <div className="wbar">
                       <div className="wfill" style={{ width: `${share}%` }} />
                     </div>
@@ -129,7 +133,7 @@ export default function Home() {
                       {share.toFixed(1)}%
                     </div>
                   </div>
-                  <div className={`w-[74px] text-right font-mono text-xs tabular-nums ${pnlColorClass(asset.pnl)}`}>
+                  <div className={`w-[62px] sm:w-[74px] text-right font-mono text-[11px] sm:text-xs tabular-nums flex-shrink-0 ${pnlColorClass(asset.pnl)}`}>
                     {formatPct(asset.pnlPercent)}
                   </div>
                 </Link>

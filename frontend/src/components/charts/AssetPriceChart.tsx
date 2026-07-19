@@ -155,12 +155,16 @@ function CandlestickLayer({ xAxisMap, yAxisMap, data, offset, onCandleHover }: C
             <rect
               x={x - slot / 2}
               y={0}
-              width={slot}
+              width={Math.max(slot, 12)}
               height={offset?.height ?? 0}
               fill="transparent"
               onMouseEnter={() =>
                 onCandleHover?.({ timestamp: candle.timestamp, close: candle.close })
               }
+              onTouchStart={(e) => {
+                e.preventDefault()
+                onCandleHover?.({ timestamp: candle.timestamp, close: candle.close })
+              }}
             />
             <line
               x1={x}
@@ -282,6 +286,17 @@ export default function AssetPriceChart({
   onCandleHover,
 }: AssetPriceChartProps) {
   const [activeTimestamp, setActiveTimestamp] = useState<number | null>(null)
+  const [narrowViewport, setNarrowViewport] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 639px)').matches,
+  )
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)')
+    const onChange = () => setNarrowViewport(mq.matches)
+    onChange()
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
 
   const handleCandleHover = useCallback(
     (payload: { timestamp: number; close: number } | null) => {
@@ -350,7 +365,7 @@ export default function AssetPriceChart({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-[300px] text-sillage-soft text-sm font-mono">
+      <div className="flex items-center justify-center h-[220px] sm:h-[300px] text-sillage-soft text-sm font-mono">
         Loading price history…
       </div>
     )
@@ -358,7 +373,7 @@ export default function AssetPriceChart({
 
   if (resolutionStatus === 'ambiguous' || resolutionStatus === 'not_found') {
     return (
-      <div className="flex flex-col justify-center h-[300px] px-2">
+      <div className="flex flex-col justify-center min-h-[220px] sm:min-h-[300px] px-2">
         <div className="lbl mb-2">
           {resolutionStatus === 'ambiguous' ? 'Ambiguous symbol' : 'Symbol not found'}
         </div>
@@ -387,7 +402,7 @@ export default function AssetPriceChart({
 
   if (priceHistory.length === 0) {
     return (
-      <div className="flex items-center justify-center h-[300px] text-sillage-soft text-sm">
+      <div className="flex items-center justify-center h-[220px] sm:h-[300px] text-sillage-soft text-sm">
         No price data available
       </div>
     )
@@ -395,7 +410,7 @@ export default function AssetPriceChart({
 
   return (
     <div
-      className="relative h-[300px] w-full"
+      className="relative h-[220px] sm:h-[300px] w-full touch-pan-y"
       onMouseLeave={handleChartMouseLeave}
     >
       {isMock && (
@@ -404,7 +419,10 @@ export default function AssetPriceChart({
         </div>
       )}
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={candleData} margin={{ top: 28, right: 12, left: 0, bottom: 20 }}>
+        <ComposedChart
+          data={candleData}
+          margin={{ top: 16, right: narrowViewport ? 4 : 12, left: 0, bottom: 0 }}
+        >
           <CartesianGrid stroke="var(--line)" strokeDasharray="0" vertical={false} />
           <XAxis
             dataKey="timestamp"
@@ -415,13 +433,14 @@ export default function AssetPriceChart({
             tick={{ fill: 'var(--soft)', fontSize: 9, fontFamily: 'IBM Plex Mono, monospace' }}
             axisLine={false}
             tickLine={false}
+            minTickGap={narrowViewport ? 28 : 40}
           />
           <YAxis
             tick={{ fill: 'var(--soft)', fontSize: 9, fontFamily: 'IBM Plex Mono, monospace' }}
             axisLine={false}
             tickLine={false}
             domain={yDomain}
-            width={60}
+            width={narrowViewport ? 44 : 60}
             tickFormatter={(value) => formatTokenPrice(Number(value))}
           />
           {avgEntryPrice > 0 && (

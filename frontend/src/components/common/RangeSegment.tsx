@@ -36,17 +36,20 @@ export function rangeLabel(range: RangeKey): string {
 
 export default function RangeSegment({ value, onChange }: RangeSegmentProps) {
   return (
-    <div className="seg">
-      {RANGES.map((r) => (
-        <button
-          key={r}
-          type="button"
-          className={`segb ${value === r ? 'on' : ''}`}
-          onClick={() => onChange(r)}
-        >
-          {r}
-        </button>
-      ))}
+    <div className="overflow-x-auto max-w-full -mx-0.5 px-0.5 self-start sm:self-auto">
+      <div className="seg" role="group" aria-label="Time range">
+        {RANGES.map((r) => (
+          <button
+            key={r}
+            type="button"
+            className={`segb ${value === r ? 'on' : ''}`}
+            onClick={() => onChange(r)}
+            aria-pressed={value === r}
+          >
+            {r}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }

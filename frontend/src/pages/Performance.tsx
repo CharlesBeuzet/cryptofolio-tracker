@@ -73,30 +73,32 @@ export default function Performance() {
 
   return (
     <div>
-      <div className="flex justify-between items-end mb-[18px]">
+      <div className="page-head">
         <div>
           <div className="lbl">§4 · Theses</div>
-          <div className="font-serif text-[26px] leading-none mt-[7px]">Performance by conviction</div>
+          <div className="page-title">Performance by conviction</div>
         </div>
-        <div className="cap">Grouped by venue — tag wallets and positions to track each thesis separately.</div>
+        <div className="cap max-w-md sm:text-right">
+          Grouped by venue — tag wallets and positions to track each thesis separately.
+        </div>
       </div>
 
       {theses.length === 0 ? (
         <div className="panel text-center py-12 text-sillage-soft text-sm">No positions to analyze yet.</div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
           {theses.map((t) => (
             <div key={t.name} className="panel">
-              <div className="flex justify-between items-start">
-                <div className="flex items-center gap-2.5">
+              <div className="flex justify-between items-start gap-3">
+                <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap min-w-0">
                   <span className="sw w-[11px] h-[11px]" style={{ background: t.color }} />
-                  <div className="font-serif text-xl">{t.name}</div>
+                  <div className="font-serif text-lg sm:text-xl">{t.name}</div>
                   <span className="chip">
                     {t.positions.length} position{t.positions.length === 1 ? '' : 's'}
                   </span>
                 </div>
-                <div className="text-right">
-                  <div className="font-mono tabular-nums font-semibold text-[17px]">
+                <div className="text-right flex-shrink-0">
+                  <div className="font-mono tabular-nums font-semibold text-[15px] sm:text-[17px]">
                     {formatUsd(t.totalValue)}
                   </div>
                   <div className={`font-mono text-[11px] ${pnlColorClass(t.pnlPct)}`}>
@@ -117,7 +119,7 @@ export default function Performance() {
                   <Link
                     key={p.id}
                     to={`/position/${p.id}`}
-                    className="trow cursor-pointer no-underline text-inherit hover:bg-sillage-gsoft transition-colors"
+                    className="trow cursor-pointer no-underline text-inherit hover:bg-sillage-gsoft transition-colors min-h-[44px]"
                   >
                     <span className="tk flex-1">{p.symbol}</span>
                     <span className="font-mono tabular-nums text-xs text-sillage-soft">
