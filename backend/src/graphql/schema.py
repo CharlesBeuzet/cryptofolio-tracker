@@ -5,6 +5,7 @@ import strawberry
 from sqlalchemy import func
 from strawberry.fastapi import GraphQLRouter
 
+from ..config.loader import list_configured_venues
 from ..models.database import Position, Order, PortfolioSnapshot, Asset, PositionMetrics, SessionLocal
 from ..services.portfolio import PortfolioService
 from ..services.fiat_deposits import FiatDepositService
@@ -250,8 +251,29 @@ class FiatDepositRecordType:
 
 
 @strawberry.type
+class VenueType:
+    """Configured data provider / venue from settings/config.yaml."""
+
+    key: str
+    display_name: str
+    kind: str
+
+
+@strawberry.type
 class Query:
     """GraphQL query root."""
+
+    @strawberry.field
+    def synced_venues(self) -> List[VenueType]:
+        """List data providers declared in settings/config.yaml (sidebar venues)."""
+        return [
+            VenueType(
+                key=venue["key"],
+                display_name=venue["display_name"],
+                kind=venue["kind"],
+            )
+            for venue in list_configured_venues()
+        ]
 
     @strawberry.field
     def portfolio(self) -> PortfolioType:
@@ -349,7 +371,7 @@ class Query:
 
     @strawberry.field
     def portfolio_history(self, days: int = 180) -> List[PortfolioSnapshotType]:
-        """Get portfolio value history."""
+        """Get portfolio value history (days <= 0 = Max / all snapshots)."""
         db = SessionLocal()
         try:
             service = PortfolioService(db)
@@ -433,7 +455,10 @@ class Query:
         days: int = 90,
         exchange: Optional[str] = None,
     ) -> AssetPriceHistoryType:
-        """Fetch USDT price history from the position's exchange (in-memory cache only)."""
+        """Fetch USDT price history from the position's exchange (in-memory cache only).
+
+        days <= 0 means Max (capped exchange lookback).
+        """
         service = PriceHistoryService()
         result = await service.fetch(symbol, days, exchange)
         return AssetPriceHistoryType(

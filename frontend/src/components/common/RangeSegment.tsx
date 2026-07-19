@@ -1,4 +1,4 @@
-const RANGES = ['24h', '7d', '30d', '90d', '1Y'] as const
+const RANGES = ['24h', '7d', '30d', '90d', '1Y', '2Y', '5Y'] as const
 export type RangeKey = (typeof RANGES)[number]
 
 const RANGE_DAYS: Record<RangeKey, number> = {
@@ -7,6 +7,8 @@ const RANGE_DAYS: Record<RangeKey, number> = {
   '30d': 30,
   '90d': 90,
   '1Y': 365,
+  '2Y': 730,
+  '5Y': 1825,
 }
 
 const RANGE_LABELS: Record<RangeKey, string> = {
@@ -15,6 +17,8 @@ const RANGE_LABELS: Record<RangeKey, string> = {
   '30d': 'trailing 30d',
   '90d': 'trailing 90d',
   '1Y': 'trailing 1Y',
+  '2Y': 'trailing 2Y',
+  '5Y': 'trailing 5Y',
 }
 
 interface RangeSegmentProps {

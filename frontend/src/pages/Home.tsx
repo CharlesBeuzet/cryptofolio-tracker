@@ -7,6 +7,7 @@ import AllocationDonut from '../components/charts/AllocationDonut'
 import RangeSegment, { rangeLabel, rangeToDays, type RangeKey } from '../components/common/RangeSegment'
 import { assetColor, formatPct, formatUsd, formatUsdPrecise, pnlColorClass } from '../utils/format'
 import { groupPositionsByAsset } from '../utils/groupPositionsByAsset'
+import { appendLiveNavPoint } from '../utils/portfolioChart'
 
 export default function Home() {
   const [range, setRange] = useState<RangeKey>('90d')
@@ -32,6 +33,10 @@ export default function Home() {
   const totalValue = portfolio?.totalValue || 0
   const assets = groupPositionsByAsset(positions)
   const totalBook = assets.reduce((s, a) => s + a.value, 0)
+  const chartHistory =
+    portfolio != null ? appendLiveNavPoint(history, portfolio.totalValue) : history
+  const sorted = [...positions].sort((a, b) => b.value - a.value)
+  const totalBook = sorted.reduce((s, p) => s + p.value, 0)
 
   const fiatTotal = (fiatSummaryData?.fiatDepositsSummary?.totalsByCurrency || []).reduce(
     (s: number, r: { totalAmount: number }) => s + r.totalAmount,
@@ -60,7 +65,7 @@ export default function Home() {
             <span className={`tabular-nums ${pnlColorClass(pnl)}`}>{formatUsd(pnl)}</span>
           </div>
         </div>
-        <PortfolioValueChart data={history} height={250} />
+        <PortfolioValueChart data={chartHistory} height={250} />
       </div>
 
       <div className="flex gap-5 mt-5 items-stretch flex-col lg:flex-row">

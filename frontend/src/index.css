@@ -83,7 +83,7 @@ body {
   }
 
   .segb {
-    @apply px-3 py-[5px] font-mono text-[11px] text-sillage-soft cursor-pointer border-r border-sillage-line last:border-r-0;
+    @apply px-2.5 py-[5px] font-mono text-[11px] text-sillage-soft cursor-pointer border-r border-sillage-line last:border-r-0;
   }
 
   .segb.on {

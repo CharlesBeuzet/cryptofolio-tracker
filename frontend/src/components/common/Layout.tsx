@@ -1,7 +1,7 @@
 import { ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useQuery } from '@apollo/client'
-import { GET_PORTFOLIO } from '../../graphql/queries'
+import { GET_PORTFOLIO, GET_SYNCED_VENUES } from '../../graphql/queries'
 import { useTheme } from '../../context/ThemeContext'
 import { formatPct, formatUsd, pnlColorClass } from '../../utils/format'
 import { groupPositionsByAsset } from '../../utils/groupPositionsByAsset'
@@ -9,6 +9,12 @@ import Logo from './Logo'
 
 interface LayoutProps {
   children: ReactNode
+}
+
+interface SyncedVenue {
+  key: string
+  displayName: string
+  kind: string
 }
 
 const NAV_ITEMS = [
@@ -24,15 +30,34 @@ const NAV_ITEMS = [
   { path: '/performance', label: 'Theses', glyph: '§', num: '§4', match: (p: string) => p === '/performance' },
 ]
 
+function venueLines(venues: SyncedVenue[]): string[] {
+  const exchanges = venues
+    .filter((v) => v.kind === 'exchange')
+    .map((v) => v.displayName)
+  const wallets = venues
+    .filter((v) => v.kind === 'wallet')
+    .map((v) => v.displayName)
+
+  const lines: string[] = []
+  if (exchanges.length) lines.push(exchanges.join(' · '))
+  if (wallets.length) lines.push(wallets.join(' · '))
+  return lines
+}
+
 export default function Layout({ children }: LayoutProps) {
   const location = useLocation()
   const { theme, toggleTheme, themeGlyph } = useTheme()
   const { data } = useQuery(GET_PORTFOLIO)
+  const { data: venuesData } = useQuery(GET_SYNCED_VENUES)
 
   const portfolio = data?.portfolio
   const totalValue = portfolio?.totalValue ?? 0
   const pnlPercent = portfolio?.todaysPnlPercent ?? 0
   const isPositive = pnlPercent >= 0
+
+  const venues: SyncedVenue[] = venuesData?.syncedVenues ?? []
+  const lines = venueLines(venues)
+  const venueCount = venues.length
 
   const now = new Date()
   const dateStr = now
@@ -73,10 +98,15 @@ export default function Layout({ children }: LayoutProps) {
 
         <div className="rule" />
         <div className="pt-3.5 px-1.5 pb-1">
-          <div className="lbl mb-2">Venues · synced</div>
+          <div className="lbl mb-2">
+            Venues · {venueCount > 0 ? `${venueCount} synced` : 'synced'}
+          </div>
           <div className="font-mono text-[11px] text-sillage-soft flex flex-col gap-1.5">
-            <span>◉ Binance · Coinbase</span>
-            <span>◉ Hot wallets</span>
+            {lines.length > 0 ? (
+              lines.map((line) => <span key={line}>◉ {line}</span>)
+            ) : (
+              <span>◉ No providers configured</span>
+            )}
           </div>
         </div>
         <div className="font-mono text-[9px] text-sillage-soft pt-3.5 px-2 tracking-wide">
