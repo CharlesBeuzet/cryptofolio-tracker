@@ -6,6 +6,7 @@ import { GET_POSITION, GET_PORTFOLIO, GET_ASSET_PRICE_HISTORY } from '../graphql
 import AssetPriceChart from '../components/charts/AssetPriceChart'
 import RangeSegment, { type RangeKey, rangeToDays } from '../components/common/RangeSegment'
 import { assetColor, formatPct, formatTokenPrice, formatUsdPrecise, pnlColorClass } from '../utils/format'
+import { groupPositionsByAsset } from '../utils/groupPositionsByAsset'
 
 export default function Position() {
   const { id } = useParams<{ id: string }>()
@@ -67,8 +68,7 @@ export default function Position() {
   }
 
   const position = data.position
-  const allPositions = [...(portfolioData?.portfolio?.positions || [])].sort((a, b) => b.value - a.value)
-  const posIndex = allPositions.findIndex((p) => p.id === position.id)
+  const assetTabs = groupPositionsByAsset(portfolioData?.portfolio?.positions || [])
   const costBasis = position.avgEntryPrice * position.quantity
   const unrealized = position.pnl || 0
   const isPositive = unrealized >= 0
@@ -85,21 +85,27 @@ export default function Position() {
           <div className="flex items-center gap-3 mt-2 flex-wrap">
             <div className="page-title mt-0">{position.symbol}</div>
             {position.exchange && <span className="chip">{position.exchange}</span>}
+            <Link
+              to={`/asset/${encodeURIComponent(position.symbol)}`}
+              className="font-mono text-[11px] text-sillage-soft hover:text-sillage-ink no-underline"
+            >
+              all venues ↗
+            </Link>
           </div>
         </div>
         <RangeSegment value={range} onChange={setRange} />
       </div>
 
-      <div className="flex gap-2 flex-wrap mb-[18px] overflow-x-auto pb-0.5 -mx-0.5 px-0.5">
-        {allPositions.map((p, i) => (
+      <div className=flex gap-2 flex-wrap mb-[18px] overflow-x-auto pb-0.5 -mx-0.5 px-0.5">
+        {assetTabs.map((tab, i) => (
           <button
-            key={p.id}
+            key={tab.symbol}
             type="button"
-            className={`atab ${p.id === position.id ? 'on' : ''}`}
-            onClick={() => navigate(`/position/${p.id}`)}
+            className={`atab ${tab.symbol === position.symbol.toUpperCase() ? 'on' : ''}`}
+            onClick={() => navigate(`/asset/${encodeURIComponent(tab.symbol)}`)}
           >
             <span className="sw" style={{ background: assetColor(i) }} />
-            {p.symbol}
+            {tab.symbol}
           </button>
         ))}
       </div>
@@ -241,13 +247,11 @@ export default function Position() {
         </div>
       </div>
 
-      {posIndex > 0 && (
-        <div className="mt-4 text-center">
-          <Link to="/" className="font-mono text-xs text-sillage-soft hover:text-sillage-ink">
-            ← back to overview
-          </Link>
-        </div>
-      )}
+      <div className="mt-4 text-center">
+        <Link to="/" className="font-mono text-xs text-sillage-soft hover:text-sillage-ink">
+          ← back to overview
+        </Link>
+      </div>
     </div>
   )
 }

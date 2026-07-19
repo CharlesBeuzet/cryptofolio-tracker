@@ -11,6 +11,10 @@ from ..connectors.registry import get_connector_by_name
 RESOLVED = "resolved"
 NOT_FOUND = "not_found"
 
+# Practical ceiling when the client requests Max (days <= 0). Weekly candles
+# keep payload size reasonable across multi-year lookbacks.
+MAX_PRICE_HISTORY_DAYS = 3650  # ~10 years
+
 _cache: Dict[Tuple[str, str, int], Tuple[float, "MarketChartResult"]] = {}
 _CACHE_TTL_SECONDS = 300
 
@@ -56,7 +60,13 @@ class PriceHistoryService:
             )
 
         exchange_name = exchange.strip().lower()
-        days = max(1, int(days))
+        requested_days = int(days)
+        # days <= 0 means Max (all available / exchange-capped lookback).
+        days = (
+            MAX_PRICE_HISTORY_DAYS
+            if requested_days <= 0
+            else max(1, requested_days)
+        )
         cache_key = (normalized_symbol, exchange_name, days)
         now = time.monotonic()
         cached = _cache.get(cache_key)
