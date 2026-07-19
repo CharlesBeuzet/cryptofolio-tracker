@@ -128,22 +128,6 @@ const navLinks = (
     </>
   )
 
-      <div className="flex-1" />
-
-      <div className="rule" />
-      <div className="pt-3.5 px-1.5 pb-1">
-        <div className="lbl mb-2">Venues · synced</div>
-        <div className="font-mono text-[11px] text-sillage-soft flex flex-col gap-1.5">
-          <span>◉ Binance · Coinbase</span>
-          <span>◉ Hot wallets</span>
-        </div>
-      </div>
-      <div className="font-mono text-[9px] text-sillage-soft pt-3.5 px-2 tracking-wide">
-        ⬡ keys encrypted on-device
-      </div>
-    </>
-  )
-
   return (
     <div
       className={`min-h-[100dvh] w-full max-w-full flex font-serif text-sillage-ink ${theme === 'dark' ? 'dark' : 'light'}`}
