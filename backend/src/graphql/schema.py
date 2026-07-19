@@ -300,7 +300,7 @@ class Query:
 
     @strawberry.field
     def asset(self, symbol: str) -> Optional[AssetDetailType]:
-        """Open venues and all historical orders for one asset symbol."""
+        """Open venues and their orders for one asset symbol (excludes closed positions)."""
         symbol_key = (symbol or "").strip().upper()
         if not symbol_key:
             return None
@@ -313,14 +313,16 @@ class Query:
                 for pos in service.get_positions()
                 if (pos.symbol or "").upper() == symbol_key
             ]
+            if not open_positions:
+                return None
+
+            position_ids = [pos.id for pos in open_positions]
             orders = (
                 db.query(Order)
-                .filter(func.upper(Order.symbol) == symbol_key)
+                .filter(Order.position_id.in_(position_ids))
                 .order_by(Order.executed_at.desc())
                 .all()
             )
-            if not open_positions and not orders:
-                return None
 
             return AssetDetailType(
                 symbol=symbol_key,
