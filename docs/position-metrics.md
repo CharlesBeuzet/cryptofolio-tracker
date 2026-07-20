@@ -117,3 +117,7 @@ If `order_derived_qty` diverges from `positions.quantity` (exchange balance), a 
 If an old database still has legacy columns on `positions` (`avg_entry_price`, `pnl`, `pnl_percent`), delete `portfolio.db` in development and re-sync, or rebuild that table manually.
 
 After schema is correct, the scheduler backfills metrics from order history on the next sync cycle.
+
+---
+
+← [Docs hub](README.md) · [Features](features.md)
