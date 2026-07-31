@@ -39,7 +39,6 @@ class Tag(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(80), unique=True, nullable=False, index=True)
     description = Column(String(500), nullable=True)
-    sort_order = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
     positions = relationship("Position", back_populates="tag")
@@ -193,6 +192,8 @@ def migrate_tags_schema(bind=None):
         tag_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(tags)")}
         if "color" in tag_cols:
             conn.exec_driver_sql("ALTER TABLE tags DROP COLUMN color")
+        if "sort_order" in tag_cols:
+            conn.exec_driver_sql("ALTER TABLE tags DROP COLUMN sort_order")
 
 
 def get_db():

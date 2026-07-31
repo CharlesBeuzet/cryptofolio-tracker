@@ -1,28 +1,21 @@
 import { gql } from '@apollo/client'
 
 export const CREATE_TAG = gql`
-  mutation CreateTag($name: String!, $description: String, $sortOrder: Int) {
-    createTag(name: $name, description: $description, sortOrder: $sortOrder) {
+  mutation CreateTag($name: String!, $description: String) {
+    createTag(name: $name, description: $description) {
       id
       name
       description
-      sortOrder
     }
   }
 `
 
 export const UPDATE_TAG = gql`
-  mutation UpdateTag(
-    $id: Int!
-    $name: String
-    $description: String
-    $sortOrder: Int
-  ) {
-    updateTag(id: $id, name: $name, description: $description, sortOrder: $sortOrder) {
+  mutation UpdateTag($id: Int!, $name: String, $description: String) {
+    updateTag(id: $id, name: $name, description: $description) {
       id
       name
       description
-      sortOrder
     }
   }
 `
@@ -41,7 +34,6 @@ export const SET_POSITION_TAG = gql`
         id
         name
         description
-        sortOrder
       }
     }
   }

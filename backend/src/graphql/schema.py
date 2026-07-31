@@ -97,7 +97,6 @@ class TagType:
     id: int
     name: str
     description: Optional[str]
-    sort_order: int
 
 
 @strawberry.type
@@ -159,7 +158,6 @@ def _tag_to_type(tag: Optional[Tag]) -> Optional[TagType]:
         id=tag.id,
         name=tag.name,
         description=tag.description,
-        sort_order=tag.sort_order,
     )
 
 
@@ -457,13 +455,10 @@ class Mutation:
         self,
         name: str,
         description: Optional[str] = None,
-        sort_order: int = 0,
     ) -> TagType:
         db = SessionLocal()
         try:
-            tag = TagService(db).create_tag(
-                name=name, description=description, sort_order=sort_order
-            )
+            tag = TagService(db).create_tag(name=name, description=description)
             return _tag_to_type(tag)  # type: ignore[return-value]
         except ValueError as exc:
             raise ValueError(str(exc)) from exc
@@ -476,7 +471,6 @@ class Mutation:
         id: int,
         name: Optional[str] = None,
         description: Optional[str] = None,
-        sort_order: Optional[int] = None,
     ) -> TagType:
         db = SessionLocal()
         try:
@@ -484,7 +478,6 @@ class Mutation:
                 tag_id=id,
                 name=name,
                 description=description,
-                sort_order=sort_order,
             )
             return _tag_to_type(tag)  # type: ignore[return-value]
         except ValueError as exc:

@@ -13,7 +13,7 @@ class TagService:
         self.db = db
 
     def list_tags(self) -> List[Tag]:
-        return self.db.query(Tag).order_by(Tag.sort_order.asc(), Tag.name.asc()).all()
+        return self.db.query(Tag).order_by(Tag.name.asc()).all()
 
     def get_tag(self, tag_id: int) -> Optional[Tag]:
         return self.db.query(Tag).filter(Tag.id == tag_id).first()
@@ -22,7 +22,6 @@ class TagService:
         self,
         name: str,
         description: Optional[str] = None,
-        sort_order: int = 0,
     ) -> Tag:
         cleaned = name.strip()
         if not cleaned:
@@ -33,7 +32,6 @@ class TagService:
         tag = Tag(
             name=cleaned,
             description=description.strip() if description else None,
-            sort_order=sort_order,
         )
         self.db.add(tag)
         self.db.commit()
@@ -45,7 +43,6 @@ class TagService:
         tag_id: int,
         name: Optional[str] = None,
         description: Optional[str] = None,
-        sort_order: Optional[int] = None,
     ) -> Tag:
         tag = self.get_tag(tag_id)
         if not tag:
@@ -64,8 +61,6 @@ class TagService:
             tag.name = cleaned
         if description is not None:
             tag.description = description.strip() or None
-        if sort_order is not None:
-            tag.sort_order = sort_order
         self.db.commit()
         self.db.refresh(tag)
         return tag

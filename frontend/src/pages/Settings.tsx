@@ -8,7 +8,6 @@ interface Tag {
   id: number
   name: string
   description: string | null
-  sortOrder: number
 }
 
 interface PositionRow {
@@ -61,7 +60,6 @@ export default function Settings() {
         variables: {
           name: name.trim(),
           description: description.trim() || null,
-          sortOrder: tags.length,
         },
       })
       setName('')

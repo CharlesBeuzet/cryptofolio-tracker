@@ -22,7 +22,6 @@ export const GET_PORTFOLIO = gql`
           id
           name
           description
-          sortOrder
         }
       }
     }
@@ -47,7 +46,6 @@ export const GET_POSITIONS = gql`
         id
         name
         description
-        sortOrder
       }
       orders {
         id
@@ -80,7 +78,6 @@ export const GET_POSITION = gql`
         id
         name
         description
-        sortOrder
       }
       metrics {
         avgExitPrice
@@ -104,7 +101,6 @@ export const GET_TAGS = gql`
       id
       name
       description
-      sortOrder
     }
   }
 `
