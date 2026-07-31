@@ -80,11 +80,6 @@ export default function Home() {
           {assets.length === 0 ? (
             <div className="text-center py-8 text-sillage-soft text-sm">No positions found</div>
           ) : (
-            sorted.map((position, i) => {
-              const share = totalBook > 0 ? (position.value / totalBook) * 100 : 0
-              const pnlVal = position.pnl || 0
-              const exchange = position.exchange || '—'
-              const tagName = position.tag?.name as string | undefined
             assets.map((asset, i) => {
               const share = totalBook > 0 ? (asset.value / totalBook) * 100 : 0
 
@@ -97,9 +92,6 @@ export default function Home() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="sw" style={{ background: assetColor(i) }} />
-                      <span className="tk">{position.symbol}</span>
-                      <span className="chip">{exchange}</span>
-                      {tagName && <span className="chip">{tagName}</span>}
                       <span className="tk">{asset.symbol}</span>
                       {asset.venues.map((venue) => (
                         <span

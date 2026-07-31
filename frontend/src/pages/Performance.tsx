@@ -236,67 +236,6 @@ export default function Performance() {
         </Link>
       </div>
       <ThesisPanels theses={tagTheses} />
-      </div>
-
-      {theses.length === 0 ? (
-        <div className="panel text-center py-12 text-sillage-soft text-sm">No positions to analyze yet.</div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
-          {theses.map((t) => (
-            <div key={t.name} className="panel">
-              <div className="flex justify-between items-start gap-3">
-                <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap min-w-0">
-                  <span className="sw w-[11px] h-[11px]" style={{ background: t.color }} />
-                  <div className="font-serif text-lg sm:text-xl">{t.name}</div>
-                  <span className="chip">
-                    {t.positions.length} position{t.positions.length === 1 ? '' : 's'}
-                  </span>
-                </div>
-                <div className="text-right flex-shrink-0">
-                  <div className="font-mono tabular-nums font-semibold text-[15px] sm:text-[17px]">
-                    {formatUsd(t.totalValue)}
-                  </div>
-                  <div className={`font-mono text-[11px] ${pnlColorClass(t.pnlPct)}`}>
-                    {formatPct(t.pnlPct)}
-                  </div>
-                </div>
-              </div>
-
-              <div className="wbar mt-4">
-                <div className="wfill" style={{ width: `${t.sharePct}%`, background: t.color }} />
-              </div>
-              <div className="font-mono text-sillage-soft text-[9px] mt-1.5 tracking-widest">
-                {t.sharePct.toFixed(1)}% OF BOOK
-              </div>
-
-              <div className="mt-3.5 flex flex-col">
-                {t.positions.map((p) => (
-                  <Link
-                    key={p.id}
-                    to={`/position/${p.id}`}
-                    className="trow cursor-pointer no-underline text-inherit hover:bg-sillage-gsoft transition-colors min-h-[44px]"
-                  >
-                    <span className="tk flex-1">{p.symbol}</span>
-                    <span className="font-mono tabular-nums text-xs text-sillage-soft">
-                      {formatUsdPrecise(p.value)}
-                    </span>
-                    <span
-                      className={`font-mono text-xs w-[60px] text-right tabular-nums ${pnlColorClass(p.pnlPercent || 0)}`}
-                    >
-                      {formatPct(p.pnlPercent || 0)}
-                    </span>
-                  </Link>
-                ))}
-              </div>
-
-              <div className="cap mt-3.5 leading-normal">
-                {VENUE_NOTES[t.name.toLowerCase()] ||
-                  'Positions held across this venue — track allocation and P&L here.'}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   )
 }
