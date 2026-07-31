@@ -5,12 +5,13 @@ import strawberry
 from sqlalchemy import func
 from strawberry.fastapi import GraphQLRouter
 
+from ..models.database import Position, Order, PortfolioSnapshot, Asset, PositionMetrics, Tag, SessionLocal
 from ..config.loader import list_configured_venues
-from ..models.database import Position, Order, PortfolioSnapshot, Asset, PositionMetrics, SessionLocal
 from ..services.portfolio import PortfolioService
 from ..services.fiat_deposits import FiatDepositService
 from ..services.price_history import PriceHistoryService
 from ..services.metrics_helpers import cost_basis, cash_in_trade
+from ..services.tags import TagService
 
 
 @strawberry.type
@@ -92,6 +93,15 @@ class PositionMetricsType:
 
 
 @strawberry.type
+class TagType:
+    """Conviction tag GraphQL type."""
+
+    id: int
+    name: str
+    description: Optional[str]
+
+
+@strawberry.type
 class PositionType:
     """Position GraphQL type."""
     id: int
@@ -104,6 +114,7 @@ class PositionType:
     first_bought_at: datetime
     exchange: Optional[str]
     status: str
+    tag: Optional[TagType]
     orders: List[OrderType]
     metrics: Optional[PositionMetricsType]
 
@@ -142,6 +153,16 @@ def _metrics_to_type(metrics: PositionMetrics) -> PositionMetricsType:
     )
 
 
+def _tag_to_type(tag: Optional[Tag]) -> Optional[TagType]:
+    if not tag:
+        return None
+    return TagType(
+        id=tag.id,
+        name=tag.name,
+        description=tag.description,
+    )
+
+
 def _position_to_type(pos: Position) -> PositionType:
     """Map a Position ORM object to GraphQL type."""
     asset_price = pos.asset.current_price if pos.asset else None
@@ -158,6 +179,7 @@ def _position_to_type(pos: Position) -> PositionType:
         first_bought_at=pos.first_bought_at,
         exchange=pos.exchange,
         status=pos.status,
+        tag=_tag_to_type(pos.tag),
         orders=orders,
         metrics=_metrics_to_type(metrics) if metrics else None,
     )
@@ -484,6 +506,79 @@ class Query:
             ],
         )
 
+    @strawberry.field
+    def tags(self) -> List[TagType]:
+        """List all conviction tags."""
+        db = SessionLocal()
+        try:
+            return [_tag_to_type(t) for t in TagService(db).list_tags() if t]
+        finally:
+            db.close()
 
-schema = strawberry.Schema(query=Query)
+
+@strawberry.type
+class Mutation:
+    """GraphQL mutation root (tag management)."""
+
+    @strawberry.mutation
+    def create_tag(
+        self,
+        name: str,
+        description: Optional[str] = None,
+    ) -> TagType:
+        db = SessionLocal()
+        try:
+            tag = TagService(db).create_tag(name=name, description=description)
+            return _tag_to_type(tag)  # type: ignore[return-value]
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+        finally:
+            db.close()
+
+    @strawberry.mutation
+    def update_tag(
+        self,
+        id: int,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+    ) -> TagType:
+        db = SessionLocal()
+        try:
+            tag = TagService(db).update_tag(
+                tag_id=id,
+                name=name,
+                description=description,
+            )
+            return _tag_to_type(tag)  # type: ignore[return-value]
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+        finally:
+            db.close()
+
+    @strawberry.mutation
+    def delete_tag(self, id: int) -> bool:
+        db = SessionLocal()
+        try:
+            return TagService(db).delete_tag(id)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+        finally:
+            db.close()
+
+    @strawberry.mutation
+    def set_position_tag(self, position_id: int, tag_id: Optional[int] = None) -> PositionType:
+        db = SessionLocal()
+        try:
+            pos = TagService(db).set_position_tag(position_id, tag_id)
+            # Reload with relationships for GraphQL mapping
+            service = PortfolioService(db)
+            full = service.get_position_by_id(pos.id) or pos
+            return _position_to_type(full)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+        finally:
+            db.close()
+
+
+schema = strawberry.Schema(query=Query, mutation=Mutation)
 

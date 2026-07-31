@@ -1,5 +1,5 @@
 import { useQuery } from '@apollo/client'
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { GET_PORTFOLIO, GET_PORTFOLIO_HISTORY, GET_FIAT_DEPOSITS_SUMMARY } from '../graphql/queries'
 import PortfolioValueChart from '../components/charts/PortfolioValueChart'
@@ -94,26 +94,30 @@ export default function Home() {
                       <span className="sw" style={{ background: assetColor(i) }} />
                       <span className="tk">{asset.symbol}</span>
                       {asset.venues.map((venue) => (
-                        <span
-                          key={venue.id}
-                          role="link"
-                          tabIndex={0}
-                          className="chip cl"
-                          onClick={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            navigate(`/position/${venue.id}`)
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
+                        <Fragment key={venue.id}>
+                          <span
+                            role="link"
+                            tabIndex={0}
+                            className="chip cl"
+                            onClick={(e) => {
                               e.preventDefault()
                               e.stopPropagation()
                               navigate(`/position/${venue.id}`)
-                            }
-                          }}
-                        >
-                          {venue.exchange}
-                        </span>
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                navigate(`/position/${venue.id}`)
+                              }
+                            }}
+                          >
+                            {venue.exchange}
+                          </span>
+                          {venue.tag?.name && (
+                            <span className="chip tag">{venue.tag.name}</span>
+                          )}
+                        </Fragment>
                       ))}
                     </div>
                     <div className="text-sillage-soft text-[11px] mt-[3px] ml-[18px] font-mono truncate">

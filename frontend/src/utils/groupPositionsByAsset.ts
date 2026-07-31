@@ -1,3 +1,10 @@
+/** Optional conviction tag on a venue-level position. */
+export interface PositionTagLike {
+  id: number
+  name: string
+  description?: string | null
+}
+
 /** Venue-level slice of an open position (one exchange / wallet). */
 export interface PositionLike {
   id: number
@@ -8,6 +15,7 @@ export interface PositionLike {
   pnl?: number | null
   pnlPercent?: number | null
   exchange?: string | null
+  tag?: PositionTagLike | null
 }
 
 export interface AssetVenue {
@@ -17,6 +25,7 @@ export interface AssetVenue {
   value: number
   pnl: number
   pnlPercent: number
+  tag: PositionTagLike | null
 }
 
 /** One overview row: all open venues for a single asset symbol. */
@@ -82,6 +91,7 @@ export function groupPositionsByAsset(positions: PositionLike[]): GroupedAsset[]
       value,
       pnl,
       pnlPercent: p.pnlPercent || 0,
+      tag: p.tag ?? null,
     })
   }
 

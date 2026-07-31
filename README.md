@@ -190,10 +190,14 @@ query {
       quantity
       value
       pnl
+      exchange
+      tag { id name }
     }
   }
 }
 ```
+
+Conviction tags (per asset × exchange position) are managed via mutations `createTag`, `updateTag`, `deleteTag`, and `setPositionTag`, or in the UI under **Settings**. See `docs/position-tags.md`.
 
 ## Security Notes
 

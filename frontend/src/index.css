@@ -80,6 +80,13 @@ body {
     @apply inline-block font-mono text-[9px] tracking-[0.1em] uppercase px-[7px] py-0.5 rounded border border-sillage-line text-sillage-soft leading-normal whitespace-nowrap;
   }
 
+  /* Conviction tag — green tint so it reads apart from venue chips */
+  .chip.tag {
+    border-color: color-mix(in srgb, var(--green) 45%, transparent);
+    color: var(--green);
+    background: var(--gsoft);
+  }
+
   .chip.cl {
     @apply cursor-pointer;
   }

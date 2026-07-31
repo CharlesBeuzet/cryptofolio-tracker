@@ -24,6 +24,7 @@ class PortfolioService:
                 joinedload(Position.asset),
                 joinedload(Position.orders),
                 joinedload(Position.metrics),
+                joinedload(Position.tag),
             )
             .filter(Position.status == "open")
         )
@@ -105,6 +106,7 @@ class PortfolioService:
                 joinedload(Position.asset),
                 joinedload(Position.orders),
                 joinedload(Position.metrics),
+                joinedload(Position.tag),
             )
             .filter(Position.id == position_id)
             .first()

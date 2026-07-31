@@ -28,6 +28,11 @@ export const GET_PORTFOLIO = gql`
         firstBoughtAt
         exchange
         durationDays
+        tag {
+          id
+          name
+          description
+        }
       }
     }
   }
@@ -47,6 +52,11 @@ export const GET_POSITIONS = gql`
       firstBoughtAt
       exchange
       durationDays
+      tag {
+        id
+        name
+        description
+      }
       orders {
         id
         symbol
@@ -74,6 +84,11 @@ export const GET_POSITION = gql`
       firstBoughtAt
       exchange
       durationDays
+      tag {
+        id
+        name
+        description
+      }
       metrics {
         avgExitPrice
       }
@@ -90,6 +105,15 @@ export const GET_POSITION = gql`
   }
 `
 
+export const GET_TAGS = gql`
+  query GetTags {
+    tags {
+      id
+      name
+      description
+    }
+  }
+`
 export const GET_ASSET = gql`
   query GetAsset($symbol: String!) {
     asset(symbol: $symbol) {
@@ -203,4 +227,3 @@ export const GET_FIAT_DEPOSITS = gql`
     }
   }
 `
-
