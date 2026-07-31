@@ -90,19 +90,37 @@ function buildDemoOrders(priceHistory: PricePoint[]): Order[] {
   })
 }
 
-function computeYDomain(candles: CandleDatum[]): [number, number] {
+function computeYDomain(candles: CandleDatum[], markerPrices: number[] = []): [number, number] {
   const values: number[] = []
   for (const candle of candles) {
     values.push(candle.low, candle.high)
   }
+  values.push(...markerPrices)
 
   if (values.length === 0) return [0, 1]
 
   const min = Math.min(...values)
   const max = Math.max(...values)
   const span = max - min
-  const pad = span > 0 ? span * 0.06 : Math.max(Math.abs(min) * 0.01, 1)
+  // Extra headroom so buy/sell arrows (offset in px from the wick) are not clipped.
+  const pad = span > 0 ? span * 0.14 : Math.max(Math.abs(min) * 0.01, 1)
   return [min - pad, max + pad]
+}
+
+/** Nearest candle to an order timestamp (orders may not land exactly on a bar). */
+function findNearestCandle(candles: CandleDatum[], timestamp: number): CandleDatum | undefined {
+  if (candles.length === 0) return undefined
+
+  let nearest = candles[0]
+  let best = Math.abs(candles[0].timestamp - timestamp)
+  for (let i = 1; i < candles.length; i++) {
+    const dist = Math.abs(candles[i].timestamp - timestamp)
+    if (dist < best) {
+      best = dist
+      nearest = candles[i]
+    }
+  }
+  return nearest
 }
 
 function CandlestickLayer({ xAxisMap, yAxisMap, data, offset, onCandleHover }: CandlestickLayerProps) {
@@ -137,12 +155,16 @@ function CandlestickLayer({ xAxisMap, yAxisMap, data, offset, onCandleHover }: C
             <rect
               x={x - slot / 2}
               y={0}
-              width={slot}
+              width={Math.max(slot, 12)}
               height={offset?.height ?? 0}
               fill="transparent"
               onMouseEnter={() =>
                 onCandleHover?.({ timestamp: candle.timestamp, close: candle.close })
               }
+              onTouchStart={(e) => {
+                e.preventDefault()
+                onCandleHover?.({ timestamp: candle.timestamp, close: candle.close })
+              }}
             />
             <line
               x1={x}
@@ -170,6 +192,11 @@ function CandlestickLayer({ xAxisMap, yAxisMap, data, offset, onCandleHover }: C
   )
 }
 
+/** Pixel gap between the candle wick tip and the arrow tip. */
+const ORDER_ARROW_GAP = 18
+const ORDER_ARROW_HALF_W = 10
+const ORDER_ARROW_HEIGHT = 20
+
 function OrderPin({
   cx,
   cy,
@@ -182,20 +209,56 @@ function OrderPin({
   if (cx == null || cy == null) return null
 
   const isBuy = payload?.type === 'buy'
-  const color = isBuy ? 'var(--green)' : 'var(--accent)'
+  const color = isBuy ? 'var(--green)' : 'var(--down)'
   const label = isBuy ? 'B' : 'S'
 
+  // Buy sits below the candle (arrow ▲); sell sits above (arrow ▼).
+  // Tip points toward the price so the marker never overlaps the wick/body.
+  // Label sits in the wide base of the triangle.
+  if (isBuy) {
+    const tipY = cy + ORDER_ARROW_GAP
+    const baseY = tipY + ORDER_ARROW_HEIGHT
+    const labelY = tipY + ORDER_ARROW_HEIGHT * 0.68
+    return (
+      <g>
+        <path
+          d={`M${cx},${tipY} L${cx + ORDER_ARROW_HALF_W},${baseY} L${cx - ORDER_ARROW_HALF_W},${baseY} Z`}
+          fill={color}
+          stroke="var(--card)"
+          strokeWidth={1.2}
+          strokeLinejoin="round"
+        />
+        <text
+          x={cx}
+          y={labelY}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          fill="var(--mkink)"
+          fontSize={9}
+          fontWeight={700}
+          fontFamily="IBM Plex Mono, monospace"
+        >
+          {label}
+        </text>
+      </g>
+    )
+  }
+
+  const tipY = cy - ORDER_ARROW_GAP
+  const baseY = tipY - ORDER_ARROW_HEIGHT
+  const labelY = tipY - ORDER_ARROW_HEIGHT * 0.68
   return (
-    <g transform={`translate(${cx}, ${cy - 6})`}>
+    <g>
       <path
-        d="M0,-10 C5.5,-10 10,-5.5 10,0 C10,5.5 0,14 0,14 C0,14 -10,5.5 -10,0 C-10,-5.5 -5.5,-10 0,-10 Z"
+        d={`M${cx},${tipY} L${cx + ORDER_ARROW_HALF_W},${baseY} L${cx - ORDER_ARROW_HALF_W},${baseY} Z`}
         fill={color}
         stroke="var(--card)"
         strokeWidth={1.2}
+        strokeLinejoin="round"
       />
       <text
-        x={0}
-        y={1}
+        x={cx}
+        y={labelY}
         textAnchor="middle"
         dominantBaseline="middle"
         fill="var(--mkink)"
@@ -223,6 +286,17 @@ export default function AssetPriceChart({
   onCandleHover,
 }: AssetPriceChartProps) {
   const [activeTimestamp, setActiveTimestamp] = useState<number | null>(null)
+  const [narrowViewport, setNarrowViewport] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(max-width: 639px)').matches,
+  )
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)')
+    const onChange = () => setNarrowViewport(mq.matches)
+    onChange()
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
 
   const handleCandleHover = useCallback(
     (payload: { timestamp: number; close: number } | null) => {
@@ -257,15 +331,33 @@ export default function AssetPriceChart({
 
   const orderData = useMemo(
     () =>
-      displayOrders.map((order) => ({
-        timestamp: new Date(order.executedAt).getTime(),
-        price: order.price,
-        type: order.type,
-      })),
-    [displayOrders],
+      displayOrders.map((order) => {
+        const timestamp = new Date(order.executedAt).getTime()
+        const candle = findNearestCandle(candleData, timestamp)
+        const isBuy = order.type === 'buy'
+        // Anchor outside the candle wick so arrows never sit inside the body.
+        const anchorPrice = candle
+          ? isBuy
+            ? Math.min(order.price, candle.low)
+            : Math.max(order.price, candle.high)
+          : order.price
+
+        return {
+          timestamp,
+          price: anchorPrice,
+          type: order.type,
+        }
+      }),
+    [displayOrders, candleData],
   )
 
-  const yDomain = useMemo(() => computeYDomain(candleData), [candleData])
+  const yDomain = useMemo(
+    () => computeYDomain(
+      candleData,
+      orderData.map((order) => order.price),
+    ),
+    [candleData, orderData],
+  )
 
   useEffect(() => {
     setActiveTimestamp(null)
@@ -273,7 +365,7 @@ export default function AssetPriceChart({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-[300px] text-sillage-soft text-sm font-mono">
+      <div className="flex items-center justify-center h-[220px] sm:h-[300px] text-sillage-soft text-sm font-mono">
         Loading price history…
       </div>
     )
@@ -281,7 +373,7 @@ export default function AssetPriceChart({
 
   if (resolutionStatus === 'ambiguous' || resolutionStatus === 'not_found') {
     return (
-      <div className="flex flex-col justify-center h-[300px] px-2">
+      <div className="flex flex-col justify-center min-h-[220px] sm:min-h-[300px] px-2">
         <div className="lbl mb-2">
           {resolutionStatus === 'ambiguous' ? 'Ambiguous symbol' : 'Symbol not found'}
         </div>
@@ -310,7 +402,7 @@ export default function AssetPriceChart({
 
   if (priceHistory.length === 0) {
     return (
-      <div className="flex items-center justify-center h-[300px] text-sillage-soft text-sm">
+      <div className="flex items-center justify-center h-[220px] sm:h-[300px] text-sillage-soft text-sm">
         No price data available
       </div>
     )
@@ -318,7 +410,7 @@ export default function AssetPriceChart({
 
   return (
     <div
-      className="relative h-[300px] w-full"
+      className="relative h-[220px] sm:h-[300px] w-full touch-pan-y"
       onMouseLeave={handleChartMouseLeave}
     >
       {isMock && (
@@ -327,7 +419,10 @@ export default function AssetPriceChart({
         </div>
       )}
       <ResponsiveContainer width="100%" height="100%">
-        <ComposedChart data={candleData} margin={{ top: 16, right: 12, left: 0, bottom: 0 }}>
+        <ComposedChart
+          data={candleData}
+          margin={{ top: 16, right: narrowViewport ? 4 : 12, left: 0, bottom: 0 }}
+        >
           <CartesianGrid stroke="var(--line)" strokeDasharray="0" vertical={false} />
           <XAxis
             dataKey="timestamp"
@@ -338,13 +433,14 @@ export default function AssetPriceChart({
             tick={{ fill: 'var(--soft)', fontSize: 9, fontFamily: 'IBM Plex Mono, monospace' }}
             axisLine={false}
             tickLine={false}
+            minTickGap={narrowViewport ? 28 : 40}
           />
           <YAxis
             tick={{ fill: 'var(--soft)', fontSize: 9, fontFamily: 'IBM Plex Mono, monospace' }}
             axisLine={false}
             tickLine={false}
             domain={yDomain}
-            width={60}
+            width={narrowViewport ? 44 : 60}
             tickFormatter={(value) => formatTokenPrice(Number(value))}
           />
           {avgEntryPrice > 0 && (
@@ -431,6 +527,7 @@ export default function AssetPriceChart({
               x={order.timestamp}
               y={order.price}
               isFront
+              ifOverflow="extendDomain"
               shape={(props: { cx?: number; cy?: number }) => (
                 <OrderPin cx={props.cx} cy={props.cy} payload={{ type: order.type }} />
               )}

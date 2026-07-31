@@ -1,5 +1,15 @@
 import { gql } from '@apollo/client'
 
+export const GET_SYNCED_VENUES = gql`
+  query GetSyncedVenues {
+    syncedVenues {
+      key
+      displayName
+      kind
+    }
+  }
+`
+
 export const GET_PORTFOLIO = gql`
   query GetPortfolio {
     portfolio {
@@ -101,6 +111,35 @@ export const GET_TAGS = gql`
       id
       name
       description
+    }
+  }
+`
+export const GET_ASSET = gql`
+  query GetAsset($symbol: String!) {
+    asset(symbol: $symbol) {
+      symbol
+      positions {
+        id
+        symbol
+        quantity
+        avgEntryPrice
+        currentPrice
+        pnl
+        pnlPercent
+        value
+        firstBoughtAt
+        exchange
+        durationDays
+      }
+      orders {
+        id
+        symbol
+        type
+        quantity
+        price
+        executedAt
+        exchange
+      }
     }
   }
 `
