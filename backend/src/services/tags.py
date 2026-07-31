@@ -21,7 +21,6 @@ class TagService:
     def create_tag(
         self,
         name: str,
-        color: Optional[str] = None,
         description: Optional[str] = None,
         sort_order: int = 0,
     ) -> Tag:
@@ -33,7 +32,6 @@ class TagService:
             raise ValueError(f"Tag '{cleaned}' already exists")
         tag = Tag(
             name=cleaned,
-            color=color.strip() if color else None,
             description=description.strip() if description else None,
             sort_order=sort_order,
         )
@@ -46,7 +44,6 @@ class TagService:
         self,
         tag_id: int,
         name: Optional[str] = None,
-        color: Optional[str] = None,
         description: Optional[str] = None,
         sort_order: Optional[int] = None,
     ) -> Tag:
@@ -65,8 +62,6 @@ class TagService:
             if clash:
                 raise ValueError(f"Tag '{cleaned}' already exists")
             tag.name = cleaned
-        if color is not None:
-            tag.color = color.strip() or None
         if description is not None:
             tag.description = description.strip() or None
         if sort_order is not None:

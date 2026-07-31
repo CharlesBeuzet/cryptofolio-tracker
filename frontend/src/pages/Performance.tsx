@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@apollo/client'
 import { Link } from 'react-router-dom'
 import { GET_PORTFOLIO } from '../graphql/queries'
@@ -7,7 +7,6 @@ import { assetColor, formatPct, formatUsd, formatUsdPrecise, pnlColorClass } fro
 interface Tag {
   id: number
   name: string
-  color: string | null
   description: string | null
 }
 
@@ -77,40 +76,53 @@ function buildGroups(
     .sort((a, b) => b.totalValue - a.totalValue)
 }
 
-function ThesisPanels({ theses }: { theses: ThesisGroup[] }) {
-  if (theses.length === 0) {
-    return <div className="panel text-center py-12 text-sillage-soft text-sm">No positions to analyze yet.</div>
-  }
+function ThesisCard({ thesis: t }: { thesis: ThesisGroup }) {
+  const [open, setOpen] = useState(false)
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-      {theses.map((t) => (
-        <div key={t.key} className="panel">
-          <div className="flex justify-between items-start">
-            <div className="flex items-center gap-2.5">
-              <span className="sw w-[11px] h-[11px]" style={{ background: t.color }} />
-              <div className="font-serif text-xl">{t.name}</div>
-              <span className="chip">
-                {t.positions.length} position{t.positions.length === 1 ? '' : 's'}
-              </span>
+    <div className="panel">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="w-full text-left bg-transparent border-0 p-0 cursor-pointer text-inherit"
+      >
+        <div className="flex justify-between items-start gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span
+              className={`font-mono text-sillage-soft text-xs shrink-0 transition-transform duration-200 ${
+                open ? 'rotate-90' : ''
+              }`}
+              aria-hidden
+            >
+              ›
+            </span>
+            <span className="sw w-[11px] h-[11px] shrink-0" style={{ background: t.color }} />
+            <div className="font-serif text-xl truncate">{t.name}</div>
+            <span className="chip shrink-0">
+              {t.positions.length} position{t.positions.length === 1 ? '' : 's'}
+            </span>
+          </div>
+          <div className="text-right shrink-0">
+            <div className="font-mono tabular-nums font-semibold text-[17px]">
+              {formatUsd(t.totalValue)}
             </div>
-            <div className="text-right">
-              <div className="font-mono tabular-nums font-semibold text-[17px]">
-                {formatUsd(t.totalValue)}
-              </div>
-              <div className={`font-mono text-[11px] ${pnlColorClass(t.pnlPct)}`}>
-                {formatPct(t.pnlPct)}
-              </div>
+            <div className={`font-mono text-[11px] ${pnlColorClass(t.pnlPct)}`}>
+              {formatPct(t.pnlPct)}
             </div>
           </div>
+        </div>
 
-          <div className="wbar mt-4">
-            <div className="wfill" style={{ width: `${t.sharePct}%`, background: t.color }} />
-          </div>
-          <div className="font-mono text-sillage-soft text-[9px] mt-1.5 tracking-widest">
-            {t.sharePct.toFixed(1)}% OF BOOK
-          </div>
+        <div className="wbar mt-4">
+          <div className="wfill" style={{ width: `${t.sharePct}%`, background: t.color }} />
+        </div>
+        <div className="font-mono text-sillage-soft text-[9px] mt-1.5 tracking-widest">
+          {t.sharePct.toFixed(1)}% OF BOOK
+        </div>
+      </button>
 
+      {open && (
+        <>
           <div className="mt-3.5 flex flex-col">
             {t.positions.map((p) => (
               <Link
@@ -134,7 +146,21 @@ function ThesisPanels({ theses }: { theses: ThesisGroup[] }) {
           </div>
 
           <div className="cap mt-3.5 leading-normal">{t.note}</div>
-        </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function ThesisPanels({ theses }: { theses: ThesisGroup[] }) {
+  if (theses.length === 0) {
+    return <div className="panel text-center py-12 text-sillage-soft text-sm">No positions to analyze yet.</div>
+  }
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+      {theses.map((t) => (
+        <ThesisCard key={t.key} thesis={t} />
       ))}
     </div>
   )
@@ -167,8 +193,7 @@ export default function Performance() {
         totalBook,
         (p) => (p.tag ? `tag:${p.tag.id}` : 'untagged'),
         (key, sample) => (key === 'untagged' ? 'Untagged' : sample?.tag?.name || 'Tag'),
-        (key, gi, sample) =>
-          key === 'untagged' ? 'var(--soft)' : sample?.tag?.color || assetColor(gi),
+        (key, gi) => (key === 'untagged' ? 'var(--soft)' : assetColor(gi)),
         (key, sample) =>
           key === 'untagged'
             ? 'Positions without a conviction tag — assign one in Settings.'

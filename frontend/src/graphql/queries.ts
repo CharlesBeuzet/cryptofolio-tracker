@@ -21,7 +21,6 @@ export const GET_PORTFOLIO = gql`
         tag {
           id
           name
-          color
           description
           sortOrder
         }
@@ -47,7 +46,6 @@ export const GET_POSITIONS = gql`
       tag {
         id
         name
-        color
         description
         sortOrder
       }
@@ -81,7 +79,6 @@ export const GET_POSITION = gql`
       tag {
         id
         name
-        color
         description
         sortOrder
       }
@@ -106,7 +103,6 @@ export const GET_TAGS = gql`
     tags {
       id
       name
-      color
       description
       sortOrder
     }

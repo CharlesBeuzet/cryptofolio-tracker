@@ -7,7 +7,7 @@ Use them to separate theses such as “VC play” vs “backspot” when the sam
 
 | Table / column | Role |
 |----------------|------|
-| `tags` | Catalog: `name` (unique), optional `color`, `description`, `sort_order` |
+| `tags` | Catalog: `name` (unique), optional `description`, `sort_order` |
 | `positions.tag_id` | Nullable FK — at most one tag per position |
 
 Balance sync (`update_position_from_balance`) only updates quantity / status and **preserves** `tag_id`.
@@ -17,11 +17,11 @@ Balance sync (`update_position_from_balance`) only updates quantity / status and
 **Queries**
 
 - `tags` — list catalog
-- `portfolio` / `positions` / `position` — each position may include `tag { id name color description }`
+- `portfolio` / `positions` / `position` — each position may include `tag { id name description }`
 
 **Mutations**
 
-- `createTag(name, color?, description?, sortOrder?)`
+- `createTag(name, description?, sortOrder?)`
 - `updateTag(id, …)`
 - `deleteTag(id)` — clears assignments then removes the tag
 - `setPositionTag(positionId, tagId)` — pass `tagId: null` to clear
@@ -34,4 +34,4 @@ Balance sync (`update_position_from_balance`) only updates quantity / status and
 
 ## Schema migration
 
-`init_db()` calls `migrate_tags_schema()`, which creates `tags` if missing and `ALTER TABLE`s `positions.tag_id` on existing SQLite databases without wiping data.
+`init_db()` calls `migrate_tags_schema()`, which creates `tags` if missing, `ALTER TABLE`s `positions.tag_id` on existing SQLite databases, and drops legacy `tags.color` when present — without wiping data.

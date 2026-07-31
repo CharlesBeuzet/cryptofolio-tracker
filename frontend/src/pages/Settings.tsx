@@ -7,7 +7,6 @@ import { assetColor } from '../utils/format'
 interface Tag {
   id: number
   name: string
-  color: string | null
   description: string | null
   sortOrder: number
 }
@@ -189,7 +188,7 @@ export default function Settings() {
                 >
                   <span
                     className="sw w-[10px] h-[10px] mt-1 flex-shrink-0"
-                    style={{ background: tag.color || assetColor(i) }}
+                    style={{ background: assetColor(i) }}
                   />
                   <div className="flex-1 min-w-0">
                     <div className="font-mono text-xs font-semibold">{tag.name}</div>

@@ -96,7 +96,6 @@ class TagType:
 
     id: int
     name: str
-    color: Optional[str]
     description: Optional[str]
     sort_order: int
 
@@ -159,7 +158,6 @@ def _tag_to_type(tag: Optional[Tag]) -> Optional[TagType]:
     return TagType(
         id=tag.id,
         name=tag.name,
-        color=tag.color,
         description=tag.description,
         sort_order=tag.sort_order,
     )
@@ -458,14 +456,13 @@ class Mutation:
     def create_tag(
         self,
         name: str,
-        color: Optional[str] = None,
         description: Optional[str] = None,
         sort_order: int = 0,
     ) -> TagType:
         db = SessionLocal()
         try:
             tag = TagService(db).create_tag(
-                name=name, color=color, description=description, sort_order=sort_order
+                name=name, description=description, sort_order=sort_order
             )
             return _tag_to_type(tag)  # type: ignore[return-value]
         except ValueError as exc:
@@ -478,7 +475,6 @@ class Mutation:
         self,
         id: int,
         name: Optional[str] = None,
-        color: Optional[str] = None,
         description: Optional[str] = None,
         sort_order: Optional[int] = None,
     ) -> TagType:
@@ -487,7 +483,6 @@ class Mutation:
             tag = TagService(db).update_tag(
                 tag_id=id,
                 name=name,
-                color=color,
                 description=description,
                 sort_order=sort_order,
             )
