@@ -77,6 +77,21 @@ export default function Position() {
     (a, b) => new Date(b.executedAt).getTime() - new Date(a.executedAt).getTime(),
   )
 
+  // Prefer earliest buy fill for this venue; fall back to position open date.
+  const firstBoughtAt =
+    orders
+      .filter((o) => o.type === 'buy')
+      .reduce<string | null>((earliest, o) => {
+        if (!earliest || new Date(o.executedAt) < new Date(earliest)) return o.executedAt
+        return earliest
+      }, null) ?? position.firstBoughtAt
+  const durationDays = firstBoughtAt
+    ? Math.max(
+        0,
+        Math.floor((Date.now() - new Date(firstBoughtAt).getTime()) / (1000 * 60 * 60 * 24)),
+      )
+    : position.durationDays || 0
+
   return (
     <div>
       <div className="page-head mb-4">
@@ -178,7 +193,7 @@ export default function Position() {
                 ? [['Avg sell', formatTokenPrice(position.metrics.avgExitPrice)] as const]
                 : []),
               ['Holdings', position.quantity.toLocaleString(undefined, { maximumFractionDigits: 8 })],
-              ['Duration', `${position.durationDays} days`],
+              ['Duration', `${durationDays} days`],
             ].map(([label, val], idx, arr) => (
               <div
                 key={label}
@@ -197,7 +212,10 @@ export default function Position() {
                 : `Since · ${position.exchange || 'unknown venue'}`}
             </div>
             <div className="cap leading-relaxed">
-              First bought {format(new Date(position.firstBoughtAt), 'MMM dd, yyyy')}.
+              {firstBoughtAt
+                ? `First bought {format(new Date(position.firstBoughtAt), 'MMM dd, yyyy')}. `
+                : ''}
+              Track conviction tags in the Theses view.
               {position.tag?.description
                 ? ` ${position.tag.description}`
                 : position.tag
