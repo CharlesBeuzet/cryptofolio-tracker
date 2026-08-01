@@ -14,7 +14,7 @@ Stop tabbing between Binance, OKX, Coinbase, and block explorers. Stop trusting 
 | **Your keys stay home** | API secrets live in a local config file. No cloud account. No telemetry. |
 | **Built for a Pi** | SQLite, a single Docker container, one published port. Designed for Raspberry Pi 4/5. |
 | **Real analytics** | Average-cost entry, realised / unrealised P&L, order history per position. |
-| **Multi-source by default** | Binance · OKX · Coinbase · Ethereum hot wallets — aggregated into one portfolio. |
+| **Multi-source by default** | Binance · OKX · Ethereum hot wallets — aggregated into one portfolio. |
 
 ---
 
@@ -23,6 +23,8 @@ Stop tabbing between Binance, OKX, Coinbase, and block explorers. Stop trusting 
 - **Portfolio overview** — value, daily P&L, distribution, rankings  
 - **Performance over time** — NAV evolution with BTC comparison  
 - **Position deep-dives** — charts, metrics, and full order history  
+- **Conviction tags** — label positions by thesis; group Theses by tag  
+- **Settings** — edit connectors and tags in the UI (secrets stay masked)  
 - **Hourly sync** — connectors pull balances and orders on a schedule  
 - **Self-hosted UI** — React dashboard with dark / light themes  
 
@@ -44,10 +46,11 @@ touch data/portfolio.db
 docker compose up -d --build
 ```
 
-Open `http://<pi-ip>:8080` — you're live.
+Open `http://<pi-ip>:8080` — you're live. After first run you can also manage connectors under **Settings → Connections**.
 
 → **[Full installation guide](docs/installation.md)** (Docker on Pi · local development)  
 → **[Configuration](docs/configuration.md)** (exchanges, wallets, security)  
+→ **[Settings](docs/settings.md)** (Connections UI and config API)  
 → **[Usage & GraphQL API](docs/usage.md)**
 
 ---
@@ -60,9 +63,11 @@ Open `http://<pi-ip>:8080` — you're live.
 | [How it works](docs/how-it-works.md) | Architecture, stack, data flow, project layout |
 | [Installation](docs/installation.md) | Docker (Pi) and local backend / frontend setup |
 | [Configuration](docs/configuration.md) | API keys, wallets, security practices |
+| [Settings](docs/settings.md) | Connections editor, masked secrets, config API |
 | [Usage](docs/usage.md) | Day-to-day use and GraphQL examples |
 | [Troubleshooting](docs/troubleshooting.md) | Common fixes and Pi performance tips |
 | [Position metrics](docs/position-metrics.md) | Average-cost P&L and analytics model |
+| [Position tags](docs/position-tags.md) | Conviction tags per asset × exchange |
 | [Docs hub](docs/README.md) | Index of all documentation |
 
 Component notes: [backend](backend/readme.md) · [frontend](frontend/readme.md) · [settings](settings/readme.md)

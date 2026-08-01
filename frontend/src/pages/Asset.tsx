@@ -110,10 +110,18 @@ export default function Asset() {
   const unrealized = asset?.pnl ?? 0
   const isPositive = unrealized >= 0
   const currentPrice = venues[0]?.currentPrice as number | null | undefined
-  const firstBoughtAt = venues.reduce((earliest: string | null, p: { firstBoughtAt: string }) => {
-    if (!earliest || new Date(p.firstBoughtAt) < new Date(earliest)) return p.firstBoughtAt
-    return earliest
-  }, null as string | null)
+  // Prefer earliest buy fill across all venues; fall back to position open dates.
+  const firstBoughtAt =
+    allOrders
+      .filter((o) => o.type === 'buy')
+      .reduce<string | null>((earliest, o) => {
+        if (!earliest || new Date(o.executedAt) < new Date(earliest)) return o.executedAt
+        return earliest
+      }, null) ??
+    venues.reduce<string | null>((earliest, p: { firstBoughtAt: string }) => {
+      if (!earliest || new Date(p.firstBoughtAt) < new Date(earliest)) return p.firstBoughtAt
+      return earliest
+    }, null)
   const durationDays = firstBoughtAt
     ? Math.max(
         0,

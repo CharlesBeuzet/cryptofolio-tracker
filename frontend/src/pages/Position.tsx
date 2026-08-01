@@ -77,6 +77,21 @@ export default function Position() {
     (a, b) => new Date(b.executedAt).getTime() - new Date(a.executedAt).getTime(),
   )
 
+  // Prefer earliest buy fill for this venue; fall back to position open date.
+  const firstBoughtAt =
+    orders
+      .filter((o) => o.type === 'buy')
+      .reduce<string | null>((earliest, o) => {
+        if (!earliest || new Date(o.executedAt) < new Date(earliest)) return o.executedAt
+        return earliest
+      }, null) ?? position.firstBoughtAt
+  const durationDays = firstBoughtAt
+    ? Math.max(
+        0,
+        Math.floor((Date.now() - new Date(firstBoughtAt).getTime()) / (1000 * 60 * 60 * 24)),
+      )
+    : position.durationDays || 0
+
   return (
     <div>
       <div className="page-head mb-4">
@@ -85,6 +100,7 @@ export default function Position() {
           <div className="flex items-center gap-3 mt-2 flex-wrap">
             <div className="page-title mt-0">{position.symbol}</div>
             {position.exchange && <span className="chip">{position.exchange}</span>}
+            {position.tag?.name && <span className="chip">{position.tag.name}</span>}
             <Link
               to={`/asset/${encodeURIComponent(position.symbol)}`}
               className="font-mono text-[11px] text-sillage-soft hover:text-sillage-ink no-underline"
@@ -177,7 +193,7 @@ export default function Position() {
                 ? [['Avg sell', formatTokenPrice(position.metrics.avgExitPrice)] as const]
                 : []),
               ['Holdings', position.quantity.toLocaleString(undefined, { maximumFractionDigits: 8 })],
-              ['Duration', `${position.durationDays} days`],
+              ['Duration', `${durationDays} days`],
             ].map(([label, val], idx, arr) => (
               <div
                 key={label}
@@ -190,10 +206,21 @@ export default function Position() {
           </div>
 
           <div className="mt-4 bg-sillage-gsoft border border-sillage-line rounded-lg px-[15px] py-3">
-            <div className="lbl mb-[7px]">Since · {position.exchange || 'unknown venue'}</div>
+            <div className="lbl mb-[7px]">
+              {position.tag?.name
+                ? `Thesis · ${position.tag.name}`
+                : `Since · ${position.exchange || 'unknown venue'}`}
+            </div>
             <div className="cap leading-relaxed">
-              First bought {format(new Date(position.firstBoughtAt), 'MMM dd, yyyy')}. Track conviction
-              tags in the Theses view.
+              {firstBoughtAt
+                ? `First bought {format(new Date(position.firstBoughtAt), 'MMM dd, yyyy')}. `
+                : ''}
+              Track conviction tags in the Theses view.
+              {position.tag?.description
+                ? ` ${position.tag.description}`
+                : position.tag
+                  ? ' Tagged for separate tracking on Theses.'
+                  : ' Assign a conviction tag in Settings to track this thesis separately.'}
             </div>
           </div>
         </div>
