@@ -88,6 +88,16 @@ Details in **[How it works](docs/how-it-works.md)**.
 
 Your portfolio data is yours. This app runs where you put it, talks only to the exchanges and RPCs you configure, and stores everything in a local SQLite file. Read-only API keys are enough. Wallet tracking needs public addresses only — never private keys.
 
+There is no reason to hand your balances and holdings to a SaaS portfolio dashboard. That creates an unnecessary data leak: a third party sees your net worth and positions, and that data can be shared, subpoenaed, or disclosed under government requests. Self-hosting keeps valuation data on a machine you control.
+
+---
+
+### License
+
+This project is released under the [MIT License](LICENSE).
+
+You may use it, fork it, modify it, and open pull requests — including for commercial use — as long as you keep the copyright notice and license text (attribution to this repository / author). See [LICENSE](LICENSE) for the full terms.
+
 ---
 
 **Ready?** Start with the **[installation guide](docs/installation.md)**.
