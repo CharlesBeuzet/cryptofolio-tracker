@@ -21,7 +21,7 @@ Stop tabbing between Binance, OKX, Coinbase, and block explorers. Stop trusting 
 ### What you get
 
 - **Portfolio overview** — value, daily P&L, distribution, rankings  
-- **Performance over time** — NAV evolution with BTC comparison  
+- **Performance over time** — NAV evolution and theses by venue / tag  
 - **Position deep-dives** — charts, metrics, and full order history  
 - **Conviction tags** — label positions by thesis; group Theses by tag  
 - **Settings** — edit connectors and tags in the UI (secrets stay masked)  

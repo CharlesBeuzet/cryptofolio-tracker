@@ -11,8 +11,8 @@ Crypto Portfolio Tracker aggregates your crypto holdings and turns them into a s
 
 ## Performance analysis
 
-- Portfolio value evolution over time
-- Comparison against Bitcoin (BTC) as a benchmark
+- Portfolio value evolution over time (NAV history on Overview)
+- Theses view: performance grouped by venue and by conviction tag
 
 ## Position details
 
