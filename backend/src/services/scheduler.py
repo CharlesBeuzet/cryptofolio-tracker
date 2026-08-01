@@ -29,24 +29,17 @@ class DataUpdateScheduler:
             config_path = str(BASE_DIR / "settings" / "config.yaml")
         self.config_path = config_path
         self.scheduler = AsyncIOScheduler()
-        self.connectors = []
         self.reload_connectors()
 
-    def reload_connectors(self) -> None:
-        """Re-read config.yaml and rebuild connector instances."""
-        self.connectors = load_connectors(self.config_path)
-        if self.connectors:
-            for connector in self.connectors:
+    def reload_connectors(self) -> List[BaseConnector]:
+        """Re-read config.yaml and instantiate connectors (fresh HTTP sessions)."""
+        loaded = load_connectors(self.config_path)
+        if loaded:
+            for connector in loaded:
                 print(f"{connector.name} connector initialized")
         else:
             print("No exchange connectors configured")
-
-    def _fresh_connectors(self) -> List[BaseConnector]:
-        """Instantiate connectors for this sync run (fresh HTTP sessions)."""
-        connectors = load_connectors(self.config_path)
-        names = ", ".join(c.name for c in connectors) or "(none)"
-        print(f"Loaded {len(connectors)} connector(s) for this run: {names}")
-        return connectors
+        return loaded
 
     async def _with_retry(self, label: str, fn: Callable[[], Any]) -> Any:
         """Run fn (sync or async) with one light retry; log type + message on failure."""
@@ -75,7 +68,7 @@ class DataUpdateScheduler:
     async def update_portfolio_data(self):
         """Update portfolio data from all connectors."""
         print("Starting portfolio data update...")
-        connectors = self._fresh_connectors()
+        connectors = self.reload_connectors()
         db = SessionLocal()
         try:
             assets_svc = AssetsService(db)
