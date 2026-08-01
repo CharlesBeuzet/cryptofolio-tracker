@@ -24,6 +24,7 @@ class PortfolioService:
                 joinedload(Position.asset),
                 joinedload(Position.orders),
                 joinedload(Position.metrics),
+                joinedload(Position.tag),
             )
             .filter(Position.status == "open")
         )
@@ -105,6 +106,7 @@ class PortfolioService:
                 joinedload(Position.asset),
                 joinedload(Position.orders),
                 joinedload(Position.metrics),
+                joinedload(Position.tag),
             )
             .filter(Position.id == position_id)
             .first()
@@ -113,14 +115,15 @@ class PortfolioService:
     def get_portfolio_history(
         self, days: int = 180
     ) -> List[Dict]:
-        """Get portfolio value history for the last N days."""
-        cutoff_date = datetime.utcnow() - timedelta(days=days)
-        snapshots = (
-            self.db.query(PortfolioSnapshot)
-            .filter(PortfolioSnapshot.timestamp >= cutoff_date)
-            .order_by(PortfolioSnapshot.timestamp.asc())
-            .all()
-        )
+        """Get portfolio value history for the last N days.
+
+        Pass days <= 0 for Max: return all stored snapshots with no cutoff.
+        """
+        query = self.db.query(PortfolioSnapshot)
+        if days > 0:
+            cutoff_date = datetime.utcnow() - timedelta(days=days)
+            query = query.filter(PortfolioSnapshot.timestamp >= cutoff_date)
+        snapshots = query.order_by(PortfolioSnapshot.timestamp.asc()).all()
         return [
             {"timestamp": s.timestamp, "value": s.total_value} for s in snapshots
         ]

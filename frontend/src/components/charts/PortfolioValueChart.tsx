@@ -5,7 +5,7 @@ import { format } from 'date-fns'
 interface PortfolioValueChartProps {
   data: Array<{ timestamp: string; totalValue: number }>
   compareBtc?: boolean
-  height?: number
+  height?: number | string
   overlay?: React.ReactNode
 }
 
@@ -25,14 +25,14 @@ export default function PortfolioValueChart({
 
   if (chartData.length === 0) {
     return (
-      <div className="flex items-center justify-center text-sillage-soft text-sm" style={{ height }}>
+      <div className="flex items-center justify-center text-sillage-soft text-sm h-full" style={{ height }}>
         No history data
       </div>
     )
   }
 
   return (
-    <div className="relative" style={{ height }}>
+    <div className="relative h-full w-full" style={{ height }}>
       {overlay}
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>

@@ -6,6 +6,7 @@ import { GET_POSITION, GET_PORTFOLIO, GET_ASSET_PRICE_HISTORY } from '../graphql
 import AssetPriceChart from '../components/charts/AssetPriceChart'
 import RangeSegment, { type RangeKey, rangeToDays } from '../components/common/RangeSegment'
 import { assetColor, formatPct, formatTokenPrice, formatUsdPrecise, pnlColorClass } from '../utils/format'
+import { groupPositionsByAsset } from '../utils/groupPositionsByAsset'
 
 export default function Position() {
   const { id } = useParams<{ id: string }>()
@@ -67,8 +68,7 @@ export default function Position() {
   }
 
   const position = data.position
-  const allPositions = [...(portfolioData?.portfolio?.positions || [])].sort((a, b) => b.value - a.value)
-  const posIndex = allPositions.findIndex((p) => p.id === position.id)
+  const assetTabs = groupPositionsByAsset(portfolioData?.portfolio?.positions || [])
   const costBasis = position.avgEntryPrice * position.quantity
   const unrealized = position.pnl || 0
   const isPositive = unrealized >= 0
@@ -79,36 +79,43 @@ export default function Position() {
 
   return (
     <div>
-      <div className="flex justify-between items-end mb-4">
+      <div className="page-head mb-4">
         <div>
           <div className="lbl">§2 · Position detail</div>
-          <div className="flex items-center gap-3 mt-2">
-            <div className="font-serif text-[26px] leading-none">{position.symbol}</div>
+          <div className="flex items-center gap-3 mt-2 flex-wrap">
+            <div className="page-title mt-0">{position.symbol}</div>
             {position.exchange && <span className="chip">{position.exchange}</span>}
+            {position.tag?.name && <span className="chip">{position.tag.name}</span>}
+            <Link
+              to={`/asset/${encodeURIComponent(position.symbol)}`}
+              className="font-mono text-[11px] text-sillage-soft hover:text-sillage-ink no-underline"
+            >
+              all venues ↗
+            </Link>
           </div>
         </div>
         <RangeSegment value={range} onChange={setRange} />
       </div>
 
-      <div className="flex gap-2.5 flex-wrap mb-[18px]">
-        {allPositions.map((p, i) => (
+      <div className="flex gap-2 flex-wrap mb-[18px] overflow-x-auto pb-0.5 -mx-0.5 px-0.5">
+        {assetTabs.map((tab, i) => (
           <button
-            key={p.id}
+            key={tab.symbol}
             type="button"
-            className={`atab ${p.id === position.id ? 'on' : ''}`}
-            onClick={() => navigate(`/position/${p.id}`)}
+            className={`atab ${tab.symbol === position.symbol.toUpperCase() ? 'on' : ''}`}
+            onClick={() => navigate(`/asset/${encodeURIComponent(tab.symbol)}`)}
           >
             <span className="sw" style={{ background: assetColor(i) }} />
-            {p.symbol}
+            {tab.symbol}
           </button>
         ))}
       </div>
 
-      <div className="flex gap-5 items-stretch flex-col lg:flex-row">
+      <div className="flex gap-4 sm:gap-5 items-stretch flex-col lg:flex-row">
         <div className="panel flex-1 min-w-0">
-          <div className="flex justify-between items-center mb-3.5">
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-start mb-3.5">
             <div className="lbl">Fig 2 · Price · order markers</div>
-            <div className="font-mono text-[11px] flex gap-4 flex-wrap justify-end">
+            <div className="font-mono text-[11px] flex gap-x-3 gap-y-1.5 flex-wrap sm:justify-end">
               <span>
                 <span className="text-sillage-green font-bold">B</span> buy
               </span>
@@ -154,7 +161,7 @@ export default function Position() {
 
         <div className="panel w-full lg:w-[286px] flex-shrink-0">
           <div className="lbl mb-4">P&amp;L · since first entry</div>
-          <div className={`font-serif text-[30px] leading-none ${pnlColorClass(unrealized)}`}>
+          <div className={`font-serif text-[26px] sm:text-[30px] leading-none ${pnlColorClass(unrealized)}`}>
             {isPositive ? '+' : ''}
             {formatUsdPrecise(unrealized)}
           </div>
@@ -175,75 +182,85 @@ export default function Position() {
             ].map(([label, val], idx, arr) => (
               <div
                 key={label}
-                className={`flex justify-between py-2.5 ${idx < arr.length - 1 ? 'border-b border-sillage-line' : ''}`}
+                className={`flex justify-between gap-3 py-2.5 ${idx < arr.length - 1 ? 'border-b border-sillage-line' : ''}`}
               >
-                <span className="lbl">{label}</span>
-                <span className="font-mono tabular-nums text-xs">{val}</span>
+                <span className="lbl flex-shrink-0">{label}</span>
+                <span className="font-mono tabular-nums text-xs text-right break-all">{val}</span>
               </div>
             ))}
           </div>
 
           <div className="mt-4 bg-sillage-gsoft border border-sillage-line rounded-lg px-[15px] py-3">
-            <div className="lbl mb-[7px]">Since · {position.exchange || 'unknown venue'}</div>
+            <div className="lbl mb-[7px]">
+              {position.tag?.name
+                ? `Thesis · ${position.tag.name}`
+                : `Since · ${position.exchange || 'unknown venue'}`}
+            </div>
             <div className="cap leading-relaxed">
-              First bought {format(new Date(position.firstBoughtAt), 'MMM dd, yyyy')}. Track conviction
-              tags in the Theses view.
+              First bought {format(new Date(position.firstBoughtAt), 'MMM dd, yyyy')}.
+              {position.tag?.description
+                ? ` ${position.tag.description}`
+                : position.tag
+                  ? ' Tagged for separate tracking on Theses.'
+                  : ' Assign a conviction tag in Settings to track this thesis separately.'}
             </div>
           </div>
         </div>
       </div>
 
-      <div className="panel mt-5">
+      <div className="panel mt-4 sm:mt-5">
         <div className="lbl mb-1">Table 2 · Order history</div>
-        <div className="trow text-sillage-soft border-t-0">
-          <div className="w-24 lbl text-[9px]">Date</div>
-          <div className="w-[54px] lbl text-[9px]">Side</div>
-          <div className="flex-1 lbl text-[9px]">Quantity</div>
-          <div className="w-24 text-right lbl text-[9px]">Price</div>
-          <div className="w-24 text-right lbl text-[9px]">Value</div>
-          <div className="w-24 text-right lbl text-[9px]">Venue</div>
+        <div className="table-scroll">
+          <div className="table-scroll-inner">
+            <div className="trow text-sillage-soft border-t-0">
+              <div className="w-24 lbl text-[9px]">Date</div>
+              <div className="w-[54px] lbl text-[9px]">Side</div>
+              <div className="flex-1 lbl text-[9px]">Quantity</div>
+              <div className="w-24 text-right lbl text-[9px]">Price</div>
+              <div className="w-24 text-right lbl text-[9px]">Value</div>
+              <div className="w-24 text-right lbl text-[9px]">Venue</div>
+            </div>
+            {orders.length === 0 ? (
+              <div className="text-center py-8 text-sillage-soft text-sm">No orders found</div>
+            ) : (
+              orders.map((order) => {
+                const isBuy = order.type === 'buy'
+                const total = order.quantity * order.price
+                return (
+                  <div key={order.id} className="trow">
+                    <div className="w-24 font-mono text-[11px] text-sillage-soft">
+                      {format(new Date(order.executedAt), 'MMM dd, yy')}
+                    </div>
+                    <div className="w-[54px]">
+                      <span className={`font-mono text-[11px] ${isBuy ? 'text-sillage-green' : 'text-sillage-accent'}`}>
+                        {isBuy ? 'BUY' : 'SELL'}
+                      </span>
+                    </div>
+                    <div className="flex-1 font-mono tabular-nums text-xs">
+                      {order.quantity.toLocaleString(undefined, { maximumFractionDigits: 8 })} {position.symbol}
+                    </div>
+                    <div className="w-24 text-right font-mono tabular-nums text-xs">
+                      {formatTokenPrice(order.price)}
+                    </div>
+                    <div className="w-24 text-right font-mono tabular-nums text-xs">
+                      {formatUsdPrecise(total)}
+                    </div>
+                    <div className="w-24 text-right font-mono text-[11px] text-sillage-soft">
+                      {order.exchange || '—'}
+                    </div>
+                  </div>
+                )
+              })
+            )}
+          </div>
         </div>
-        {orders.length === 0 ? (
-          <div className="text-center py-8 text-sillage-soft text-sm">No orders found</div>
-        ) : (
-          orders.map((order) => {
-            const isBuy = order.type === 'buy'
-            const total = order.quantity * order.price
-            return (
-              <div key={order.id} className="trow">
-                <div className="w-24 font-mono text-[11px] text-sillage-soft">
-                  {format(new Date(order.executedAt), 'MMM dd, yy')}
-                </div>
-                <div className="w-[54px]">
-                  <span className={`font-mono text-[11px] ${isBuy ? 'text-sillage-green' : 'text-sillage-accent'}`}>
-                    {isBuy ? 'BUY' : 'SELL'}
-                  </span>
-                </div>
-                <div className="flex-1 font-mono tabular-nums text-xs">
-                  {order.quantity.toLocaleString(undefined, { maximumFractionDigits: 8 })} {position.symbol}
-                </div>
-                <div className="w-24 text-right font-mono tabular-nums text-xs">
-                  {formatTokenPrice(order.price)}
-                </div>
-                <div className="w-24 text-right font-mono tabular-nums text-xs">
-                  {formatUsdPrecise(total)}
-                </div>
-                <div className="w-24 text-right font-mono text-[11px] text-sillage-soft">
-                  {order.exchange || '—'}
-                </div>
-              </div>
-            )
-          })
-        )}
       </div>
 
-      {posIndex > 0 && (
-        <div className="mt-4 text-center">
-          <Link to="/" className="font-mono text-xs text-sillage-soft hover:text-sillage-ink">
-            ← back to overview
-          </Link>
-        </div>
-      )}
+      <div className="mt-4 text-center">
+        <Link to="/" className="font-mono text-xs text-sillage-soft hover:text-sillage-ink">
+          ← back to overview
+        </Link>
+      </div>
     </div>
   )
 }
