@@ -118,10 +118,10 @@ export default function Asset() {
         if (!earliest || new Date(o.executedAt) < new Date(earliest)) return o.executedAt
         return earliest
       }, null) ??
-    venues.reduce<string | null>((earliest, p: { firstBoughtAt: string }) => {
+    venues.reduce((earliest: string | null, p: { firstBoughtAt: string }) => {
       if (!earliest || new Date(p.firstBoughtAt) < new Date(earliest)) return p.firstBoughtAt
       return earliest
-    }, null)
+    }, null as string | null)
   const durationDays = firstBoughtAt
     ? Math.max(
         0,
