@@ -174,6 +174,7 @@ export const GET_APP_CONFIG = gql`
         label
         supportsPassphrase
         supportsHostname
+        supportsAddress
         requiredSecrets
       }
       exchanges {
@@ -182,8 +183,10 @@ export const GET_APP_CONFIG = gql`
         configured
         supportsPassphrase
         supportsHostname
+        supportsAddress
         sandbox
         hostname
+        address
         apiKey {
           isSet
           hint
@@ -197,30 +200,17 @@ export const GET_APP_CONFIG = gql`
           hint
         }
       }
-      hotWallets {
-        defaultRpc
-        rpcUrls {
-          chain
-          url
-        }
-        addresses {
-          address
-          chain
-        }
-      }
     }
   }
 `
 
 export const UPDATE_APP_CONFIG = gql`
   mutation UpdateAppConfig(
-    $exchanges: [ExchangeConfigInput!]
-    $hotWallets: HotWalletsConfigInput
+    $exchanges: [ExchangeConnectorInput!]
     $replaceExchanges: Boolean
   ) {
     updateAppConfig(
       exchanges: $exchanges
-      hotWallets: $hotWallets
       replaceExchanges: $replaceExchanges
     ) {
       success
@@ -233,6 +223,7 @@ export const UPDATE_APP_CONFIG = gql`
           label
           supportsPassphrase
           supportsHostname
+          supportsAddress
           requiredSecrets
         }
         exchanges {
@@ -241,8 +232,10 @@ export const UPDATE_APP_CONFIG = gql`
           configured
           supportsPassphrase
           supportsHostname
+          supportsAddress
           sandbox
           hostname
+          address
           apiKey {
             isSet
             hint
@@ -254,17 +247,6 @@ export const UPDATE_APP_CONFIG = gql`
           passphrase {
             isSet
             hint
-          }
-        }
-        hotWallets {
-          defaultRpc
-          rpcUrls {
-            chain
-            url
-          }
-          addresses {
-            address
-            chain
           }
         }
       }

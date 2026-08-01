@@ -28,28 +28,15 @@ coinbase:
   # Optional: enable sandbox
   # sandbox: false
 
-# Hot Wallets Configuration
-hot_wallets:
-  # Default RPC endpoint (used if chain-specific RPC not provided)
-  default_rpc: "https://eth.llamarpc.com"
-  
-  # Chain-specific RPC URLs (optional, falls back to default_rpc)
-  rpc_urls:
-    ethereum: "https://eth.llamarpc.com"
-    # polygon: "https://polygon-rpc.com"
-    # bsc: "https://bsc-dataseed.binance.org"
-  
-  # List of wallet addresses to track (tokens on each address are resolved automatically)
-  addresses:
-    - address: "0xYourEthereumAddressHere"
-      chain: "ethereum"
-    # Add more addresses as needed
-    # - address: "0xAnotherAddress"
-    #   chain: "ethereum"
+# Ethereum hot wallet (same connector shape as exchanges)
+ethereum:
+  # JSON-RPC endpoint (optional; public defaults may be used later)
+  hostname: "https://eth.llamarpc.com"
+  # Public wallet address to track (required)
+  address: "0xYourEthereumAddressHere"
 
 # Notes:
 # - For exchanges: Only provide API keys with read-only permissions for security
-# - For hot wallets: Only public addresses are needed (no private keys required)
-# - RPC endpoints: Free public RPCs are used by default, but you can use your own for better reliability
+# - For hot wallets: Only a public address is needed (no private keys required)
+# - RPC hostname: Free public RPCs are fine to start; use your own for better reliability
 # - Asset price history is fetched on demand from exchange APIs and never stored in portfolio.db
-

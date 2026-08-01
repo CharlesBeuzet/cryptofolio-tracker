@@ -248,8 +248,8 @@ class SecretFieldType:
 
 
 @strawberry.type
-class ExchangeConfigType:
-    """One active connector block from settings/config.yaml."""
+class ExchangeConnector:
+    """One active connector block from settings/config.yaml (exchange or hot wallet)."""
 
     name: str
     label: str
@@ -259,8 +259,10 @@ class ExchangeConfigType:
     passphrase: SecretFieldType
     supports_passphrase: bool
     supports_hostname: bool
+    supports_address: bool
     sandbox: Optional[bool]
     hostname: Optional[str]
+    address: Optional[str]
 
 
 @strawberry.type
@@ -271,32 +273,8 @@ class AvailableConnectorType:
     label: str
     supports_passphrase: bool
     supports_hostname: bool
+    supports_address: bool
     required_secrets: List[str]
-
-
-@strawberry.type
-class RpcUrlType:
-    """Chain → RPC URL pair."""
-
-    chain: str
-    url: str
-
-
-@strawberry.type
-class WalletAddressType:
-    """Public wallet address to track."""
-
-    address: str
-    chain: str
-
-
-@strawberry.type
-class HotWalletsConfigType:
-    """Hot wallets section of config.yaml."""
-
-    default_rpc: Optional[str]
-    rpc_urls: List[RpcUrlType]
-    addresses: List[WalletAddressType]
 
 
 @strawberry.type
@@ -306,13 +284,12 @@ class AppConfigType:
     exists: bool
     relative_path: str
     available_connectors: List[AvailableConnectorType]
-    exchanges: List[ExchangeConfigType]
-    hot_wallets: HotWalletsConfigType
+    exchanges: List[ExchangeConnector]
 
 
 @strawberry.input
-class ExchangeConfigInput:
-    """Partial update for one exchange. Omit secrets (null) to keep current values."""
+class ExchangeConnectorInput:
+    """Partial update for one connector. Omit secrets (null) to keep current values."""
 
     name: str
     api_key: Optional[str] = None
@@ -320,27 +297,7 @@ class ExchangeConfigInput:
     passphrase: Optional[str] = None
     sandbox: Optional[bool] = None
     hostname: Optional[str] = None
-
-
-@strawberry.input
-class RpcUrlInput:
-    chain: str
-    url: str
-
-
-@strawberry.input
-class WalletAddressInput:
-    address: str
-    chain: str = "ethereum"
-
-
-@strawberry.input
-class HotWalletsConfigInput:
-    """Full replacement payload for the hot_wallets section."""
-
-    default_rpc: Optional[str] = None
-    rpc_urls: Optional[List[RpcUrlInput]] = None
-    addresses: Optional[List[WalletAddressInput]] = None
+    address: Optional[str] = None
 
 
 @strawberry.type
@@ -358,7 +315,7 @@ def _secret_to_type(data: dict) -> SecretFieldType:
 
 def _config_to_type(data: dict) -> AppConfigType:
     exchanges = [
-        ExchangeConfigType(
+        ExchangeConnector(
             name=ex["name"],
             label=ex.get("label") or ex["name"].title(),
             configured=ex["configured"],
@@ -367,8 +324,10 @@ def _config_to_type(data: dict) -> AppConfigType:
             passphrase=_secret_to_type(ex["passphrase"]),
             supports_passphrase=ex["supports_passphrase"],
             supports_hostname=bool(ex.get("supports_hostname")),
+            supports_address=bool(ex.get("supports_address")),
             sandbox=ex.get("sandbox"),
             hostname=ex.get("hostname"),
+            address=ex.get("address"),
         )
         for ex in data["exchanges"]
     ]
@@ -378,27 +337,16 @@ def _config_to_type(data: dict) -> AppConfigType:
             label=item["label"],
             supports_passphrase=item["supports_passphrase"],
             supports_hostname=item["supports_hostname"],
+            supports_address=bool(item.get("supports_address")),
             required_secrets=list(item.get("required_secrets") or []),
         )
         for item in data.get("available_connectors") or []
     ]
-    hw = data["hot_wallets"]
     return AppConfigType(
         exists=data["exists"],
         relative_path=data["relative_path"],
         available_connectors=available,
         exchanges=exchanges,
-        hot_wallets=HotWalletsConfigType(
-            default_rpc=hw.get("default_rpc"),
-            rpc_urls=[RpcUrlType(chain=r["chain"], url=r["url"]) for r in hw.get("rpc_urls") or []],
-            addresses=[
-                WalletAddressType(
-                    address=a["address"],
-                    chain=a["chain"],
-                )
-                for a in hw.get("addresses") or []
-            ],
-        ),
     )
 
 
@@ -591,8 +539,7 @@ class Mutation:
     @strawberry.mutation
     def update_app_config(
         self,
-        exchanges: Optional[List[ExchangeConfigInput]] = None,
-        hot_wallets: Optional[HotWalletsConfigInput] = None,
+        exchanges: Optional[List[ExchangeConnectorInput]] = None,
         replace_exchanges: bool = False,
     ) -> UpdateConfigResultType:
         """Persist Settings changes to settings/config.yaml (secrets never echoed back)."""
@@ -607,30 +554,13 @@ class Mutation:
                         "passphrase": ex.passphrase,
                         "sandbox": ex.sandbox,
                         "hostname": ex.hostname,
+                        "address": ex.address,
                     }
                     for ex in exchanges
                 ]
 
-            hot_wallets_payload = None
-            if hot_wallets is not None:
-                hot_wallets_payload = {
-                    "default_rpc": hot_wallets.default_rpc,
-                    "rpc_urls": [
-                        {"chain": r.chain, "url": r.url}
-                        for r in (hot_wallets.rpc_urls or [])
-                    ],
-                    "addresses": [
-                        {
-                            "address": a.address,
-                            "chain": a.chain,
-                        }
-                        for a in (hot_wallets.addresses or [])
-                    ],
-                }
-
             updated = config_settings_service.update_config(
                 exchanges=exchange_payload,
-                hot_wallets=hot_wallets_payload,
                 replace_exchanges=replace_exchanges,
             )
             return UpdateConfigResultType(

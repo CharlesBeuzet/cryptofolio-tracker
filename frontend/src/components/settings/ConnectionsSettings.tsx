@@ -9,6 +9,7 @@ type AvailableConnector = {
   label: string
   supportsPassphrase: boolean
   supportsHostname: boolean
+  supportsAddress: boolean
   requiredSecrets: string[]
 }
 
@@ -18,25 +19,26 @@ type ExchangeConfig = {
   configured: boolean
   supportsPassphrase: boolean
   supportsHostname: boolean
+  supportsAddress: boolean
   sandbox?: boolean | null
   hostname?: string | null
+  address?: string | null
   apiKey: SecretField
   apiSecret: SecretField
   passphrase: SecretField
 }
-
-type WalletAddress = { address: string; chain: string }
-type RpcUrl = { chain: string; url: string }
 
 type ExchangeDraft = {
   name: string
   label: string
   supportsPassphrase: boolean
   supportsHostname: boolean
+  supportsAddress: boolean
   apiKey: string
   apiSecret: string
   passphrase: string
   hostname: string
+  address: string
   sandbox: boolean
   /** True when freshly added and not yet persisted */
   isNew?: boolean
@@ -54,11 +56,6 @@ export default function ConnectionsSettings() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [adding, setAdding] = useState(false)
   const [pickName, setPickName] = useState('')
-
-  const [defaultRpc, setDefaultRpc] = useState('')
-  const [rpcUrls, setRpcUrls] = useState<RpcUrl[]>([])
-  const [addresses, setAddresses] = useState<WalletAddress[]>([])
-  const [walletsOpen, setWalletsOpen] = useState(false)
   const [status, setStatus] = useState<StatusMsg>(null)
   const [metaExists, setMetaExists] = useState(false)
 
@@ -75,28 +72,16 @@ export default function ConnectionsSettings() {
         label: ex.label || ex.name,
         supportsPassphrase: ex.supportsPassphrase,
         supportsHostname: ex.supportsHostname,
+        supportsAddress: ex.supportsAddress,
         apiKey: '',
         apiSecret: '',
         passphrase: '',
         hostname: ex.hostname || '',
+        address: ex.address || '',
         sandbox: Boolean(ex.sandbox),
         isNew: false,
       })),
     )
-    setDefaultRpc(cfg.hotWallets?.defaultRpc || '')
-    setRpcUrls(
-      (cfg.hotWallets?.rpcUrls || []).map((r: RpcUrl) => ({
-        chain: r.chain,
-        url: r.url,
-      })),
-    )
-    setAddresses(
-      (cfg.hotWallets?.addresses || []).map((a: WalletAddress) => ({
-        address: a.address,
-        chain: a.chain,
-      })),
-    )
-    // Collapse all after reload except brand-new drafts handled locally
     setExpanded({})
     setAdding(false)
     setPickName('')
@@ -106,10 +91,6 @@ export default function ConnectionsSettings() {
     const active = new Set(exchanges.map((ex) => ex.name))
     return available.filter((item) => !active.has(item.name))
   }, [available, exchanges])
-
-  const walletsActive = Boolean(
-    defaultRpc.trim() || rpcUrls.length > 0 || addresses.some((a) => a.address.trim()),
-  )
 
   const updateExchange = (name: string, patch: Partial<ExchangeDraft>) => {
     setExchanges((prev) => prev.map((ex) => (ex.name === name ? { ...ex, ...patch } : ex)))
@@ -134,10 +115,12 @@ export default function ConnectionsSettings() {
       label: catalog.label,
       supportsPassphrase: catalog.supportsPassphrase,
       supportsHostname: catalog.supportsHostname,
+      supportsAddress: catalog.supportsAddress,
       apiKey: '',
       apiSecret: '',
       passphrase: '',
       hostname: '',
+      address: '',
       sandbox: false,
       isNew: true,
     }
@@ -161,11 +144,19 @@ export default function ConnectionsSettings() {
     event.preventDefault()
     setStatus(null)
 
-    // Validate new connectors have required secrets before save
     for (const ex of exchanges) {
+      if (ex.supportsAddress && !ex.address.trim()) {
+        setStatus({
+          kind: 'err',
+          text: `${ex.label}: wallet address is required.`,
+        })
+        setExpanded((prev) => ({ ...prev, [ex.name]: true }))
+        return
+      }
+
       if (!ex.isNew) continue
       const catalog = available.find((item) => item.name === ex.name)
-      const required = catalog?.requiredSecrets || ['api_key', 'api_secret']
+      const required = catalog?.requiredSecrets || []
       const values: Record<string, string> = {
         api_key: ex.apiKey,
         api_secret: ex.apiSecret,
@@ -188,22 +179,13 @@ export default function ConnectionsSettings() {
           replaceExchanges: true,
           exchanges: exchanges.map((ex) => ({
             name: ex.name,
-            apiKey: ex.apiKey.trim() || null,
-            apiSecret: ex.apiSecret.trim() || null,
-            passphrase: ex.passphrase.trim() || null,
-            hostname: ex.supportsHostname ? ex.hostname.trim() : null,
-            sandbox: ex.sandbox,
+            apiKey: ex.supportsAddress ? null : ex.apiKey.trim() || null,
+            apiSecret: ex.supportsAddress ? null : ex.apiSecret.trim() || null,
+            passphrase: ex.supportsAddress ? null : ex.passphrase.trim() || null,
+            hostname: ex.supportsHostname ? ex.hostname.trim() || null : null,
+            address: ex.supportsAddress ? ex.address.trim() || null : null,
+            sandbox: ex.supportsAddress ? null : ex.sandbox,
           })),
-          hotWallets: {
-            defaultRpc: defaultRpc.trim() || null,
-            rpcUrls: rpcUrls.filter((r) => r.chain.trim() && r.url.trim()),
-            addresses: addresses
-              .filter((a) => a.address.trim())
-              .map((a) => ({
-                address: a.address.trim(),
-                chain: a.chain.trim() || 'ethereum',
-              })),
-          },
         },
       })
 
@@ -264,13 +246,14 @@ export default function ConnectionsSettings() {
 
         {exchanges.length === 0 && !adding && (
           <div className="panel text-sillage-soft font-mono text-sm">
-            No connectors declared yet. Add Binance or OKX to get started.
+            No connectors declared yet. Add an exchange or Ethereum wallet to get started.
           </div>
         )}
 
         {exchanges.map((ex) => {
           const server = serverExchanges.find((s) => s.name === ex.name)
           const isOpen = Boolean(expanded[ex.name])
+          const isWallet = ex.supportsAddress
           return (
             <div key={ex.name} className="panel !py-0 !px-0 overflow-hidden">
               <button
@@ -298,55 +281,85 @@ export default function ConnectionsSettings() {
                     </p>
                   )}
 
-                  <SecretInput
-                    label="API key"
-                    hint={server?.apiKey.hint}
-                    isSet={Boolean(server?.apiKey.isSet)}
-                    value={ex.apiKey}
-                    onChange={(value) => updateExchange(ex.name, { apiKey: value })}
-                    required={ex.isNew}
-                  />
-                  <SecretInput
-                    label="API secret"
-                    hint={server?.apiSecret.hint}
-                    isSet={Boolean(server?.apiSecret.isSet)}
-                    value={ex.apiSecret}
-                    onChange={(value) => updateExchange(ex.name, { apiSecret: value })}
-                    required={ex.isNew}
-                  />
-                  {ex.supportsPassphrase && (
-                    <SecretInput
-                      label="Passphrase"
-                      hint={server?.passphrase.hint}
-                      isSet={Boolean(server?.passphrase.isSet)}
-                      value={ex.passphrase}
-                      onChange={(value) => updateExchange(ex.name, { passphrase: value })}
-                      required={ex.isNew}
-                    />
-                  )}
-
-                  {ex.supportsHostname && (
-                    <label className="flex flex-col gap-1.5">
-                      <span className="lbl">Hostname (optional)</span>
-                      <input
-                        className="field"
-                        value={ex.hostname}
-                        onChange={(e) => updateExchange(ex.name, { hostname: e.target.value })}
-                        placeholder="openapi.okx.com"
-                        autoComplete="off"
+                  {isWallet ? (
+                    <>
+                      <p className="cap">Public address only — never paste a private key.</p>
+                      <label className="flex flex-col gap-1.5">
+                        <span className="lbl">Wallet address *</span>
+                        <input
+                          className="field"
+                          value={ex.address}
+                          onChange={(e) => updateExchange(ex.name, { address: e.target.value })}
+                          placeholder="0x…"
+                          autoComplete="off"
+                        />
+                      </label>
+                      {ex.supportsHostname && (
+                        <label className="flex flex-col gap-1.5">
+                          <span className="lbl">RPC URL (optional)</span>
+                          <input
+                            className="field"
+                            value={ex.hostname}
+                            onChange={(e) => updateExchange(ex.name, { hostname: e.target.value })}
+                            placeholder="https://eth.llamarpc.com"
+                            autoComplete="off"
+                          />
+                        </label>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <SecretInput
+                        label="API key"
+                        hint={server?.apiKey.hint}
+                        isSet={Boolean(server?.apiKey.isSet)}
+                        value={ex.apiKey}
+                        onChange={(value) => updateExchange(ex.name, { apiKey: value })}
+                        required={ex.isNew}
                       />
-                    </label>
-                  )}
+                      <SecretInput
+                        label="API secret"
+                        hint={server?.apiSecret.hint}
+                        isSet={Boolean(server?.apiSecret.isSet)}
+                        value={ex.apiSecret}
+                        onChange={(value) => updateExchange(ex.name, { apiSecret: value })}
+                        required={ex.isNew}
+                      />
+                      {ex.supportsPassphrase && (
+                        <SecretInput
+                          label="Passphrase"
+                          hint={server?.passphrase.hint}
+                          isSet={Boolean(server?.passphrase.isSet)}
+                          value={ex.passphrase}
+                          onChange={(value) => updateExchange(ex.name, { passphrase: value })}
+                          required={ex.isNew}
+                        />
+                      )}
 
-                  <label className="flex items-center gap-2.5 font-mono text-[11px] text-sillage-soft cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={ex.sandbox}
-                      onChange={(e) => updateExchange(ex.name, { sandbox: e.target.checked })}
-                      className="accent-[var(--green)]"
-                    />
-                    Sandbox / testnet
-                  </label>
+                      {ex.supportsHostname && (
+                        <label className="flex flex-col gap-1.5">
+                          <span className="lbl">Hostname (optional)</span>
+                          <input
+                            className="field"
+                            value={ex.hostname}
+                            onChange={(e) => updateExchange(ex.name, { hostname: e.target.value })}
+                            placeholder="openapi.okx.com"
+                            autoComplete="off"
+                          />
+                        </label>
+                      )}
+
+                      <label className="flex items-center gap-2.5 font-mono text-[11px] text-sillage-soft cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={ex.sandbox}
+                          onChange={(e) => updateExchange(ex.name, { sandbox: e.target.checked })}
+                          className="accent-[var(--green)]"
+                        />
+                        Sandbox / testnet
+                      </label>
+                    </>
+                  )}
 
                   <div className="flex justify-end pt-1">
                     <button
@@ -402,166 +415,6 @@ export default function ConnectionsSettings() {
         {addable.length === 0 && exchanges.length > 0 && (
           <div className="font-mono text-[11px] text-sillage-soft">
             All project connectors are already declared.
-          </div>
-        )}
-      </div>
-
-      <div className="panel !py-0 !px-0 overflow-hidden">
-        <button
-          type="button"
-          className="w-full flex items-center justify-between gap-3 px-6 py-4 text-left cursor-pointer bg-transparent border-0 text-inherit"
-          onClick={() => setWalletsOpen((v) => !v)}
-          aria-expanded={walletsOpen}
-        >
-          <div className="font-serif text-[20px] leading-none">Hot wallets</div>
-          {walletsActive ? (
-            <span className="inline-flex items-center gap-2 font-mono text-[11px] tracking-wide text-sillage-green">
-              <span className="w-[7px] h-[7px] rounded-full bg-sillage-green inline-block" aria-hidden />
-              Active
-              <span className="text-sillage-soft ml-1">{walletsOpen ? '▾' : '▸'}</span>
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-2 font-mono text-[11px] tracking-wide text-sillage-soft">
-              Inactive
-              <span className="ml-1">{walletsOpen ? '▾' : '▸'}</span>
-            </span>
-          )}
-        </button>
-
-        {walletsOpen && (
-          <div className="px-6 pb-5 pt-1 flex flex-col gap-4 border-t border-sillage-line">
-            <p className="cap">Public addresses only — never paste a private key.</p>
-
-            <div className="flex justify-end">
-              <button
-                type="button"
-                className="btn-ghost"
-                onClick={() =>
-                  setAddresses((prev) => [...prev, { address: '', chain: 'ethereum' }])
-                }
-              >
-                + Address
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <label className="flex flex-col gap-1.5">
-                <span className="lbl">Default RPC</span>
-                <input
-                  className="field"
-                  value={defaultRpc}
-                  onChange={(e) => setDefaultRpc(e.target.value)}
-                  placeholder="https://eth.llamarpc.com"
-                  autoComplete="off"
-                />
-              </label>
-              <div className="flex flex-col gap-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="lbl">Chain RPC overrides</span>
-                  <button
-                    type="button"
-                    className="btn-ghost text-[10px]"
-                    onClick={() => setRpcUrls((prev) => [...prev, { chain: '', url: '' }])}
-                  >
-                    + RPC
-                  </button>
-                </div>
-                <div className="flex flex-col gap-2">
-                  {rpcUrls.length === 0 && (
-                    <div className="font-mono text-[11px] text-sillage-soft">
-                      None — using default RPC.
-                    </div>
-                  )}
-                  {rpcUrls.map((row, idx) => (
-                    <div key={idx} className="flex gap-2">
-                      <input
-                        className="field w-[120px]"
-                        value={row.chain}
-                        placeholder="ethereum"
-                        onChange={(e) =>
-                          setRpcUrls((prev) =>
-                            prev.map((r, i) => (i === idx ? { ...r, chain: e.target.value } : r)),
-                          )
-                        }
-                      />
-                      <input
-                        className="field flex-1"
-                        value={row.url}
-                        placeholder="https://…"
-                        onChange={(e) =>
-                          setRpcUrls((prev) =>
-                            prev.map((r, i) => (i === idx ? { ...r, url: e.target.value } : r)),
-                          )
-                        }
-                      />
-                      <button
-                        type="button"
-                        className="iconbtn"
-                        aria-label="Remove RPC"
-                        onClick={() => setRpcUrls((prev) => prev.filter((_, i) => i !== idx))}
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="rule" />
-
-            <div className="flex flex-col gap-3">
-              {addresses.length === 0 && (
-                <div className="font-mono text-[11px] text-sillage-soft">
-                  No wallets yet. Add a public address to track balances.
-                </div>
-              )}
-              {addresses.map((wallet, wIdx) => (
-                <div
-                  key={wIdx}
-                  className="border border-sillage-line rounded-[10px] px-4 py-3.5 flex flex-col gap-3"
-                >
-                  <div className="flex flex-wrap gap-2 items-end">
-                    <label className="flex flex-col gap-1.5 flex-1 min-w-[220px]">
-                      <span className="lbl">Address</span>
-                      <input
-                        className="field"
-                        value={wallet.address}
-                        onChange={(e) =>
-                          setAddresses((prev) =>
-                            prev.map((a, i) =>
-                              i === wIdx ? { ...a, address: e.target.value } : a,
-                            ),
-                          )
-                        }
-                        placeholder="0x…"
-                        autoComplete="off"
-                      />
-                    </label>
-                    <label className="flex flex-col gap-1.5 w-[140px]">
-                      <span className="lbl">Chain</span>
-                      <input
-                        className="field"
-                        value={wallet.chain}
-                        onChange={(e) =>
-                          setAddresses((prev) =>
-                            prev.map((a, i) => (i === wIdx ? { ...a, chain: e.target.value } : a)),
-                          )
-                        }
-                        placeholder="ethereum"
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      className="btn-ghost"
-                      onClick={() => setAddresses((prev) => prev.filter((_, i) => i !== wIdx))}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
           </div>
         )}
       </div>

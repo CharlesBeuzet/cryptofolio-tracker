@@ -67,6 +67,14 @@ def _catalog_by_name() -> Dict[str, Dict[str, Any]]:
     return {entry["name"]: entry for entry in list_available_connectors()}
 
 
+def _is_configured(section: Dict[str, Any], meta: Dict[str, Any]) -> bool:
+    """Exchange connectors need secrets; address-based connectors need a real address."""
+    if meta.get("supports_address"):
+        address = section.get("address")
+        return bool(address) and not _is_placeholder(address)
+    return _has_real_secret(section)
+
+
 def get_public_config() -> Dict[str, Any]:
     """Return a UI-safe view of config.yaml (secrets masked)."""
     raw = loader.load_config()
@@ -81,36 +89,21 @@ def get_public_config() -> Dict[str, Any]:
             continue
         section = dict(section)
         meta = catalog_map.get(name, {})
+        address = section.get("address")
         exchanges.append(
             {
                 "name": name,
                 "label": meta.get("label") or name.title(),
-                "configured": _has_real_secret(section),
+                "configured": _is_configured(section, meta),
                 "api_key": _secret_field(section, "api_key"),
                 "api_secret": _secret_field(section, "api_secret"),
                 "passphrase": _secret_field(section, "passphrase"),
                 "supports_passphrase": bool(meta.get("supports_passphrase")),
                 "supports_hostname": bool(meta.get("supports_hostname")),
+                "supports_address": bool(meta.get("supports_address")),
                 "sandbox": bool(section["sandbox"]) if "sandbox" in section else None,
                 "hostname": section.get("hostname"),
-            }
-        )
-
-    hw = dict(raw.get("hot_wallets") or {})
-    rpc_urls_raw = hw.get("rpc_urls") or {}
-    rpc_urls = [
-        {"chain": str(chain), "url": str(url)}
-        for chain, url in rpc_urls_raw.items()
-        if chain and url
-    ]
-    addresses: List[Dict[str, Any]] = []
-    for entry in hw.get("addresses") or []:
-        if not isinstance(entry, dict):
-            continue
-        addresses.append(
-            {
-                "address": str(entry.get("address") or ""),
-                "chain": str(entry.get("chain") or "ethereum"),
+                "address": None if _is_placeholder(address) else (str(address).strip() if address else None),
             }
         )
 
@@ -119,11 +112,6 @@ def get_public_config() -> Dict[str, Any]:
         "relative_path": "settings/config.yaml",
         "available_connectors": catalog,
         "exchanges": exchanges,
-        "hot_wallets": {
-            "default_rpc": hw.get("default_rpc"),
-            "rpc_urls": rpc_urls,
-            "addresses": addresses,
-        },
     }
 
 
@@ -144,6 +132,7 @@ def _apply_secret(
 def _merge_exchange(
     current: Dict[str, Any],
     update: Dict[str, Any],
+    meta: Dict[str, Any],
 ) -> Dict[str, Any]:
     merged = deepcopy(current) if current else {}
 
@@ -163,44 +152,20 @@ def _merge_exchange(
         else:
             merged["hostname"] = str(hostname).strip()
 
+    if meta.get("supports_address") and "address" in update:
+        address = update.get("address")
+        if address is None:
+            pass
+        elif str(address).strip() == "" or _is_placeholder(address):
+            merged.pop("address", None)
+        else:
+            merged["address"] = str(address).strip()
+
     return merged
-
-
-def _build_hot_wallets(update: Dict[str, Any]) -> Dict[str, Any]:
-    result: Dict[str, Any] = {}
-    default_rpc = update.get("default_rpc")
-    if default_rpc is not None and str(default_rpc).strip():
-        result["default_rpc"] = str(default_rpc).strip()
-
-    rpc_urls: Dict[str, str] = {}
-    for item in update.get("rpc_urls") or []:
-        chain = str(item.get("chain") or "").strip()
-        url = str(item.get("url") or "").strip()
-        if chain and url:
-            rpc_urls[chain] = url
-    if rpc_urls:
-        result["rpc_urls"] = rpc_urls
-
-    addresses: List[Dict[str, Any]] = []
-    for item in update.get("addresses") or []:
-        address = str(item.get("address") or "").strip()
-        if not address or _is_placeholder(address):
-            continue
-        addresses.append(
-            {
-                "address": address,
-                "chain": str(item.get("chain") or "ethereum").strip() or "ethereum",
-            }
-        )
-    if addresses:
-        result["addresses"] = addresses
-
-    return result
 
 
 def update_config(
     exchanges: Optional[List[Dict[str, Any]]] = None,
-    hot_wallets: Optional[Dict[str, Any]] = None,
     replace_exchanges: bool = False,
 ) -> Dict[str, Any]:
     """
@@ -209,10 +174,14 @@ def update_config(
     Secret fields: None/omitted keeps the existing value; "" clears it.
     When replace_exchanges is True, developed connector sections not present in
     `exchanges` are removed (so the UI list is the source of truth).
-    Hot wallets: when provided, the whole section is replaced by the payload.
+    Legacy `hot_wallets` sections are removed on any write.
     """
     current = deepcopy(loader.load_config())
     known = set(available_connector_names())
+    catalog = _catalog_by_name()
+
+    # Drop legacy nested hot_wallets block (replaced by ethereum connector sections).
+    current.pop("hot_wallets", None)
 
     if exchanges is not None:
         if replace_exchanges:
@@ -231,19 +200,21 @@ def update_config(
                     f"Unsupported connector: {name}. "
                     f"Available: {', '.join(sorted(known))}"
                 )
+            meta = catalog.get(name, {})
             existing = dict(current.get(name) or {})
-            merged = _merge_exchange(existing, exchange_update)
+            merged = _merge_exchange(existing, exchange_update, meta)
+
+            if meta.get("supports_address"):
+                address = merged.get("address")
+                if not address or _is_placeholder(address):
+                    raise ValueError(
+                        f"{meta.get('label') or name}: wallet address is required."
+                    )
+
             if merged:
                 current[name] = merged
             elif name in current:
                 del current[name]
-
-    if hot_wallets is not None:
-        built = _build_hot_wallets(hot_wallets)
-        if built:
-            current["hot_wallets"] = built
-        else:
-            current.pop("hot_wallets", None)
 
     loader.save_config(current)
     trigger_config_reload()

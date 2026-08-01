@@ -59,7 +59,7 @@ class ConfigSettingsTests(unittest.TestCase):
         self.assertFalse(by_name["okx"]["configured"])
 
         available_names = {item["name"] for item in public["available_connectors"]}
-        self.assertEqual(available_names, {"binance", "okx"})
+        self.assertEqual(available_names, {"binance", "okx", "ethereum"})
 
     def test_update_keeps_secret_when_omitted(self) -> None:
         self._write(
@@ -111,24 +111,35 @@ class ConfigSettingsTests(unittest.TestCase):
         self.assertEqual(saved["okx"]["api_key"], "new-okx-key")
         self.assertEqual(saved["okx"]["passphrase"], "new-okx-pass")
 
-    def test_update_replaces_hot_wallets(self) -> None:
+    def test_ethereum_requires_address(self) -> None:
+        self._write({})
+        with self.assertRaises(ValueError):
+            config_settings.update_config(
+                exchanges=[{"name": "ethereum", "hostname": "https://eth.llamarpc.com"}],
+                replace_exchanges=True,
+            )
+
+    def test_add_ethereum_connector(self) -> None:
         self._write({"hot_wallets": {"default_rpc": "https://old.example"}})
         config_settings.update_config(
-            hot_wallets={
-                "default_rpc": "https://eth.llamarpc.com",
-                "rpc_urls": [{"chain": "ethereum", "url": "https://eth.llamarpc.com"}],
-                "addresses": [
-                    {
-                        "address": "0xabc123",
-                        "chain": "ethereum",
-                    }
-                ],
-            }
+            exchanges=[
+                {
+                    "name": "ethereum",
+                    "hostname": "https://eth.llamarpc.com",
+                    "address": "0xabc123",
+                }
+            ],
+            replace_exchanges=True,
         )
         saved = yaml.safe_load(self.config_file.read_text(encoding="utf-8"))
-        self.assertEqual(saved["hot_wallets"]["default_rpc"], "https://eth.llamarpc.com")
-        self.assertEqual(saved["hot_wallets"]["addresses"][0]["address"], "0xabc123")
-        self.assertNotIn("tokens", saved["hot_wallets"]["addresses"][0])
+        self.assertNotIn("hot_wallets", saved)
+        self.assertEqual(saved["ethereum"]["hostname"], "https://eth.llamarpc.com")
+        self.assertEqual(saved["ethereum"]["address"], "0xabc123")
+        public = config_settings.get_public_config()
+        eth = next(ex for ex in public["exchanges"] if ex["name"] == "ethereum")
+        self.assertTrue(eth["configured"])
+        self.assertTrue(eth["supports_address"])
+        self.assertEqual(eth["address"], "0xabc123")
 
 
 if __name__ == "__main__":

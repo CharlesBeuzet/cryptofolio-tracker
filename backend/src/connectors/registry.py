@@ -6,11 +6,13 @@ import yaml
 
 from .base import BaseConnector
 from .binance import BinanceConnector
+from .ethereum import EthereumConnector
 from .okx import OkxConnector
 
 _CONNECTOR_FACTORIES = {
     "binance": BinanceConnector,
     "okx": OkxConnector,
+    "ethereum": EthereumConnector,
 }
 
 # Field metadata for the Settings UI (must stay aligned with each connector __init__).
@@ -19,13 +21,22 @@ _CONNECTOR_SPECS: Dict[str, Dict[str, Any]] = {
         "label": "Binance",
         "supports_passphrase": False,
         "supports_hostname": False,
+        "supports_address": False,
         "required_secrets": ("api_key", "api_secret"),
     },
     "okx": {
         "label": "OKX",
         "supports_passphrase": True,
         "supports_hostname": True,
+        "supports_address": False,
         "required_secrets": ("api_key", "api_secret", "passphrase"),
+    },
+    "ethereum": {
+        "label": "Ethereum",
+        "supports_passphrase": False,
+        "supports_hostname": True,
+        "supports_address": True,
+        "required_secrets": (),
     },
 }
 
@@ -46,7 +57,8 @@ def list_available_connectors() -> List[Dict[str, Any]]:
                 "label": spec.get("label") or name.title(),
                 "supports_passphrase": bool(spec.get("supports_passphrase")),
                 "supports_hostname": bool(spec.get("supports_hostname")),
-                "required_secrets": list(spec.get("required_secrets") or ("api_key", "api_secret")),
+                "supports_address": bool(spec.get("supports_address")),
+                "required_secrets": list(spec.get("required_secrets") or ()),
             }
         )
     return catalog
