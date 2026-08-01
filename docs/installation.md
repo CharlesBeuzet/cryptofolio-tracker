@@ -32,7 +32,7 @@ docker compose up -d --build
 
 ### 3. Open the UI
 
-Open `http://<pi-ip>:8080`
+Open `http://<pi-ip>:8080`. After the first sync you can edit connectors under **Settings → Connections** instead of hand-editing `data/config.yaml`.
 
 ### 4. Update later without losing data
 
@@ -86,6 +86,8 @@ cd ../settings
 cp config.example.yaml config.yaml
 # Edit config.yaml with your actual credentials
 ```
+
+After the UI is up, you can also manage connectors under **Settings → Connections** (see [Settings](settings.md)).
 
 5. Start the backend (creates the SQLite database on first run):
 

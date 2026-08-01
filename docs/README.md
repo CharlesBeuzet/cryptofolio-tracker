@@ -8,8 +8,10 @@ Guides for installing, configuring, and understanding Crypto Portfolio Tracker.
 | [How it works](how-it-works.md) | Architecture, tech stack, data flow, project structure |
 | [Installation](installation.md) | Docker on Raspberry Pi and local development setup |
 | [Configuration](configuration.md) | Exchange / wallet config and security notes |
+| [Settings](settings.md) | Connections editor, masked secrets, and config API |
 | [Usage](usage.md) | Running the app and querying the GraphQL API |
 | [Troubleshooting](troubleshooting.md) | Common issues and Raspberry Pi performance tips |
 | [Position metrics](position-metrics.md) | Average-cost analytics and `position_metrics` model |
+| [Position tags](position-tags.md) | Conviction tags per asset × exchange position |
 
 ← Back to the [project README](../README.md)

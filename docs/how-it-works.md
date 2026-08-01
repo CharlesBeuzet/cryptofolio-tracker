@@ -6,9 +6,9 @@
 Exchanges / wallets          Local machine
 ┌─────────────────┐          ┌──────────────────────────────────┐
 │ Binance / OKX / │  ccxt    │  Connectors (scheduled hourly)   │
-│ Coinbase        │ ───────► │         ↓                        │
-│ Ethereum RPC    │  web3    │  SQLite (portfolio.db)           │
-└─────────────────┘          │         ↓                        │
+│ Ethereum RPC    │  web3    │         ↓                        │
+└─────────────────┘          │  SQLite (portfolio.db)           │
+                             │         ↓                        │
                              │  FastAPI + GraphQL  →  React UI  │
                              └──────────────────────────────────┘
 ```
@@ -16,9 +16,9 @@ Exchanges / wallets          Local machine
 1. **Connectors** fetch balances, orders, and wallet holdings on a schedule.
 2. Data is persisted in a local **SQLite** database (`portfolio.db` at the repo root).
 3. **GraphQL** resolvers expose portfolio, positions, orders, and related data.
-4. The **React** frontend queries GraphQL and renders overview, positions, and performance views.
+4. The **React** frontend queries GraphQL and renders overview, positions, performance, and Settings.
 
-There are no GraphQL mutations for portfolio data: values arrive via the scheduler and connectors.
+Portfolio balances and orders arrive via the scheduler and connectors. GraphQL **mutations** exist for user intent only: saving connector config and managing conviction tags.
 
 ## Technology stack
 
@@ -45,10 +45,11 @@ There are no GraphQL mutations for portfolio data: values arrive via the schedul
 cryptofolio-tracker/
 ├── backend/
 │   ├── src/
-│   │   ├── connectors/     # Exchange and wallet connectors
+│   │   ├── connectors/     # Exchange and wallet connectors + registry
 │   │   ├── graphql/        # Schema and resolvers
 │   │   ├── models/         # SQLAlchemy / SQLite models
-│   │   ├── services/       # Sync, valuation, position analytics
+│   │   ├── services/       # Sync, valuation, config_settings, tags, analytics
+│   │   ├── runtime.py      # Config-reload hook for the running process
 │   │   └── main.py         # FastAPI entry point
 │   └── requirements.txt
 ├── frontend/
@@ -68,10 +69,11 @@ cryptofolio-tracker/
 
 ## Data flow (summary)
 
-1. On startup (and every hour), the scheduler runs connectors.
-2. Balances and orders update `positions`, `orders`, and related tables.
+1. On startup (and every hour), the scheduler loads **fresh** connector instances for that run, then syncs balances and orders (with a light retry on transient network errors).
+2. Rows update in `positions`, `orders`, and related tables. Balance sync preserves `tag_id` on positions.
 3. Position analytics refresh in `position_metrics` (see [Position metrics](position-metrics.md)).
-4. The UI reads the latest state through GraphQL.
+4. Saving Settings writes `config.yaml`, clears the config cache, and reloads connectors without restarting the process (see [Settings](settings.md)).
+5. The UI reads the latest state through GraphQL.
 
 Credentials stay on-premise in `settings/config.yaml` (or the Docker-mounted `data/config.yaml`).
 
