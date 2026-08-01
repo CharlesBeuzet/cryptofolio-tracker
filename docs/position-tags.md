@@ -35,3 +35,7 @@ Balance sync (`update_position_from_balance`) only updates quantity / status and
 ## Schema migration
 
 `init_db()` calls `migrate_tags_schema()`, which creates `tags` if missing, `ALTER TABLE`s `positions.tag_id` on existing SQLite databases, and drops legacy `tags.color` / `tags.sort_order` when present — without wiping data.
+
+---
+
+← [Docs hub](README.md) · [Settings](settings.md) · [Features](features.md)
