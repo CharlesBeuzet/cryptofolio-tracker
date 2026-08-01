@@ -131,7 +131,7 @@ Edit `settings/config.yaml` (create from `config.example.yaml`) to configure:
 - **Binance**: API key and secret
 - **OKX**: API key, secret, and passphrase
 - **Coinbase**: API key, secret, and passphrase
-- **Hot Wallets**: Ethereum addresses and token contracts to track
+- **Ethereum**: public wallet `address` and RPC `hostname` (both required)
 
 **Important**: Never commit `config.yaml` to version control. It contains sensitive API keys.
 
@@ -190,17 +190,21 @@ query {
       quantity
       value
       pnl
+      exchange
+      tag { id name }
     }
   }
 }
 ```
+
+Conviction tags (per asset × exchange position) are managed via mutations `createTag`, `updateTag`, `deleteTag`, and `setPositionTag`, or in the UI under **Settings**. See `docs/position-tags.md`.
 
 ## Security Notes
 
 - All API keys are stored locally in `settings/config.yaml` (gitignored)
 - The backend runs locally and is not exposed to the internet by default
 - Use read-only API keys for exchanges when possible
-- Hot wallet tracking only requires public addresses (no private keys needed)
+- Hot wallet connectors use the same config shape as exchanges; only a public `address` is required (no private keys)
 
 ## Performance Considerations for Raspberry Pi 5
 

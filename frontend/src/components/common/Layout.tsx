@@ -28,6 +28,7 @@ const NAV_ITEMS = [
   },
   { path: '/fiat-deposits', label: 'On-ramp', glyph: '$', num: '§3', match: (p: string) => p === '/fiat-deposits' },
   { path: '/performance', label: 'Theses', glyph: '§', num: '§4', match: (p: string) => p === '/performance' },
+  { path: '/settings', label: 'Settings', glyph: '⚙', num: '§5', match: (p: string) => p === '/settings' },
 ]
 
 function venueLines(venues: SyncedVenue[]): string[] {

@@ -80,6 +80,13 @@ body {
     @apply inline-block font-mono text-[9px] tracking-[0.1em] uppercase px-[7px] py-0.5 rounded border border-sillage-line text-sillage-soft leading-normal whitespace-nowrap;
   }
 
+  /* Conviction tag — green tint so it reads apart from venue chips */
+  .chip.tag {
+    border-color: color-mix(in srgb, var(--green) 45%, transparent);
+    color: var(--green);
+    background: var(--gsoft);
+  }
+
   .chip.cl {
     @apply cursor-pointer;
   }
@@ -168,6 +175,35 @@ body {
   .atab.on {
     @apply bg-sillage-card text-sillage-ink;
     border-color: var(--green);
+  }
+
+  .field {
+    @apply w-full bg-sillage-card2 border border-sillage-line rounded-[7px] px-3 py-2 font-mono text-[12px] text-sillage-ink outline-none transition-colors;
+  }
+
+  .field:focus {
+    border-color: var(--green);
+  }
+
+  .field::placeholder {
+    color: var(--soft);
+    opacity: 0.75;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center px-4 py-2 rounded-[8px] font-mono text-[11px] tracking-wide border border-sillage-green bg-sillage-gsoft text-sillage-ink cursor-pointer transition-opacity;
+  }
+
+  .btn-primary:disabled {
+    @apply opacity-50 cursor-not-allowed;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center px-2.5 py-1.5 rounded-[7px] font-mono text-[11px] tracking-wide border border-sillage-line text-sillage-soft cursor-pointer bg-transparent transition-colors;
+  }
+
+  .btn-ghost:hover {
+    @apply text-sillage-ink;
   }
 
   .page-head {

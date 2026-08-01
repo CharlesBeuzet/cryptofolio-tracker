@@ -28,6 +28,11 @@ export const GET_PORTFOLIO = gql`
         firstBoughtAt
         exchange
         durationDays
+        tag {
+          id
+          name
+          description
+        }
       }
     }
   }
@@ -47,6 +52,11 @@ export const GET_POSITIONS = gql`
       firstBoughtAt
       exchange
       durationDays
+      tag {
+        id
+        name
+        description
+      }
       orders {
         id
         symbol
@@ -74,6 +84,11 @@ export const GET_POSITION = gql`
       firstBoughtAt
       exchange
       durationDays
+      tag {
+        id
+        name
+        description
+      }
       metrics {
         avgExitPrice
       }
@@ -90,6 +105,15 @@ export const GET_POSITION = gql`
   }
 `
 
+export const GET_TAGS = gql`
+  query GetTags {
+    tags {
+      id
+      name
+      description
+    }
+  }
+`
 export const GET_ASSET = gql`
   query GetAsset($symbol: String!) {
     asset(symbol: $symbol) {
@@ -200,6 +224,96 @@ export const GET_FIAT_DEPOSITS = gql`
       source
       depositedAt
       createdAt
+    }
+  }
+`
+
+export const GET_APP_CONFIG = gql`
+  query GetAppConfig {
+    appConfig {
+      exists
+      relativePath
+      availableConnectors {
+        name
+        label
+        supportsPassphrase
+        supportsHostname
+        supportsAddress
+        requiredSecrets
+      }
+      exchanges {
+        name
+        label
+        configured
+        supportsPassphrase
+        supportsHostname
+        supportsAddress
+        sandbox
+        hostname
+        address
+        apiKey {
+          isSet
+          hint
+        }
+        apiSecret {
+          isSet
+          hint
+        }
+        passphrase {
+          isSet
+          hint
+        }
+      }
+    }
+  }
+`
+
+export const UPDATE_APP_CONFIG = gql`
+  mutation UpdateAppConfig(
+    $exchanges: [ExchangeConnectorInput!]
+    $replaceExchanges: Boolean
+  ) {
+    updateAppConfig(
+      exchanges: $exchanges
+      replaceExchanges: $replaceExchanges
+    ) {
+      success
+      message
+      config {
+        exists
+        relativePath
+        availableConnectors {
+          name
+          label
+          supportsPassphrase
+          supportsHostname
+          supportsAddress
+          requiredSecrets
+        }
+        exchanges {
+          name
+          label
+          configured
+          supportsPassphrase
+          supportsHostname
+          supportsAddress
+          sandbox
+          hostname
+          address
+          apiKey {
+            isSet
+            hint
+          }
+          apiSecret {
+            isSet
+            hint
+          }
+          passphrase {
+            isSet
+            hint
+          }
+        }
+      }
     }
   }
 `
