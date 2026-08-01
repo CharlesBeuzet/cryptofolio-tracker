@@ -11,6 +11,7 @@ from ..services.portfolio import PortfolioService
 from ..services.fiat_deposits import FiatDepositService
 from ..services.price_history import PriceHistoryService
 from ..services.metrics_helpers import cost_basis, cash_in_trade
+from ..services import config_settings as config_settings_service
 from ..services.tags import TagService
 
 
@@ -273,6 +274,117 @@ class FiatDepositRecordType:
 
 
 @strawberry.type
+class SecretFieldType:
+    """Masked secret field for Settings (never returns the raw value)."""
+
+    is_set: bool
+    hint: Optional[str]
+
+
+@strawberry.type
+class ExchangeConnector:
+    """One active connector block from settings/config.yaml (exchange or hot wallet)."""
+
+    name: str
+    label: str
+    configured: bool
+    api_key: SecretFieldType
+    api_secret: SecretFieldType
+    passphrase: SecretFieldType
+    supports_passphrase: bool
+    supports_hostname: bool
+    supports_address: bool
+    sandbox: Optional[bool]
+    hostname: Optional[str]
+    address: Optional[str]
+
+
+@strawberry.type
+class AvailableConnectorType:
+    """A connector implemented in this project that can be added in Settings."""
+
+    name: str
+    label: str
+    supports_passphrase: bool
+    supports_hostname: bool
+    supports_address: bool
+    required_secrets: List[str]
+
+
+@strawberry.type
+class AppConfigType:
+    """UI-safe view of settings/config.yaml."""
+
+    exists: bool
+    relative_path: str
+    available_connectors: List[AvailableConnectorType]
+    exchanges: List[ExchangeConnector]
+
+
+@strawberry.input
+class ExchangeConnectorInput:
+    """Partial update for one connector. Omit secrets (null) to keep current values."""
+
+    name: str
+    api_key: Optional[str] = None
+    api_secret: Optional[str] = None
+    passphrase: Optional[str] = None
+    sandbox: Optional[bool] = None
+    hostname: Optional[str] = None
+    address: Optional[str] = None
+
+
+@strawberry.type
+class UpdateConfigResultType:
+    """Result of saving config.yaml."""
+
+    success: bool
+    message: str
+    config: AppConfigType
+
+
+def _secret_to_type(data: dict) -> SecretFieldType:
+    return SecretFieldType(is_set=bool(data.get("is_set")), hint=data.get("hint"))
+
+
+def _config_to_type(data: dict) -> AppConfigType:
+    exchanges = [
+        ExchangeConnector(
+            name=ex["name"],
+            label=ex.get("label") or ex["name"].title(),
+            configured=ex["configured"],
+            api_key=_secret_to_type(ex["api_key"]),
+            api_secret=_secret_to_type(ex["api_secret"]),
+            passphrase=_secret_to_type(ex["passphrase"]),
+            supports_passphrase=ex["supports_passphrase"],
+            supports_hostname=bool(ex.get("supports_hostname")),
+            supports_address=bool(ex.get("supports_address")),
+            sandbox=ex.get("sandbox"),
+            hostname=ex.get("hostname"),
+            address=ex.get("address"),
+        )
+        for ex in data["exchanges"]
+    ]
+    available = [
+        AvailableConnectorType(
+            name=item["name"],
+            label=item["label"],
+            supports_passphrase=item["supports_passphrase"],
+            supports_hostname=item["supports_hostname"],
+            supports_address=bool(item.get("supports_address")),
+            required_secrets=list(item.get("required_secrets") or []),
+        )
+        for item in data.get("available_connectors") or []
+    ]
+    return AppConfigType(
+        exists=data["exists"],
+        relative_path=data["relative_path"],
+        available_connectors=available,
+        exchanges=exchanges,
+    )
+
+
+@strawberry.type
 class VenueType:
     """Configured data provider / venue from settings/config.yaml."""
 
@@ -507,6 +619,11 @@ class Query:
         )
 
     @strawberry.field
+    def app_config(self) -> AppConfigType:
+        """Return a masked view of settings/config.yaml for the Settings page."""
+        return _config_to_type(config_settings_service.get_public_config())
+    
+    @strawberry.field
     def tags(self) -> List[TagType]:
         """List all conviction tags."""
         db = SessionLocal()
@@ -518,6 +635,52 @@ class Query:
 
 @strawberry.type
 class Mutation:
+    """GraphQL mutation root."""
+
+    @strawberry.mutation
+    def update_app_config(
+        self,
+        exchanges: Optional[List[ExchangeConnectorInput]] = None,
+        replace_exchanges: bool = False,
+    ) -> UpdateConfigResultType:
+        """Persist Settings changes to settings/config.yaml (secrets never echoed back)."""
+        try:
+            exchange_payload = None
+            if exchanges is not None:
+                exchange_payload = [
+                    {
+                        "name": ex.name,
+                        "api_key": ex.api_key,
+                        "api_secret": ex.api_secret,
+                        "passphrase": ex.passphrase,
+                        "sandbox": ex.sandbox,
+                        "hostname": ex.hostname,
+                        "address": ex.address,
+                    }
+                    for ex in exchanges
+                ]
+
+            updated = config_settings_service.update_config(
+                exchanges=exchange_payload,
+                replace_exchanges=replace_exchanges,
+            )
+            return UpdateConfigResultType(
+                success=True,
+                message="Configuration saved. Connectors reloaded.",
+                config=_config_to_type(updated),
+            )
+        except ValueError as exc:
+            return UpdateConfigResultType(
+                success=False,
+                message=str(exc),
+                config=_config_to_type(config_settings_service.get_public_config()),
+            )
+        except Exception as exc:
+            return UpdateConfigResultType(
+                success=False,
+                message=f"Failed to save configuration: {exc}",
+                config=_config_to_type(config_settings_service.get_public_config()),
+            )
     """GraphQL mutation root (tag management)."""
 
     @strawberry.mutation

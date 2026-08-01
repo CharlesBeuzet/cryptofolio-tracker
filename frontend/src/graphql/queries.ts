@@ -227,3 +227,94 @@ export const GET_FIAT_DEPOSITS = gql`
     }
   }
 `
+
+export const GET_APP_CONFIG = gql`
+  query GetAppConfig {
+    appConfig {
+      exists
+      relativePath
+      availableConnectors {
+        name
+        label
+        supportsPassphrase
+        supportsHostname
+        supportsAddress
+        requiredSecrets
+      }
+      exchanges {
+        name
+        label
+        configured
+        supportsPassphrase
+        supportsHostname
+        supportsAddress
+        sandbox
+        hostname
+        address
+        apiKey {
+          isSet
+          hint
+        }
+        apiSecret {
+          isSet
+          hint
+        }
+        passphrase {
+          isSet
+          hint
+        }
+      }
+    }
+  }
+`
+
+export const UPDATE_APP_CONFIG = gql`
+  mutation UpdateAppConfig(
+    $exchanges: [ExchangeConnectorInput!]
+    $replaceExchanges: Boolean
+  ) {
+    updateAppConfig(
+      exchanges: $exchanges
+      replaceExchanges: $replaceExchanges
+    ) {
+      success
+      message
+      config {
+        exists
+        relativePath
+        availableConnectors {
+          name
+          label
+          supportsPassphrase
+          supportsHostname
+          supportsAddress
+          requiredSecrets
+        }
+        exchanges {
+          name
+          label
+          configured
+          supportsPassphrase
+          supportsHostname
+          supportsAddress
+          sandbox
+          hostname
+          address
+          apiKey {
+            isSet
+            hint
+          }
+          apiSecret {
+            isSet
+            hint
+          }
+          passphrase {
+            isSet
+            hint
+          }
+        }
+      }
+    }
+  }
+`
+

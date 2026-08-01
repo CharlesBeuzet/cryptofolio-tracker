@@ -19,6 +19,12 @@ def config_path() -> Path:
     return project_root() / "settings" / "config.yaml"
 
 
+def clear_config_cache() -> None:
+    """Drop the in-memory config cache (call after writing config.yaml)."""
+    global _CONFIG_CACHE
+    _CONFIG_CACHE = None
+
+
 def load_config() -> Dict[str, Any]:
     """Load settings/config.yaml once and cache the result."""
     global _CONFIG_CACHE
@@ -41,6 +47,22 @@ def get_section(name: str) -> Dict[str, Any]:
     return dict(load_config().get(name) or {})
 
 
+def save_config(data: Dict[str, Any]) -> None:
+    """Atomically write config.yaml and invalidate the cache."""
+    path = config_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(".yaml.tmp")
+    with open(tmp_path, "w", encoding="utf-8") as handle:
+        yaml.safe_dump(
+            data,
+            handle,
+            default_flow_style=False,
+            sort_keys=False,
+            allow_unicode=True,
+        )
+    tmp_path.replace(path)
+    clear_config_cache()
+    
 def venue_display_name(key: str) -> str:
     """
     Human-readable label for a config provider key.
