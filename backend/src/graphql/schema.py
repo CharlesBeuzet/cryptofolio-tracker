@@ -382,6 +382,9 @@ def _config_to_type(data: dict) -> AppConfigType:
         available_connectors=available,
         exchanges=exchanges,
     )
+
+
+@strawberry.type
 class VenueType:
     """Configured data provider / venue from settings/config.yaml."""
 

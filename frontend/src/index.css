@@ -204,6 +204,8 @@ body {
 
   .btn-ghost:hover {
     @apply text-sillage-ink;
+  }
+
   .page-head {
     @apply flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-end mb-[18px];
   }
