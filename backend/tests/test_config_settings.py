@@ -119,6 +119,15 @@ class ConfigSettingsTests(unittest.TestCase):
                 replace_exchanges=True,
             )
 
+    def test_ethereum_requires_hostname(self) -> None:
+        self._write({})
+        with self.assertRaises(ValueError) as ctx:
+            config_settings.update_config(
+                exchanges=[{"name": "ethereum", "address": "0xabc123"}],
+                replace_exchanges=True,
+            )
+        self.assertIn("RPC URL is required", str(ctx.exception))
+
     def test_add_ethereum_connector(self) -> None:
         self._write({"hot_wallets": {"default_rpc": "https://old.example"}})
         config_settings.update_config(

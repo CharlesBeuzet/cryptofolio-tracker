@@ -68,10 +68,16 @@ def _catalog_by_name() -> Dict[str, Dict[str, Any]]:
 
 
 def _is_configured(section: Dict[str, Any], meta: Dict[str, Any]) -> bool:
-    """Exchange connectors need secrets; address-based connectors need a real address."""
+    """Exchange connectors need secrets; wallets need address + RPC hostname."""
     if meta.get("supports_address"):
         address = section.get("address")
-        return bool(address) and not _is_placeholder(address)
+        if not address or _is_placeholder(address):
+            return False
+        if meta.get("supports_hostname"):
+            hostname = section.get("hostname")
+            if not hostname or _is_placeholder(hostname):
+                return False
+        return True
     return _has_real_secret(section)
 
 
@@ -210,6 +216,12 @@ def update_config(
                     raise ValueError(
                         f"{meta.get('label') or name}: wallet address is required."
                     )
+                if meta.get("supports_hostname"):
+                    hostname = merged.get("hostname")
+                    if not hostname or _is_placeholder(hostname):
+                        raise ValueError(
+                            f"{meta.get('label') or name}: RPC URL is required."
+                        )
 
             if merged:
                 current[name] = merged

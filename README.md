@@ -131,7 +131,7 @@ Edit `settings/config.yaml` (create from `config.example.yaml`) to configure:
 - **Binance**: API key and secret
 - **OKX**: API key, secret, and passphrase
 - **Coinbase**: API key, secret, and passphrase
-- **Ethereum**: public wallet `address` (required) and optional RPC `hostname`
+- **Ethereum**: public wallet `address` and RPC `hostname` (both required)
 
 **Important**: Never commit `config.yaml` to version control. It contains sensitive API keys.
 

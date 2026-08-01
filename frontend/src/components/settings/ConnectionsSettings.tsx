@@ -153,6 +153,14 @@ export default function ConnectionsSettings() {
         setExpanded((prev) => ({ ...prev, [ex.name]: true }))
         return
       }
+      if (ex.supportsAddress && ex.supportsHostname && !ex.hostname.trim()) {
+        setStatus({
+          kind: 'err',
+          text: `${ex.label}: RPC URL is required.`,
+        })
+        setExpanded((prev) => ({ ...prev, [ex.name]: true }))
+        return
+      }
 
       if (!ex.isNew) continue
       const catalog = available.find((item) => item.name === ex.name)
@@ -296,7 +304,7 @@ export default function ConnectionsSettings() {
                       </label>
                       {ex.supportsHostname && (
                         <label className="flex flex-col gap-1.5">
-                          <span className="lbl">RPC URL (optional)</span>
+                          <span className="lbl">RPC URL *</span>
                           <input
                             className="field"
                             value={ex.hostname}

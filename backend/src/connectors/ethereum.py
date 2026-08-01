@@ -25,5 +25,5 @@ class EthereumConnector(BaseConnector):
         return {}
 
     async def test_connection(self) -> bool:
-        """Require a public wallet address (RPC hostname is optional for now)."""
-        return bool(self.address)
+        """Require both a public wallet address and an RPC hostname."""
+        return bool(self.address and self.hostname)
