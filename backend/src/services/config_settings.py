@@ -107,22 +107,10 @@ def get_public_config() -> Dict[str, Any]:
     for entry in hw.get("addresses") or []:
         if not isinstance(entry, dict):
             continue
-        tokens = []
-        for token in entry.get("tokens") or []:
-            if not isinstance(token, dict):
-                continue
-            tokens.append(
-                {
-                    "address": str(token.get("address") or ""),
-                    "symbol": str(token.get("symbol") or ""),
-                    "decimals": int(token.get("decimals") or 18),
-                }
-            )
         addresses.append(
             {
                 "address": str(entry.get("address") or ""),
                 "chain": str(entry.get("chain") or "ethereum"),
-                "tokens": tokens,
             }
         )
 
@@ -198,25 +186,12 @@ def _build_hot_wallets(update: Dict[str, Any]) -> Dict[str, Any]:
         address = str(item.get("address") or "").strip()
         if not address or _is_placeholder(address):
             continue
-        entry: Dict[str, Any] = {
-            "address": address,
-            "chain": str(item.get("chain") or "ethereum").strip() or "ethereum",
-        }
-        tokens: List[Dict[str, Any]] = []
-        for token in item.get("tokens") or []:
-            token_addr = str(token.get("address") or "").strip()
-            if not token_addr or _is_placeholder(token_addr):
-                continue
-            tokens.append(
-                {
-                    "address": token_addr,
-                    "symbol": str(token.get("symbol") or "").strip(),
-                    "decimals": int(token.get("decimals") if token.get("decimals") is not None else 18),
-                }
-            )
-        if tokens:
-            entry["tokens"] = tokens
-        addresses.append(entry)
+        addresses.append(
+            {
+                "address": address,
+                "chain": str(item.get("chain") or "ethereum").strip() or "ethereum",
+            }
+        )
     if addresses:
         result["addresses"] = addresses
 

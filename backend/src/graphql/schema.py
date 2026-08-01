@@ -283,21 +283,11 @@ class RpcUrlType:
 
 
 @strawberry.type
-class WalletTokenType:
-    """ERC-20 (or similar) token tracked on a wallet address."""
-
-    address: str
-    symbol: str
-    decimals: int
-
-
-@strawberry.type
 class WalletAddressType:
     """Public wallet address to track."""
 
     address: str
     chain: str
-    tokens: List[WalletTokenType]
 
 
 @strawberry.type
@@ -339,17 +329,9 @@ class RpcUrlInput:
 
 
 @strawberry.input
-class WalletTokenInput:
-    address: str
-    symbol: str = ""
-    decimals: int = 18
-
-
-@strawberry.input
 class WalletAddressInput:
     address: str
     chain: str = "ethereum"
-    tokens: Optional[List[WalletTokenInput]] = None
 
 
 @strawberry.input
@@ -413,14 +395,6 @@ def _config_to_type(data: dict) -> AppConfigType:
                 WalletAddressType(
                     address=a["address"],
                     chain=a["chain"],
-                    tokens=[
-                        WalletTokenType(
-                            address=t["address"],
-                            symbol=t["symbol"],
-                            decimals=t["decimals"],
-                        )
-                        for t in a.get("tokens") or []
-                    ],
                 )
                 for a in hw.get("addresses") or []
             ],
@@ -649,14 +623,6 @@ class Mutation:
                         {
                             "address": a.address,
                             "chain": a.chain,
-                            "tokens": [
-                                {
-                                    "address": t.address,
-                                    "symbol": t.symbol,
-                                    "decimals": t.decimals,
-                                }
-                                for t in (a.tokens or [])
-                            ],
                         }
                         for a in (hot_wallets.addresses or [])
                     ],

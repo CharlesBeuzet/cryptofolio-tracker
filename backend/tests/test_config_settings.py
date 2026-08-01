@@ -121,13 +121,6 @@ class ConfigSettingsTests(unittest.TestCase):
                     {
                         "address": "0xabc123",
                         "chain": "ethereum",
-                        "tokens": [
-                            {
-                                "address": "0xtoken1",
-                                "symbol": "USDC",
-                                "decimals": 6,
-                            }
-                        ],
                     }
                 ],
             }
@@ -135,7 +128,7 @@ class ConfigSettingsTests(unittest.TestCase):
         saved = yaml.safe_load(self.config_file.read_text(encoding="utf-8"))
         self.assertEqual(saved["hot_wallets"]["default_rpc"], "https://eth.llamarpc.com")
         self.assertEqual(saved["hot_wallets"]["addresses"][0]["address"], "0xabc123")
-        self.assertEqual(saved["hot_wallets"]["addresses"][0]["tokens"][0]["symbol"], "USDC")
+        self.assertNotIn("tokens", saved["hot_wallets"]["addresses"][0])
 
 
 if __name__ == "__main__":

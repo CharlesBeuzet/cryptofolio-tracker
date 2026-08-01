@@ -25,8 +25,7 @@ type ExchangeConfig = {
   passphrase: SecretField
 }
 
-type WalletToken = { address: string; symbol: string; decimals: number }
-type WalletAddress = { address: string; chain: string; tokens: WalletToken[] }
+type WalletAddress = { address: string; chain: string }
 type RpcUrl = { chain: string; url: string }
 
 type ExchangeDraft = {
@@ -95,11 +94,6 @@ export default function ConnectionsSettings() {
       (cfg.hotWallets?.addresses || []).map((a: WalletAddress) => ({
         address: a.address,
         chain: a.chain,
-        tokens: (a.tokens || []).map((t) => ({
-          address: t.address,
-          symbol: t.symbol,
-          decimals: t.decimals,
-        })),
       })),
     )
     // Collapse all after reload except brand-new drafts handled locally
@@ -208,13 +202,6 @@ export default function ConnectionsSettings() {
               .map((a) => ({
                 address: a.address.trim(),
                 chain: a.chain.trim() || 'ethereum',
-                tokens: a.tokens
-                  .filter((t) => t.address.trim())
-                  .map((t) => ({
-                    address: t.address.trim(),
-                    symbol: t.symbol.trim(),
-                    decimals: Number.isFinite(t.decimals) ? t.decimals : 18,
-                  })),
               })),
           },
         },
@@ -450,7 +437,7 @@ export default function ConnectionsSettings() {
                 type="button"
                 className="btn-ghost"
                 onClick={() =>
-                  setAddresses((prev) => [...prev, { address: '', chain: 'ethereum', tokens: [] }])
+                  setAddresses((prev) => [...prev, { address: '', chain: 'ethereum' }])
                 }
               >
                 + Address
@@ -572,111 +559,6 @@ export default function ConnectionsSettings() {
                       Remove
                     </button>
                   </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="lbl">Tokens</span>
-                    <button
-                      type="button"
-                      className="btn-ghost text-[10px]"
-                      onClick={() =>
-                        setAddresses((prev) =>
-                          prev.map((a, i) =>
-                            i === wIdx
-                              ? {
-                                  ...a,
-                                  tokens: [...a.tokens, { address: '', symbol: '', decimals: 18 }],
-                                }
-                              : a,
-                          ),
-                        )
-                      }
-                    >
-                      + Token
-                    </button>
-                  </div>
-
-                  {wallet.tokens.map((token, tIdx) => (
-                    <div key={tIdx} className="flex flex-wrap gap-2 items-end">
-                      <input
-                        className="field flex-1 min-w-[180px]"
-                        value={token.address}
-                        placeholder="Token contract"
-                        onChange={(e) =>
-                          setAddresses((prev) =>
-                            prev.map((a, i) =>
-                              i === wIdx
-                                ? {
-                                    ...a,
-                                    tokens: a.tokens.map((t, j) =>
-                                      j === tIdx ? { ...t, address: e.target.value } : t,
-                                    ),
-                                  }
-                                : a,
-                            ),
-                          )
-                        }
-                      />
-                      <input
-                        className="field w-[90px]"
-                        value={token.symbol}
-                        placeholder="USDC"
-                        onChange={(e) =>
-                          setAddresses((prev) =>
-                            prev.map((a, i) =>
-                              i === wIdx
-                                ? {
-                                    ...a,
-                                    tokens: a.tokens.map((t, j) =>
-                                      j === tIdx ? { ...t, symbol: e.target.value } : t,
-                                    ),
-                                  }
-                                : a,
-                            ),
-                          )
-                        }
-                      />
-                      <input
-                        className="field w-[80px]"
-                        type="number"
-                        value={token.decimals}
-                        onChange={(e) =>
-                          setAddresses((prev) =>
-                            prev.map((a, i) =>
-                              i === wIdx
-                                ? {
-                                    ...a,
-                                    tokens: a.tokens.map((t, j) =>
-                                      j === tIdx
-                                        ? {
-                                            ...t,
-                                            decimals: parseInt(e.target.value || '18', 10),
-                                          }
-                                        : t,
-                                    ),
-                                  }
-                                : a,
-                            ),
-                          )
-                        }
-                      />
-                      <button
-                        type="button"
-                        className="iconbtn"
-                        aria-label="Remove token"
-                        onClick={() =>
-                          setAddresses((prev) =>
-                            prev.map((a, i) =>
-                              i === wIdx
-                                ? { ...a, tokens: a.tokens.filter((_, j) => j !== tIdx) }
-                                : a,
-                            ),
-                          )
-                        }
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
                 </div>
               ))}
             </div>

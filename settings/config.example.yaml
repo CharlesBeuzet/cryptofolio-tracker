@@ -39,22 +39,13 @@ hot_wallets:
     # polygon: "https://polygon-rpc.com"
     # bsc: "https://bsc-dataseed.binance.org"
   
-  # List of wallet addresses to track
+  # List of wallet addresses to track (tokens on each address are resolved automatically)
   addresses:
     - address: "0xYourEthereumAddressHere"
       chain: "ethereum"
-      # Optional: List of ERC-20 tokens to track on this address
-      tokens:
-        - address: "0xTokenContractAddress"
-          symbol: "USDC"
-          decimals: 6
-        - address: "0xAnotherTokenContractAddress"
-          symbol: "DAI"
-          decimals: 18
     # Add more addresses as needed
     # - address: "0xAnotherAddress"
     #   chain: "ethereum"
-    #   tokens: []
 
 # Notes:
 # - For exchanges: Only provide API keys with read-only permissions for security

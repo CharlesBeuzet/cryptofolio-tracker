@@ -206,11 +206,6 @@ export const GET_APP_CONFIG = gql`
         addresses {
           address
           chain
-          tokens {
-            address
-            symbol
-            decimals
-          }
         }
       }
     }
@@ -270,11 +265,6 @@ export const UPDATE_APP_CONFIG = gql`
           addresses {
             address
             chain
-            tokens {
-              address
-              symbol
-              decimals
-            }
           }
         }
       }
