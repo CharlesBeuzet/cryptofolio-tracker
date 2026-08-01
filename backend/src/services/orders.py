@@ -9,6 +9,8 @@ from ..models.database import Order, Position
 from .analyzer import PositionAnalyzerService
 
 SYNC_OVERLAP_HOURS = 2
+COLD_START_DAYS_ON_CHAIN = 730
+ON_CHAIN_EXCHANGES = frozenset({"helius"})
 QUOTE_CURRENCIES = ("USDT", "USDC")
 
 
@@ -43,7 +45,7 @@ class OrderService:
         return sorted({r.symbol for r in rows if r.symbol})
 
     def _sync_params_for_symbol(self, exchange: str, symbol: str) -> Tuple[int, bool]:
-        """Return (since_ms, paginate). Always limits to a recent window to avoid stale fills."""
+        """Return (since_ms, paginate). On-chain connectors backfill up to two years."""
         overlap = timedelta(hours=SYNC_OVERLAP_HOURS)
         last_at = (
             self.db.query(func.max(Order.executed_at))
@@ -51,6 +53,9 @@ class OrderService:
             .scalar()
         )
         if last_at is None:
+            if exchange in ON_CHAIN_EXCHANGES:
+                since = datetime.utcnow() - timedelta(days=COLD_START_DAYS_ON_CHAIN)
+                return int(since.timestamp() * 1000), True
             since = datetime.utcnow() - overlap
         else:
             since = last_at - overlap
@@ -108,7 +113,8 @@ class OrderService:
             return 0
 
         total_added = 0
-        for market_pair in _market_pairs(symbol):
+        pairs = [symbol] if exchange in ON_CHAIN_EXCHANGES else _market_pairs(symbol)
+        for market_pair in pairs:
             print(
                 f"Syncing orders for {market_pair} from {exchange} "
                 f"(since_ms={since_ms}, paginate={paginate}) ..."

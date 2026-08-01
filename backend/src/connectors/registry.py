@@ -6,10 +6,12 @@ import yaml
 
 from .base import BaseConnector
 from .binance import BinanceConnector
+from .helius import HeliusConnector
 from .okx import OkxConnector
 
 _CONNECTOR_FACTORIES = {
     "binance": BinanceConnector,
+    "helius": HeliusConnector,
     "okx": OkxConnector,
 }
 
