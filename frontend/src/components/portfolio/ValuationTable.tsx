@@ -26,6 +26,14 @@ function impliedPrice(row: ValuationRow): number | null {
   return null
 }
 
+/** Date-only inputs: use now when the day is today so later marks sort after earlier ones. */
+function toRecordedAtIso(date: string): string {
+  const now = new Date()
+  const todayUtc = now.toISOString().slice(0, 10)
+  if (date === todayUtc) return now.toISOString()
+  return new Date(`${date}T12:00:00.000Z`).toISOString()
+}
+
 export default function ValuationTable({
   symbol,
   valuations,
@@ -60,7 +68,7 @@ export default function ValuationTable({
       return
     }
     await onAdd({
-      recordedAt: new Date(`${date}T00:00:00.000Z`).toISOString(),
+      recordedAt: toRecordedAtIso(date),
       valueAmount,
       quantity: qty,
     })
