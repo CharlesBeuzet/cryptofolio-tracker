@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..connectors.registry import get_connector_by_name
+from ..data_quality import ConnectorFetchError
 
 RESOLVED = "resolved"
 NOT_FOUND = "not_found"
@@ -93,11 +94,22 @@ class PriceHistoryService:
             (datetime.now(tz=timezone.utc) - timedelta(days=days)).timestamp() * 1000
         )
 
-        points = connector.fetch_price_history_sync(
-            market_pair,
-            since_ms,
-            days=days,
-        )
+        try:
+            points = connector.fetch_price_history_sync(
+                market_pair,
+                since_ms,
+                days=days,
+            )
+        except ConnectorFetchError as exc:
+            result = MarketChartResult(
+                resolution_status=NOT_FOUND,
+                ambiguity_message=(
+                    f"Price history request for {market_pair} on "
+                    f"{exchange_name} failed: {exc}"
+                ),
+            )
+            _cache[cache_key] = (now, result)
+            return result
 
         if not points:
             result = MarketChartResult(

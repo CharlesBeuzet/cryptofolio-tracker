@@ -3,6 +3,7 @@ import ccxt
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
+from ..data_quality import ConnectorFetchError, is_valid_price
 from .base import BaseConnector
 
 
@@ -23,24 +24,35 @@ class BinanceConnector(BaseConnector):
         )
 
     async def fetch_balances(self) -> List[Dict]:
-        """Fetch balances from Binance."""
+        """Fetch balances from Binance.
+
+        Raises ConnectorFetchError on request failure so callers do not treat
+        an empty list as "the account has no holdings".
+        """
         try:
             balance = self.exchange.fetch_balance()
-            balances = []
-            for symbol, amount in balance["total"].items():
-                # Skip fiat buckets and deprecated BUSD listing noise but track everything else
-                if amount > 0 and symbol not in ["BUSD", "EUR"]:
-                    balances.append(
-                        {
-                            "symbol": symbol,
-                            "quantity": float(amount),
-                            "exchange": "binance",
-                        }
-                    )
-            return balances
         except Exception as e:
             print(f"Error fetching Binance balances: {e}")
-            return []
+            raise ConnectorFetchError(f"binance balances: {e}") from e
+        totals = balance.get("total") if isinstance(balance, dict) else None
+        if not isinstance(totals, dict):
+            raise ConnectorFetchError("binance balances: missing total map")
+        balances = []
+        for symbol, amount in totals.items():
+            # Skip fiat buckets and deprecated BUSD listing noise but track everything else
+            try:
+                qty = float(amount)
+            except (TypeError, ValueError):
+                continue
+            if qty > 0 and symbol not in ["BUSD", "EUR"]:
+                balances.append(
+                    {
+                        "symbol": symbol,
+                        "quantity": qty,
+                        "exchange": "binance",
+                    }
+                )
+        return balances
 
     def _normalize_executed_order(
         self, order: Dict[str, Any], market_pair: str
@@ -66,6 +78,8 @@ class BinanceConnector(BaseConnector):
         except (TypeError, ValueError):
             return None
         if quantity <= 0:
+            return None
+        if not is_valid_price(price):
             return None
         base = market_pair.split("/")[0] if "/" in market_pair else market_pair
         return {
@@ -118,7 +132,9 @@ class BinanceConnector(BaseConnector):
             return out
         except Exception as e:
             print(f"Error fetching Binance orders for {market_pair}: {e}")
-            return []
+            raise ConnectorFetchError(
+                f"binance orders for {market_pair}: {e}"
+            ) from e
 
     async def fetch_orders(self, symbol: Optional[str] = None) -> List[Dict]:
         """Fetch order history from Binance for one base symbol or market pair."""
@@ -152,7 +168,11 @@ class BinanceConnector(BaseConnector):
 
 
     async def fetch_prices(self, symbols: List[str]) -> Dict[str, float]:
-        """Fetch current prices from Binance."""
+        """Fetch current prices from Binance.
+
+        Per-symbol ticker failures are skipped. A transport-level failure
+        raises ConnectorFetchError instead of returning {}.
+        """
         try:
             prices = {}
             for symbol in symbols:
@@ -163,14 +183,20 @@ class BinanceConnector(BaseConnector):
                     pair = symbol
                 try:
                     ticker = self.exchange.fetch_ticker(pair)
-                    prices[symbol] = float(ticker["last"])
+                    last = ticker.get("last") if isinstance(ticker, dict) else None
+                    if is_valid_price(last):
+                        prices[symbol] = float(last)
+                    else:
+                        print(f"Ignoring invalid Binance price for {pair}: {last}")
                 except Exception as e:
                     print(f"Error fetching price for {pair}: {e}")
                     continue
             return prices
+        except ConnectorFetchError:
+            raise
         except Exception as e:
             print(f"Error fetching Binance prices: {e}")
-            return {}
+            raise ConnectorFetchError(f"binance prices: {e}") from e
 
     async def test_connection(self) -> bool:
         """Test Binance connection."""
@@ -258,6 +284,8 @@ class BinanceConnector(BaseConnector):
         # Sequential calls: shared ccxt exchange instance is not guaranteed thread-safe.
         resp_orders = _get_orders()
         resp_payments = _get_payments()
+        if resp_orders is None and resp_payments is None:
+            raise ConnectorFetchError("binance fiat deposits: both endpoints failed")
 
         out: List[Dict[str, Any]] = []
         seen: set[str] = set()

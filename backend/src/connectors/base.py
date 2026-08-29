@@ -3,6 +3,8 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from ..data_quality import ConnectorFetchError, is_valid_price
+
 
 class BaseConnector(ABC):
     """Abstract base class for all data connectors."""
@@ -23,7 +25,10 @@ class BaseConnector(ABC):
         Fetch current balances from the data source.
 
         Returns:
-            List of dictionaries with keys: symbol, quantity, exchange
+            List of dictionaries with keys: symbol, quantity, exchange.
+            An empty list means the request succeeded and the account has no
+            holdings. Request failures must raise ConnectorFetchError instead
+            of returning [].
         """
         pass
 
@@ -133,6 +138,10 @@ class BaseConnector(ABC):
                     f"Error fetching {timeframe} OHLCV for {market_pair} "
                     f"from {self.name}: {exc}"
                 )
+                if not raw_candles:
+                    raise ConnectorFetchError(
+                        f"{self.name} OHLCV for {market_pair}: {exc}"
+                    ) from exc
                 break
             if not batch:
                 break
@@ -157,6 +166,8 @@ class BaseConnector(ABC):
                 low = float(candle[3])
                 close = float(candle[4])
             except (TypeError, ValueError):
+                continue
+            if not all(is_valid_price(v) for v in (open_, high, low, close)):
                 continue
             points.append(
                 {
