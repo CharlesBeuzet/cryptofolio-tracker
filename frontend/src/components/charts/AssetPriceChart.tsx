@@ -102,8 +102,8 @@ function computeYDomain(candles: CandleDatum[], markerPrices: number[] = []): [n
   const min = Math.min(...values)
   const max = Math.max(...values)
   const span = max - min
-  // Extra headroom so buy/sell arrows (offset in px from the wick) are not clipped.
-  const pad = span > 0 ? span * 0.14 : Math.max(Math.abs(min) * 0.01, 1)
+  // Extra headroom so buy/sell pins (offset in px from the wick) are not clipped.
+  const pad = span > 0 ? span * 0.12 : Math.max(Math.abs(min) * 0.01, 1)
   return [min - pad, max + pad]
 }
 
@@ -192,10 +192,20 @@ function CandlestickLayer({ xAxisMap, yAxisMap, data, offset, onCandleHover }: C
   )
 }
 
-/** Pixel gap between the candle wick tip and the arrow tip. */
-const ORDER_ARROW_GAP = 18
-const ORDER_ARROW_HALF_W = 10
-const ORDER_ARROW_HEIGHT = 20
+/** Pixel gap between the candle wick and the pin tip. */
+const PIN_GAP = 7
+const PIN_RADIUS = 8
+const PIN_POINTER = 4.5
+
+/** Map-pin path: circular badge with a short pointer toward the candle (OKX/Binance style). */
+function orderPinPath(cx: number, tipY: number, dir: 1 | -1): string {
+  const r = PIN_RADIUS
+  const bodyCy = tipY + dir * (PIN_POINTER + r)
+  const shoulderX = r * 0.68
+  const shoulderY = bodyCy - dir * r * 0.48
+  const sweep = dir > 0 ? 1 : 0
+  return `M${cx},${tipY} L${cx + shoulderX},${shoulderY} A${r} ${r} 0 1 ${sweep} ${cx - shoulderX},${shoulderY} Z`
+}
 
 function OrderPin({
   cx,
@@ -211,58 +221,27 @@ function OrderPin({
   const isBuy = payload?.type === 'buy'
   const color = isBuy ? 'var(--green)' : 'var(--down)'
   const label = isBuy ? 'B' : 'S'
+  // Buy sits below the candle; sell sits above. Tip points at the wick.
+  const dir: 1 | -1 = isBuy ? 1 : -1
+  const tipY = cy + dir * PIN_GAP
+  const bodyCy = tipY + dir * (PIN_POINTER + PIN_RADIUS)
 
-  // Buy sits below the candle (arrow ▲); sell sits above (arrow ▼).
-  // Tip points toward the price so the marker never overlaps the wick/body.
-  // Label sits in the wide base of the triangle.
-  if (isBuy) {
-    const tipY = cy + ORDER_ARROW_GAP
-    const baseY = tipY + ORDER_ARROW_HEIGHT
-    const labelY = tipY + ORDER_ARROW_HEIGHT * 0.68
-    return (
-      <g>
-        <path
-          d={`M${cx},${tipY} L${cx + ORDER_ARROW_HALF_W},${baseY} L${cx - ORDER_ARROW_HALF_W},${baseY} Z`}
-          fill={color}
-          stroke="var(--card)"
-          strokeWidth={1.2}
-          strokeLinejoin="round"
-        />
-        <text
-          x={cx}
-          y={labelY}
-          textAnchor="middle"
-          dominantBaseline="middle"
-          fill="var(--mkink)"
-          fontSize={9}
-          fontWeight={700}
-          fontFamily="IBM Plex Mono, monospace"
-        >
-          {label}
-        </text>
-      </g>
-    )
-  }
-
-  const tipY = cy - ORDER_ARROW_GAP
-  const baseY = tipY - ORDER_ARROW_HEIGHT
-  const labelY = tipY - ORDER_ARROW_HEIGHT * 0.68
   return (
-    <g>
+    <g pointerEvents="none">
       <path
-        d={`M${cx},${tipY} L${cx + ORDER_ARROW_HALF_W},${baseY} L${cx - ORDER_ARROW_HALF_W},${baseY} Z`}
+        d={orderPinPath(cx, tipY, dir)}
         fill={color}
         stroke="var(--card)"
-        strokeWidth={1.2}
+        strokeWidth={1.35}
         strokeLinejoin="round"
       />
       <text
         x={cx}
-        y={labelY}
+        y={bodyCy + 0.4}
         textAnchor="middle"
         dominantBaseline="middle"
         fill="var(--mkink)"
-        fontSize={9}
+        fontSize={8}
         fontWeight={700}
         fontFamily="IBM Plex Mono, monospace"
       >
@@ -335,7 +314,7 @@ export default function AssetPriceChart({
         const timestamp = new Date(order.executedAt).getTime()
         const candle = findNearestCandle(candleData, timestamp)
         const isBuy = order.type === 'buy'
-        // Anchor outside the candle wick so arrows never sit inside the body.
+        // Anchor outside the candle wick so pins never sit inside the body.
         const anchorPrice = candle
           ? isBuy
             ? Math.min(order.price, candle.low)
@@ -421,7 +400,7 @@ export default function AssetPriceChart({
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart
           data={candleData}
-          margin={{ top: 16, right: narrowViewport ? 4 : 12, left: 0, bottom: 0 }}
+          margin={{ top: 18, right: narrowViewport ? 4 : 12, left: 0, bottom: 4 }}
         >
           <CartesianGrid stroke="var(--line)" strokeDasharray="0" vertical={false} />
           <XAxis
