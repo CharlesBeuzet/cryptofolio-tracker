@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from src.connectors.base import BaseConnector
 from src.connectors.binance import BinanceConnector
 from src.connectors.okx import OkxConnector
-from src.data_quality import (
+from src.utils.data_quality import (
     ConnectorFetchError,
     positive_finite,
     sanitize_row,

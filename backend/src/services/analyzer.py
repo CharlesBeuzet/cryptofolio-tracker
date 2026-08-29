@@ -4,7 +4,7 @@ from typing import List, Optional
 
 from sqlalchemy.orm import Session, joinedload
 
-from ..data_quality import positive_finite
+from ..utils.data_quality import positive_finite
 from ..models.database import Order, Position, PositionMetrics
 from .metrics_helpers import QTY_EPSILON, has_qty_mismatch
 

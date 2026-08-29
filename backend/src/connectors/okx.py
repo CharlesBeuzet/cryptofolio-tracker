@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from ..data_quality import ConnectorFetchError, positive_finite
+from ..utils.data_quality import ConnectorFetchError, positive_finite
 from .base import BaseConnector
 
 # OKX order history is split between a 7-day endpoint and a 3-month archive.

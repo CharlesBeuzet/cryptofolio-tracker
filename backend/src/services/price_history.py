@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..connectors.registry import get_connector_by_name
-from ..data_quality import ConnectorFetchError
+from ..utils.data_quality import ConnectorFetchError
 
 RESOLVED = "resolved"
 NOT_FOUND = "not_found"

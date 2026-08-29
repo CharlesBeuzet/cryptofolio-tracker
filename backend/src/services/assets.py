@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Set
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
-from ..data_quality import ConnectorFetchError, positive_finite, sanitize_rows
+from ..utils.data_quality import ConnectorFetchError, positive_finite, sanitize_rows
 from ..models.database import Asset, Position
 from .portfolio import PortfolioService
 

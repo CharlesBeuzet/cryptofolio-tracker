@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Tuple
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_
 
-from ..data_quality import positive_finite, snapshot_skip_reason
+from ..utils.data_quality import positive_finite, snapshot_skip_reason
 from ..models.database import (
     Asset,
     Position,

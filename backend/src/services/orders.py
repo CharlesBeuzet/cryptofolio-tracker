@@ -5,7 +5,7 @@ from typing import Any, List, Tuple
 from sqlalchemy import and_, func
 from sqlalchemy.orm import Session, joinedload
 
-from ..data_quality import sanitize_row
+from ..utils.data_quality import sanitize_row
 from ..models.database import Order, Position
 from .analyzer import PositionAnalyzerService
 

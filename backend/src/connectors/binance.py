@@ -3,7 +3,7 @@ import ccxt
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from ..data_quality import ConnectorFetchError, positive_finite
+from ..utils.data_quality import ConnectorFetchError, positive_finite
 from .base import BaseConnector
 
 

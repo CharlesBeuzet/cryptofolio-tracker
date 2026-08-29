@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from ..data_quality import ConnectorFetchError, positive_finite
+from ..utils.data_quality import ConnectorFetchError, positive_finite
 
 
 class BaseConnector(ABC):
