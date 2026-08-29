@@ -6,7 +6,8 @@ import { GET_ASSET, GET_PORTFOLIO, GET_ASSET_PRICE_HISTORY } from '../graphql/qu
 import AssetPriceChart from '../components/charts/AssetPriceChart'
 import RangeSegment, { type RangeKey, rangeToDays } from '../components/common/RangeSegment'
 import { assetColor, formatPct, formatTokenPrice, formatUsdPrecise, pnlColorClass } from '../utils/format'
-import { groupPositionsByAsset } from '../utils/groupPositionsByAsset'
+import { excludeCashLikePositions } from '../utils/cashLikeAssets'
+import { groupPositionsByAsset, type PositionLike } from '../utils/groupPositionsByAsset'
 
 interface AssetOrder {
   id: number
@@ -86,7 +87,9 @@ export default function Asset() {
   }, [allOrders])
 
   const assetTabs = useMemo(() => {
-    const positions = portfolioData?.portfolio?.positions || []
+    const positions = excludeCashLikePositions(
+      (portfolioData?.portfolio?.positions || []) as PositionLike[],
+    )
     return groupPositionsByAsset(positions)
   }, [portfolioData?.portfolio?.positions])
 

@@ -135,6 +135,15 @@ body {
     background: var(--gsoft);
   }
 
+  /* Cash / fiat rows stay in the book but are not inspectable. */
+  .hrow.hrow-static {
+    @apply cursor-default;
+  }
+
+  .hrow.hrow-static:hover {
+    background: transparent;
+  }
+
   .trow {
     @apply flex items-center gap-2 sm:gap-3 py-2.5 px-1 border-t border-sillage-line;
   }
