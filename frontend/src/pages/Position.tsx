@@ -1,9 +1,12 @@
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { useQuery } from '@apollo/client'
+import { useQuery, useMutation } from '@apollo/client'
 import { useState, useMemo, useEffect } from 'react'
 import { format } from 'date-fns'
 import { GET_POSITION, GET_PORTFOLIO, GET_ASSET_PRICE_HISTORY } from '../graphql/queries'
+import { ADD_POSITION_VALUATION, DELETE_POSITION_VALUATION } from '../graphql/mutations'
 import AssetPriceChart from '../components/charts/AssetPriceChart'
+import PortfolioValueChart from '../components/charts/PortfolioValueChart'
+import ValuationTable from '../components/portfolio/ValuationTable'
 import RangeSegment, { type RangeKey, rangeToDays } from '../components/common/RangeSegment'
 import { assetColor, formatPct, formatTokenPrice, formatUsdPrecise, pnlColorClass } from '../utils/format'
 import { groupPositionsByAsset } from '../utils/groupPositionsByAsset'
@@ -15,14 +18,18 @@ export default function Position() {
   const [hoveredCandle, setHoveredCandle] = useState<{ timestamp: number; close: number } | null>(
     null,
   )
+  const [busy, setBusy] = useState(false)
 
   const { data: portfolioData } = useQuery(GET_PORTFOLIO)
-  const { data, loading, error } = useQuery(GET_POSITION, {
+  const { data, loading, error, refetch } = useQuery(GET_POSITION, {
     variables: { id: parseInt(id || '0') },
   })
+  const [addValuation] = useMutation(ADD_POSITION_VALUATION)
+  const [deleteValuation] = useMutation(DELETE_POSITION_VALUATION)
 
   const positionSymbol = data?.position?.symbol
   const positionExchange = data?.position?.exchange
+  const isManual = data?.position?.source === 'manual'
   const days = rangeToDays(range)
 
   useEffect(() => {
@@ -31,7 +38,7 @@ export default function Position() {
 
   const { data: priceData, loading: priceLoading } = useQuery(GET_ASSET_PRICE_HISTORY, {
     variables: { symbol: positionSymbol || '', days, exchange: positionExchange || null },
-    skip: !positionSymbol || !positionExchange,
+    skip: !positionSymbol || !positionExchange || isManual,
   })
 
   const priceHistory = priceData?.assetPriceHistory?.points || []
@@ -69,22 +76,41 @@ export default function Position() {
 
   const position = data.position
   const assetTabs = groupPositionsByAsset(portfolioData?.portfolio?.positions || [])
-  const costBasis = position.avgEntryPrice * position.quantity
+  const costBasis = position.costBasis ?? position.avgEntryPrice * position.quantity
   const unrealized = position.pnl || 0
   const isPositive = unrealized >= 0
+  const title = isManual && position.displayName ? position.displayName : position.symbol
 
   const orders = [...(position.orders || [])].sort(
-    (a, b) => new Date(b.executedAt).getTime() - new Date(a.executedAt).getTime(),
+    (a: { executedAt: string }, b: { executedAt: string }) =>
+      new Date(b.executedAt).getTime() - new Date(a.executedAt).getTime(),
   )
+
+  const valuations = position.valuations || []
+  const chartHistory = [...valuations]
+    .sort(
+      (a: { recordedAt: string }, b: { recordedAt: string }) =>
+        new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime(),
+    )
+    .map((v: { recordedAt: string; valueAmount: number }) => ({
+      timestamp: v.recordedAt,
+      totalValue: v.valueAmount,
+    }))
 
   // Prefer earliest buy fill for this venue; fall back to position open date.
   const firstBoughtAt =
     orders
-      .filter((o) => o.type === 'buy')
-      .reduce<string | null>((earliest, o) => {
+      .filter((o: { type: string }) => o.type === 'buy')
+      .reduce<string | null>((earliest: string | null, o: { executedAt: string }) => {
         if (!earliest || new Date(o.executedAt) < new Date(earliest)) return o.executedAt
         return earliest
-      }, null) ?? position.firstBoughtAt
+      }, null) ??
+    (valuations.length
+      ? [...valuations].sort(
+          (a: { recordedAt: string }, b: { recordedAt: string }) =>
+            new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime(),
+        )[0].recordedAt
+      : position.firstBoughtAt)
   const durationDays = firstBoughtAt
     ? Math.max(
         0,
@@ -92,15 +118,65 @@ export default function Position() {
       )
     : position.durationDays || 0
 
+  const onAddValuation = async (input: {
+    recordedAt: string
+    valueAmount: number
+    quantity: number | null
+  }) => {
+    setBusy(true)
+    try {
+      await addValuation({
+        variables: {
+          positionId: position.id,
+          valueAmount: input.valueAmount,
+          recordedAt: input.recordedAt,
+          quantity: input.quantity,
+        },
+        refetchQueries: ['GetPortfolio', 'GetPosition'],
+      })
+      await refetch()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const onDeleteValuation = async (valuationId: number) => {
+    if (!window.confirm('Delete this valuation?')) return
+    setBusy(true)
+    try {
+      await deleteValuation({
+        variables: { id: valuationId },
+        refetchQueries: ['GetPortfolio', 'GetPosition'],
+      })
+      await refetch()
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div>
       <div className="page-head mb-4">
         <div>
           <div className="lbl">§2 · Position detail</div>
           <div className="flex items-center gap-3 mt-2 flex-wrap">
-            <div className="page-title mt-0">{position.symbol}</div>
+            <div className="page-title mt-0">{title}</div>
+            {isManual && position.symbol && position.displayName && (
+              <span className="tk text-sillage-soft">{position.symbol}</span>
+            )}
             {position.exchange && <span className="chip">{position.exchange}</span>}
+            {isManual && <span className="chip manual">manual</span>}
             {position.tag?.name && <span className="chip">{position.tag.name}</span>}
+            {isManual && position.externalUrl && (
+              <a
+                href={position.externalUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="font-mono text-[11px] text-sillage-soft hover:text-sillage-ink no-underline"
+              >
+                open link ↗
+              </a>
+            )}
             <Link
               to={`/asset/${encodeURIComponent(position.symbol)}`}
               className="font-mono text-[11px] text-sillage-soft hover:text-sillage-ink no-underline"
@@ -109,7 +185,7 @@ export default function Position() {
             </Link>
           </div>
         </div>
-        <RangeSegment value={range} onChange={setRange} />
+        {!isManual && <RangeSegment value={range} onChange={setRange} />}
       </div>
 
       <div className="flex gap-2 flex-wrap mb-[18px] overflow-x-auto pb-0.5 -mx-0.5 px-0.5">
@@ -128,50 +204,66 @@ export default function Position() {
 
       <div className="flex gap-4 sm:gap-5 items-stretch flex-col lg:flex-row">
         <div className="panel flex-1 min-w-0">
-          <div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-start mb-3.5">
-            <div className="lbl">Fig 2 · Price · order markers</div>
-            <div className="font-mono text-[11px] flex gap-x-3 gap-y-1.5 flex-wrap sm:justify-end">
-              <span>
-                <span className="text-sillage-green font-bold">B</span> buy
-              </span>
-              <span>
-                <span className="text-sillage-accent font-bold">S</span> sell
-              </span>
-              <span className="text-sillage-soft">
-                <span className="text-sillage-green">—</span> avg entry
-              </span>
-              {position.metrics?.avgExitPrice != null && (
-                <span className="text-sillage-soft">
-                  <span className="text-sillage-accent">—</span> avg sell
-                </span>
-              )}
-              {hoveredCandle ? (
-                <span className="text-sillage-ink tabular-nums">
-                  {format(new Date(hoveredCandle.timestamp), 'MMM dd, yyyy')} ·{' '}
-                  {formatTokenPrice(hoveredCandle.close)}
-                </span>
-              ) : (
-                position.currentPrice && (
-                  <span className="text-sillage-soft">
-                    last {formatTokenPrice(position.currentPrice)}
+          {isManual ? (
+            <>
+              <div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-start mb-3.5">
+                <div className="lbl">Fig 2 · Mark-to-market</div>
+                <div className="font-mono text-[11px] text-sillage-soft">
+                  last {formatUsdPrecise(position.value)}
+                </div>
+              </div>
+              <div className="h-[220px]">
+                <PortfolioValueChart data={chartHistory} height="100%" valueLabel="Value" />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-start mb-3.5">
+                <div className="lbl">Fig 2 · Price · order markers</div>
+                <div className="font-mono text-[11px] flex gap-x-3 gap-y-1.5 flex-wrap sm:justify-end">
+                  <span>
+                    <span className="text-sillage-green font-bold">B</span> buy
                   </span>
-                )
-              )}
-            </div>
-          </div>
-          <AssetPriceChart
-            symbol={position.symbol}
-            priceHistory={priceHistory}
-            orders={ordersInRange}
-            avgEntryPrice={position.avgEntryPrice}
-            avgExitPrice={position.metrics?.avgExitPrice}
-            isMock={isMock}
-            loading={priceLoading}
-            resolutionStatus={resolutionStatus}
-            ambiguityMessage={ambiguityMessage}
-            candidates={candidates}
-            onCandleHover={setHoveredCandle}
-          />
+                  <span>
+                    <span className="text-sillage-accent font-bold">S</span> sell
+                  </span>
+                  <span className="text-sillage-soft">
+                    <span className="text-sillage-green">—</span> avg entry
+                  </span>
+                  {position.metrics?.avgExitPrice != null && (
+                    <span className="text-sillage-soft">
+                      <span className="text-sillage-accent">—</span> avg sell
+                    </span>
+                  )}
+                  {hoveredCandle ? (
+                    <span className="text-sillage-ink tabular-nums">
+                      {format(new Date(hoveredCandle.timestamp), 'MMM dd, yyyy')} ·{' '}
+                      {formatTokenPrice(hoveredCandle.close)}
+                    </span>
+                  ) : (
+                    position.currentPrice && (
+                      <span className="text-sillage-soft">
+                        last {formatTokenPrice(position.currentPrice)}
+                      </span>
+                    )
+                  )}
+                </div>
+              </div>
+              <AssetPriceChart
+                symbol={position.symbol}
+                priceHistory={priceHistory}
+                orders={ordersInRange}
+                avgEntryPrice={position.avgEntryPrice}
+                avgExitPrice={position.metrics?.avgExitPrice}
+                isMock={isMock}
+                loading={priceLoading}
+                resolutionStatus={resolutionStatus}
+                ambiguityMessage={ambiguityMessage}
+                candidates={candidates}
+                onCandleHover={setHoveredCandle}
+              />
+            </>
+          )}
         </div>
 
         <div className="panel w-full lg:w-[286px] flex-shrink-0">
@@ -188,10 +280,14 @@ export default function Position() {
             {[
               ['Market value', formatUsdPrecise(position.value)],
               ['Cost basis', formatUsdPrecise(costBasis)],
-              ['Avg entry', formatTokenPrice(position.avgEntryPrice)],
-              ...(position.metrics?.avgExitPrice != null
-                ? [['Avg sell', formatTokenPrice(position.metrics.avgExitPrice)] as const]
-                : []),
+              ...(isManual
+                ? []
+                : [
+                    ['Avg entry', formatTokenPrice(position.avgEntryPrice)] as const,
+                    ...(position.metrics?.avgExitPrice != null
+                      ? [['Avg sell', formatTokenPrice(position.metrics.avgExitPrice)] as const]
+                      : []),
+                  ]),
               ['Holdings', position.quantity.toLocaleString(undefined, { maximumFractionDigits: 8 })],
               ['Duration', `${durationDays} days`],
             ].map(([label, val], idx, arr) => (
@@ -209,70 +305,99 @@ export default function Position() {
             <div className="lbl mb-[7px]">
               {position.tag?.name
                 ? `Thesis · ${position.tag.name}`
-                : `Since · ${position.exchange || 'unknown venue'}`}
+                : isManual
+                  ? `Manual · ${position.exchange || 'declared'}`
+                  : `Since · ${position.exchange || 'unknown venue'}`}
             </div>
             <div className="cap leading-relaxed">
               {firstBoughtAt
-                ? `First bought {format(new Date(position.firstBoughtAt), 'MMM dd, yyyy')}. `
+                ? `First ${isManual ? 'marked' : 'bought'} ${format(new Date(firstBoughtAt), 'MMM dd, yyyy')}. `
                 : ''}
-              Track conviction tags in the Theses view.
+              {isManual
+                ? 'Value is the latest mark you entered. Add snapshots below to keep NAV in line with parked cash.'
+                : 'Track conviction tags in the Theses view.'}
               {position.tag?.description
                 ? ` ${position.tag.description}`
                 : position.tag
                   ? ' Tagged for separate tracking on Theses.'
-                  : ' Assign a conviction tag in Settings to track this thesis separately.'}
+                  : isManual
+                    ? ''
+                    : ' Assign a conviction tag in Settings to track this thesis separately.'}
             </div>
           </div>
         </div>
       </div>
 
-      <div className="panel mt-4 sm:mt-5">
-        <div className="lbl mb-1">Table 2 · Order history</div>
-        <div className="table-scroll">
-          <div className="table-scroll-inner">
-            <div className="trow text-sillage-soft border-t-0">
-              <div className="w-24 lbl text-[9px]">Date</div>
-              <div className="w-[54px] lbl text-[9px]">Side</div>
-              <div className="flex-1 lbl text-[9px]">Quantity</div>
-              <div className="w-24 text-right lbl text-[9px]">Price</div>
-              <div className="w-24 text-right lbl text-[9px]">Value</div>
-              <div className="w-24 text-right lbl text-[9px]">Venue</div>
-            </div>
-            {orders.length === 0 ? (
-              <div className="text-center py-8 text-sillage-soft text-sm">No orders found</div>
-            ) : (
-              orders.map((order) => {
-                const isBuy = order.type === 'buy'
-                const total = order.quantity * order.price
-                return (
-                  <div key={order.id} className="trow">
-                    <div className="w-24 font-mono text-[11px] text-sillage-soft">
-                      {format(new Date(order.executedAt), 'MMM dd, yy')}
-                    </div>
-                    <div className="w-[54px]">
-                      <span className={`font-mono text-[11px] ${isBuy ? 'text-sillage-green' : 'text-sillage-accent'}`}>
-                        {isBuy ? 'BUY' : 'SELL'}
-                      </span>
-                    </div>
-                    <div className="flex-1 font-mono tabular-nums text-xs">
-                      {order.quantity.toLocaleString(undefined, { maximumFractionDigits: 8 })} {position.symbol}
-                    </div>
-                    <div className="w-24 text-right font-mono tabular-nums text-xs">
-                      {formatTokenPrice(order.price)}
-                    </div>
-                    <div className="w-24 text-right font-mono tabular-nums text-xs">
-                      {formatUsdPrecise(total)}
-                    </div>
-                    <div className="w-24 text-right font-mono text-[11px] text-sillage-soft">
-                      {order.exchange || '—'}
-                    </div>
-                  </div>
+      {isManual ? (
+        <ValuationTable
+          symbol={position.symbol}
+          valuations={valuations}
+          venue={position.exchange}
+          busy={busy}
+          onAdd={onAddValuation}
+          onDelete={onDeleteValuation}
+        />
+      ) : (
+        <div className="panel mt-4 sm:mt-5">
+          <div className="lbl mb-1">Table 2 · Order history</div>
+          <div className="table-scroll">
+            <div className="table-scroll-inner">
+              <div className="trow text-sillage-soft border-t-0">
+                <div className="w-24 lbl text-[9px]">Date</div>
+                <div className="w-[54px] lbl text-[9px]">Side</div>
+                <div className="flex-1 lbl text-[9px]">Quantity</div>
+                <div className="w-24 text-right lbl text-[9px]">Price</div>
+                <div className="w-24 text-right lbl text-[9px]">Value</div>
+                <div className="w-24 text-right lbl text-[9px]">Venue</div>
+              </div>
+              {orders.length === 0 ? (
+                <div className="text-center py-8 text-sillage-soft text-sm">No orders found</div>
+              ) : (
+                orders.map(
+                  (order: {
+                    id: number
+                    type: string
+                    quantity: number
+                    price: number
+                    executedAt: string
+                    exchange: string | null
+                  }) => {
+                    const isBuy = order.type === 'buy'
+                    const total = order.quantity * order.price
+                    return (
+                      <div key={order.id} className="trow">
+                        <div className="w-24 font-mono text-[11px] text-sillage-soft">
+                          {format(new Date(order.executedAt), 'MMM dd, yy')}
+                        </div>
+                        <div className="w-[54px]">
+                          <span
+                            className={`font-mono text-[11px] ${isBuy ? 'text-sillage-green' : 'text-sillage-accent'}`}
+                          >
+                            {isBuy ? 'BUY' : 'SELL'}
+                          </span>
+                        </div>
+                        <div className="flex-1 font-mono tabular-nums text-xs">
+                          {order.quantity.toLocaleString(undefined, { maximumFractionDigits: 8 })}{' '}
+                          {position.symbol}
+                        </div>
+                        <div className="w-24 text-right font-mono tabular-nums text-xs">
+                          {formatTokenPrice(order.price)}
+                        </div>
+                        <div className="w-24 text-right font-mono tabular-nums text-xs">
+                          {formatUsdPrecise(total)}
+                        </div>
+                        <div className="w-24 text-right font-mono text-[11px] text-sillage-soft">
+                          {order.exchange || '—'}
+                        </div>
+                      </div>
+                    )
+                  },
                 )
-              })
-            )}
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       <div className="mt-4 text-center">
         <Link to="/" className="font-mono text-xs text-sillage-soft hover:text-sillage-ink">

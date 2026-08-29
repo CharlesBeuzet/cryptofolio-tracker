@@ -2,13 +2,14 @@
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import and_
+from sqlalchemy import and_, func
 
 from ..models.database import (
     Asset,
     Position,
     PortfolioSnapshot,
 )
+from .manual_positions import SOURCE_MANUAL, SOURCE_SYNCED, is_manual_position, position_market_value
 
 
 class PortfolioService:
@@ -25,6 +26,7 @@ class PortfolioService:
                 joinedload(Position.orders),
                 joinedload(Position.metrics),
                 joinedload(Position.tag),
+                joinedload(Position.valuations),
             )
             .filter(Position.status == "open")
         )
@@ -32,12 +34,7 @@ class PortfolioService:
     def get_portfolio_value(self) -> float:
         """Calculate total portfolio value."""
         positions = self._open_positions_query().all()
-        total_value = 0.0
-        for position in positions:
-            price = position.asset.current_price if position.asset else None
-            if price:
-                total_value += position.quantity * price
-        return total_value
+        return sum(position_market_value(position) for position in positions)
 
     def record_snapshot(self, min_interval_hours: float = 5.0) -> Optional[PortfolioSnapshot]:
         """Persist the current portfolio total value as a historical snapshot.
@@ -82,9 +79,12 @@ class PortfolioService:
             pnl_percent = (pnl / snapshot.total_value * 100) if snapshot.total_value > 0 else 0
         else:
             positions = self._open_positions_query().all()
-            pnl = sum(
-                (p.metrics.total_pnl if p.metrics else 0.0) for p in positions
-            )
+            pnl = 0.0
+            for position in positions:
+                if is_manual_position(position):
+                    pnl += manual_pnl(position)[0]
+                elif position.metrics:
+                    pnl += position.metrics.total_pnl
             pnl_percent = (
                 (pnl / (current_value - pnl) * 100) if (current_value - pnl) > 0 else 0
             )
@@ -107,6 +107,7 @@ class PortfolioService:
                 joinedload(Position.orders),
                 joinedload(Position.metrics),
                 joinedload(Position.tag),
+                joinedload(Position.valuations),
             )
             .filter(Position.id == position_id)
             .first()
@@ -163,7 +164,13 @@ class PortfolioService:
         position = (
             self.db.query(Position)
             .options(joinedload(Position.asset))
-            .filter(and_(Position.symbol == symbol, Position.exchange == exchange))
+            .filter(
+                and_(
+                    Position.symbol == symbol,
+                    Position.exchange == exchange,
+                    func.coalesce(Position.source, SOURCE_SYNCED) != SOURCE_MANUAL,
+                )
+            )
             .first()
         )
 
@@ -185,6 +192,7 @@ class PortfolioService:
                 first_bought_at=datetime.utcnow(),
                 exchange=exchange,
                 status="open",
+                source=SOURCE_SYNCED,
             )
             self.db.add(position)
 

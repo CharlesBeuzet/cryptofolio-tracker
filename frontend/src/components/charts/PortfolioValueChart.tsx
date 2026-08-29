@@ -7,12 +7,14 @@ interface PortfolioValueChartProps {
   compareBtc?: boolean
   height?: number | string
   overlay?: React.ReactNode
+  valueLabel?: string
 }
 
 export default function PortfolioValueChart({
   data,
   height = 250,
   overlay,
+  valueLabel = 'NAV',
 }: PortfolioValueChartProps) {
   const chartData = useMemo(
     () =>
@@ -53,7 +55,7 @@ export default function PortfolioValueChart({
             }}
             formatter={(value: number) => [
               `$${value.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,
-              'NAV',
+              valueLabel,
             ]}
           />
           <Area

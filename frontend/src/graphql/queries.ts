@@ -28,6 +28,10 @@ export const GET_PORTFOLIO = gql`
         firstBoughtAt
         exchange
         durationDays
+        source
+        displayName
+        externalUrl
+        costBasis
         tag {
           id
           name
@@ -52,6 +56,10 @@ export const GET_POSITIONS = gql`
       firstBoughtAt
       exchange
       durationDays
+      source
+      displayName
+      externalUrl
+      costBasis
       tag {
         id
         name
@@ -84,6 +92,10 @@ export const GET_POSITION = gql`
       firstBoughtAt
       exchange
       durationDays
+      source
+      displayName
+      externalUrl
+      costBasis
       tag {
         id
         name
@@ -100,6 +112,13 @@ export const GET_POSITION = gql`
         price
         executedAt
         exchange
+      }
+      valuations {
+        id
+        recordedAt
+        valueAmount
+        quantity
+        createdAt
       }
     }
   }
@@ -130,6 +149,22 @@ export const GET_ASSET = gql`
         firstBoughtAt
         exchange
         durationDays
+        source
+        displayName
+        externalUrl
+        costBasis
+        tag {
+          id
+          name
+          description
+        }
+        valuations {
+          id
+          recordedAt
+          valueAmount
+          quantity
+          createdAt
+        }
       }
       orders {
         id
