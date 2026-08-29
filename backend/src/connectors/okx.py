@@ -4,6 +4,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
+from ..utils.data_quality import ConnectorFetchError, positive_finite
 from .base import BaseConnector
 
 # OKX order history is split between a 7-day endpoint and a 3-month archive.
@@ -42,23 +43,38 @@ class OkxConnector(BaseConnector):
         """Fetch non-zero balances from one OKX wallet (trading or funding)."""
         try:
             balance = self.exchange.fetch_balance({"type": account_type})
-            balances = []
-            for symbol, amount in balance["total"].items():
-                if amount > 0:
-                    balances.append(
-                        {
-                            "symbol": symbol,
-                            "quantity": float(amount),
-                            "exchange": self.name,
-                        }
-                    )
-            return balances
         except Exception as e:
             print(f"Error fetching OKX {account_type} balances: {e}")
-            return []
+            raise ConnectorFetchError(
+                f"okx {account_type} balances: {e}"
+            ) from e
+        totals = balance.get("total") if isinstance(balance, dict) else None
+        if not isinstance(totals, dict):
+            raise ConnectorFetchError(
+                f"okx {account_type} balances: missing total map"
+            )
+        balances = []
+        for symbol, amount in totals.items():
+            try:
+                qty = float(amount)
+            except (TypeError, ValueError):
+                continue
+            if qty > 0:
+                balances.append(
+                    {
+                        "symbol": symbol,
+                        "quantity": qty,
+                        "exchange": self.name,
+                    }
+                )
+        return balances
 
     async def fetch_balances(self) -> List[Dict]:
-        """Fetch balances from OKX trading and funding accounts (aggregated per symbol)."""
+        """Fetch balances from OKX trading and funding accounts (aggregated per symbol).
+
+        Any wallet-type failure aborts the whole fetch so callers do not persist
+        a partial book that would close missing positions.
+        """
         totals: Dict[str, float] = defaultdict(float)
         for account_type in _OKX_BALANCE_ACCOUNT_TYPES:
             for row in self._fetch_account_balances(account_type):
@@ -93,6 +109,8 @@ class OkxConnector(BaseConnector):
         except (TypeError, ValueError):
             return None
         if quantity <= 0:
+            return None
+        if positive_finite(price) is None:
             return None
         base = market_pair.split("/")[0] if "/" in market_pair else market_pair
         return {
@@ -159,7 +177,9 @@ class OkxConnector(BaseConnector):
             return out
         except Exception as e:
             print(f"Error fetching OKX orders for {market_pair}: {e}")
-            return []
+            raise ConnectorFetchError(
+                f"okx orders for {market_pair}: {e}"
+            ) from e
 
     async def fetch_orders(self, symbol: Optional[str] = None) -> List[Dict]:
         """Fetch order history from OKX for one base symbol or market pair."""
@@ -192,7 +212,11 @@ class OkxConnector(BaseConnector):
         return orders
 
     async def fetch_prices(self, symbols: List[str]) -> Dict[str, float]:
-        """Fetch current prices from OKX."""
+        """Fetch current prices from OKX.
+
+        Per-symbol ticker failures are skipped. A transport-level failure
+        raises ConnectorFetchError instead of returning {}.
+        """
         try:
             prices = {}
             for symbol in symbols:
@@ -202,14 +226,21 @@ class OkxConnector(BaseConnector):
                     pair = symbol
                 try:
                     ticker = self.exchange.fetch_ticker(pair)
-                    prices[symbol] = float(ticker["last"])
+                    last = ticker.get("last") if isinstance(ticker, dict) else None
+                    parsed_last = positive_finite(last)
+                    if parsed_last is not None:
+                        prices[symbol] = parsed_last
+                    else:
+                        print(f"Ignoring invalid OKX price for {pair}: {last}")
                 except Exception as e:
                     print(f"Error fetching price for {pair}: {e}")
                     continue
             return prices
+        except ConnectorFetchError:
+            raise
         except Exception as e:
             print(f"Error fetching OKX prices: {e}")
-            return {}
+            raise ConnectorFetchError(f"okx prices: {e}") from e
 
     async def test_connection(self) -> bool:
         """Test OKX connection."""
@@ -290,7 +321,7 @@ class OkxConnector(BaseConnector):
             resp = self._private_get_fiat_deposit_order_history(params)
         except Exception as e:
             print(f"Error fetching OKX fiat/deposit-order-history: {e}")
-            return []
+            raise ConnectorFetchError(f"okx fiat deposits: {e}") from e
 
         out: List[Dict[str, Any]] = []
         seen: set[str] = set()
