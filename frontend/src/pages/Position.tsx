@@ -95,7 +95,7 @@ export default function Position() {
   return (
     <div>
       <div className="page-head mb-4">
-        <div>
+        <div className="min-w-0">
           <div className="lbl">§2 · Position detail</div>
           <div className="flex items-center gap-3 mt-2 flex-wrap">
             <div className="page-title mt-0">{position.symbol}</div>
