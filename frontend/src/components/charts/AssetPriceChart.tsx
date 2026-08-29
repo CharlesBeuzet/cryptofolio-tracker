@@ -102,8 +102,8 @@ function computeYDomain(candles: CandleDatum[], markerPrices: number[] = []): [n
   const min = Math.min(...values)
   const max = Math.max(...values)
   const span = max - min
-  // Extra headroom so buy/sell arrows (offset in px from the wick) are not clipped.
-  const pad = span > 0 ? span * 0.14 : Math.max(Math.abs(min) * 0.01, 1)
+  // Extra headroom so buy/sell pins (offset in px from the wick) are not clipped.
+  const pad = span > 0 ? span * 0.12 : Math.max(Math.abs(min) * 0.01, 1)
   return [min - pad, max + pad]
 }
 
@@ -192,10 +192,10 @@ function CandlestickLayer({ xAxisMap, yAxisMap, data, offset, onCandleHover }: C
   )
 }
 
-/** Pixel gap between the candle wick tip and the arrow tip. */
-const ORDER_ARROW_GAP = 18
-const ORDER_ARROW_HALF_W = 10
-const ORDER_ARROW_HEIGHT = 20
+/** Pixel gap between the candle wick and the pin stem. */
+const PIN_GAP = 4
+const PIN_RADIUS = 9
+const PIN_STEM = 5
 
 function OrderPin({
   cx,
@@ -211,54 +211,34 @@ function OrderPin({
   const isBuy = payload?.type === 'buy'
   const color = isBuy ? 'var(--green)' : 'var(--down)'
   const label = isBuy ? 'B' : 'S'
+  // Buy sits below the candle; sell sits above. Stem points at the wick.
+  const dir: 1 | -1 = isBuy ? 1 : -1
+  const stemStart = cy + dir * PIN_GAP
+  const stemEnd = stemStart + dir * PIN_STEM
+  const bodyCy = stemEnd + dir * PIN_RADIUS
 
-  // Buy sits below the candle (arrow ▲); sell sits above (arrow ▼).
-  // Tip points toward the price so the marker never overlaps the wick/body.
-  // Label sits in the wide base of the triangle.
-  if (isBuy) {
-    const tipY = cy + ORDER_ARROW_GAP
-    const baseY = tipY + ORDER_ARROW_HEIGHT
-    const labelY = tipY + ORDER_ARROW_HEIGHT * 0.68
-    return (
-      <g>
-        <path
-          d={`M${cx},${tipY} L${cx + ORDER_ARROW_HALF_W},${baseY} L${cx - ORDER_ARROW_HALF_W},${baseY} Z`}
-          fill={color}
-          stroke="var(--card)"
-          strokeWidth={1.2}
-          strokeLinejoin="round"
-        />
-        <text
-          x={cx}
-          y={labelY}
-          textAnchor="middle"
-          dominantBaseline="middle"
-          fill="var(--mkink)"
-          fontSize={9}
-          fontWeight={700}
-          fontFamily="IBM Plex Mono, monospace"
-        >
-          {label}
-        </text>
-      </g>
-    )
-  }
-
-  const tipY = cy - ORDER_ARROW_GAP
-  const baseY = tipY - ORDER_ARROW_HEIGHT
-  const labelY = tipY - ORDER_ARROW_HEIGHT * 0.68
   return (
-    <g>
-      <path
-        d={`M${cx},${tipY} L${cx + ORDER_ARROW_HALF_W},${baseY} L${cx - ORDER_ARROW_HALF_W},${baseY} Z`}
+    <g pointerEvents="none">
+      <line
+        x1={cx}
+        y1={stemStart}
+        x2={cx}
+        y2={stemEnd}
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
+      <circle
+        cx={cx}
+        cy={bodyCy}
+        r={PIN_RADIUS}
         fill={color}
         stroke="var(--card)"
-        strokeWidth={1.2}
-        strokeLinejoin="round"
+        strokeWidth={1.5}
       />
       <text
         x={cx}
-        y={labelY}
+        y={bodyCy + 0.5}
         textAnchor="middle"
         dominantBaseline="middle"
         fill="var(--mkink)"
@@ -335,7 +315,7 @@ export default function AssetPriceChart({
         const timestamp = new Date(order.executedAt).getTime()
         const candle = findNearestCandle(candleData, timestamp)
         const isBuy = order.type === 'buy'
-        // Anchor outside the candle wick so arrows never sit inside the body.
+        // Anchor outside the candle wick so pins never sit inside the body.
         const anchorPrice = candle
           ? isBuy
             ? Math.min(order.price, candle.low)
@@ -421,7 +401,7 @@ export default function AssetPriceChart({
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart
           data={candleData}
-          margin={{ top: 16, right: narrowViewport ? 4 : 12, left: 0, bottom: 0 }}
+          margin={{ top: 18, right: narrowViewport ? 4 : 12, left: 0, bottom: 4 }}
         >
           <CartesianGrid stroke="var(--line)" strokeDasharray="0" vertical={false} />
           <XAxis
