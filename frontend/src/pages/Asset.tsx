@@ -1,8 +1,9 @@
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { useQuery } from '@apollo/client'
+import { useMutation, useQuery } from '@apollo/client'
 import { Fragment, useState, useMemo, useEffect } from 'react'
 import { format } from 'date-fns'
 import { GET_ASSET, GET_PORTFOLIO, GET_ASSET_PRICE_HISTORY } from '../graphql/queries'
+import { ADD_POSITION_VALUATION, DELETE_POSITION_VALUATION } from '../graphql/mutations'
 import AssetPriceChart from '../components/charts/AssetPriceChart'
 import PortfolioValueChart from '../components/charts/PortfolioValueChart'
 import ValuationTable from '../components/portfolio/ValuationTable'
@@ -28,12 +29,15 @@ export default function Asset() {
   const [hoveredCandle, setHoveredCandle] = useState<{ timestamp: number; close: number } | null>(
     null,
   )
+  const [busy, setBusy] = useState(false)
 
   const { data: portfolioData } = useQuery(GET_PORTFOLIO)
-  const { data, loading, error } = useQuery(GET_ASSET, {
+  const { data, loading, error, refetch } = useQuery(GET_ASSET, {
     variables: { symbol },
     skip: !symbol,
   })
+  const [addValuation] = useMutation(ADD_POSITION_VALUATION)
+  const [deleteValuation] = useMutation(DELETE_POSITION_VALUATION)
 
   const assetData = data?.asset
   const venues = assetData?.positions || []
@@ -355,6 +359,37 @@ export default function Asset() {
               valuations={venue.valuations || []}
               venue={venue.exchange}
               showVenue
+              busy={busy}
+              onAdd={async (input) => {
+                setBusy(true)
+                try {
+                  await addValuation({
+                    variables: {
+                      positionId: venue.id,
+                      valueAmount: input.valueAmount,
+                      recordedAt: input.recordedAt,
+                      quantity: input.quantity,
+                    },
+                    refetchQueries: ['GetPortfolio', 'GetAsset', 'GetPosition'],
+                  })
+                  await refetch()
+                } finally {
+                  setBusy(false)
+                }
+              }}
+              onDelete={async (valuationId) => {
+                if (!window.confirm('Delete this valuation?')) return
+                setBusy(true)
+                try {
+                  await deleteValuation({
+                    variables: { id: valuationId },
+                    refetchQueries: ['GetPortfolio', 'GetAsset', 'GetPosition'],
+                  })
+                  await refetch()
+                } finally {
+                  setBusy(false)
+                }
+              }}
             />
           ),
         )
