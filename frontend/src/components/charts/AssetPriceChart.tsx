@@ -192,20 +192,10 @@ function CandlestickLayer({ xAxisMap, yAxisMap, data, offset, onCandleHover }: C
   )
 }
 
-/** Pixel gap between the candle wick and the pin tip. */
-const PIN_GAP = 7
-const PIN_RADIUS = 8
-const PIN_POINTER = 4.5
-
-/** Map-pin path: circular badge with a short pointer toward the candle (OKX/Binance style). */
-function orderPinPath(cx: number, tipY: number, dir: 1 | -1): string {
-  const r = PIN_RADIUS
-  const bodyCy = tipY + dir * (PIN_POINTER + r)
-  const shoulderX = r * 0.68
-  const shoulderY = bodyCy - dir * r * 0.48
-  const sweep = dir > 0 ? 1 : 0
-  return `M${cx},${tipY} L${cx + shoulderX},${shoulderY} A${r} ${r} 0 1 ${sweep} ${cx - shoulderX},${shoulderY} Z`
-}
+/** Pixel gap between the candle wick and the pin stem. */
+const PIN_GAP = 4
+const PIN_RADIUS = 9
+const PIN_STEM = 5
 
 function OrderPin({
   cx,
@@ -221,27 +211,38 @@ function OrderPin({
   const isBuy = payload?.type === 'buy'
   const color = isBuy ? 'var(--green)' : 'var(--down)'
   const label = isBuy ? 'B' : 'S'
-  // Buy sits below the candle; sell sits above. Tip points at the wick.
+  // Buy sits below the candle; sell sits above. Stem points at the wick.
   const dir: 1 | -1 = isBuy ? 1 : -1
-  const tipY = cy + dir * PIN_GAP
-  const bodyCy = tipY + dir * (PIN_POINTER + PIN_RADIUS)
+  const stemStart = cy + dir * PIN_GAP
+  const stemEnd = stemStart + dir * PIN_STEM
+  const bodyCy = stemEnd + dir * PIN_RADIUS
 
   return (
     <g pointerEvents="none">
-      <path
-        d={orderPinPath(cx, tipY, dir)}
+      <line
+        x1={cx}
+        y1={stemStart}
+        x2={cx}
+        y2={stemEnd}
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
+      <circle
+        cx={cx}
+        cy={bodyCy}
+        r={PIN_RADIUS}
         fill={color}
         stroke="var(--card)"
-        strokeWidth={1.35}
-        strokeLinejoin="round"
+        strokeWidth={1.5}
       />
       <text
         x={cx}
-        y={bodyCy + 0.4}
+        y={bodyCy + 0.5}
         textAnchor="middle"
         dominantBaseline="middle"
         fill="var(--mkink)"
-        fontSize={8}
+        fontSize={9}
         fontWeight={700}
         fontFamily="IBM Plex Mono, monospace"
       >
