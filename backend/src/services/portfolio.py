@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Tuple
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_
 
-from ..data_quality import is_valid_price, is_valid_quantity, snapshot_skip_reason
+from ..data_quality import positive_finite, snapshot_skip_reason
 from ..models.database import (
     Asset,
     Position,
@@ -37,13 +37,15 @@ class PortfolioService:
         missing_price_count = 0
         for position in positions:
             qty = position.quantity
-            if not is_valid_quantity(qty):
+            parsed_qty = positive_finite(qty)
+            if parsed_qty is None:
                 continue
             price = position.asset.current_price if position.asset else None
-            if not is_valid_price(price):
+            parsed_price = positive_finite(price)
+            if parsed_price is None:
                 missing_price_count += 1
                 continue
-            total_value += qty * price
+            total_value += parsed_qty * parsed_price
         return total_value, len(positions), missing_price_count
 
     def get_portfolio_value(self) -> float:

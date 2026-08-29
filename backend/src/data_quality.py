@@ -6,6 +6,8 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 # Amounts at or below this are treated as missing / dust, not a real quote.
 VALUE_EPSILON = 1e-12
+# Numeric columns that decide whether a connector row is worth keeping.
+_QUALITY_FIELDS = ("quantity", "price")
 
 
 class ConnectorFetchError(Exception):
@@ -23,52 +25,57 @@ def as_finite_float(value: Any) -> Optional[float]:
     return number
 
 
-def is_valid_price(value: Any) -> bool:
+def positive_finite(value: Any) -> Optional[float]:
+    """Return value as float when it is finite and strictly positive, else None.
+
+    Shared check for prices, quantities, and any other quote-like amount.
+    """
     number = as_finite_float(value)
-    return number is not None and number > VALUE_EPSILON
+    if number is None or number <= VALUE_EPSILON:
+        return None
+    return number
 
 
-def is_valid_quantity(value: Any) -> bool:
-    number = as_finite_float(value)
-    return number is not None and number > VALUE_EPSILON
+def sanitize_row(row: Any) -> Optional[Dict[str, Any]]:
+    """Keep a mapping row if it has a symbol and usable quantity/price columns.
 
-
-def sanitize_prices(prices: Optional[Mapping[str, Any]]) -> Dict[str, float]:
-    """Keep only symbols with a strictly positive finite price."""
-    if not prices:
-        return {}
-    cleaned: Dict[str, float] = {}
-    for symbol, raw in prices.items():
-        if not symbol:
+    Present `quantity` and/or `price` keys must be strictly positive and finite.
+    At least one of those columns must be present. Invalid or missing symbol,
+    or a bad numeric column, drops the row.
+    """
+    if not isinstance(row, Mapping):
+        return None
+    symbol = row.get("symbol")
+    if not symbol or not str(symbol).strip():
+        return None
+    out = dict(row)
+    out["symbol"] = str(symbol).strip()
+    seen_quality_field = False
+    for key in _QUALITY_FIELDS:
+        if key not in row:
             continue
-        number = as_finite_float(raw)
-        if number is None or number <= VALUE_EPSILON:
-            continue
-        cleaned[str(symbol)] = number
-    return cleaned
+        number = positive_finite(row.get(key))
+        if number is None:
+            return None
+        out[key] = number
+        seen_quality_field = True
+    if not seen_quality_field:
+        return None
+    return out
 
 
-def sanitize_balances(
-    balances: Optional[Iterable[Mapping[str, Any]]],
+def sanitize_rows(
+    rows: Optional[Iterable[Any]],
 ) -> List[Dict[str, Any]]:
-    """Keep only balance rows with a symbol and a strictly positive quantity."""
-    if not balances:
+    """Apply sanitize_row to a collection; drop anything that fails the checks."""
+    if not rows:
         return []
-    cleaned: List[Dict[str, Any]] = []
-    for row in balances:
-        if not isinstance(row, Mapping):
-            continue
-        symbol = row.get("symbol")
-        if not symbol or not str(symbol).strip():
-            continue
-        qty = as_finite_float(row.get("quantity"))
-        if qty is None or qty <= VALUE_EPSILON:
-            continue
-        out = dict(row)
-        out["symbol"] = str(symbol).strip()
-        out["quantity"] = qty
-        cleaned.append(out)
-    return cleaned
+    cleaned_rows: List[Dict[str, Any]] = []
+    for row in rows:
+        cleaned = sanitize_row(row)
+        if cleaned is not None:
+            cleaned_rows.append(cleaned)
+    return cleaned_rows
 
 
 def snapshot_skip_reason(

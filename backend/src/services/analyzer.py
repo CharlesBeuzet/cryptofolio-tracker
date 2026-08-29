@@ -4,7 +4,7 @@ from typing import List, Optional
 
 from sqlalchemy.orm import Session, joinedload
 
-from ..data_quality import is_valid_price
+from ..data_quality import positive_finite
 from ..models.database import Order, Position, PositionMetrics
 from .metrics_helpers import QTY_EPSILON, has_qty_mismatch
 
@@ -90,7 +90,7 @@ class PositionAnalyzerService:
     def _refresh_market(
         self, metrics: PositionMetrics, current_price: Optional[float]
     ) -> None:
-        if metrics.order_derived_qty > QTY_EPSILON and is_valid_price(current_price):
+        if metrics.order_derived_qty > QTY_EPSILON and positive_finite(current_price):
             metrics.holding_value = metrics.order_derived_qty * current_price
             remaining_cost = metrics.avg_entry_price * metrics.order_derived_qty
             metrics.unrealised_pnl = metrics.holding_value - remaining_cost
@@ -130,7 +130,7 @@ class PositionAnalyzerService:
         )
         if position and position.asset:
             price = position.asset.current_price
-            return price if is_valid_price(price) else None
+            return positive_finite(price)
         return None
 
     def _log_qty_mismatch(self, position: Position, metrics: PositionMetrics) -> None:
@@ -177,7 +177,7 @@ class PositionAnalyzerService:
         metrics = self.ensure_metrics(position_id)
         if current_price is None:
             current_price = self._position_price(position_id)
-        if not is_valid_price(current_price) and metrics.order_derived_qty > QTY_EPSILON:
+        if positive_finite(current_price) is None and metrics.order_derived_qty > QTY_EPSILON:
             print(
                 f"Warning: no usable current price for position {position_id}; "
                 "keeping last unrealised PnL."
@@ -252,7 +252,7 @@ class PositionAnalyzerService:
         for position in positions:
             price = position.asset.current_price if position.asset else None
             self.refresh_market_metrics(
-                position.id, price if is_valid_price(price) else None
+                position.id, positive_finite(price)
             )
             count += 1
         return count

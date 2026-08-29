@@ -5,7 +5,7 @@ from typing import Any, List, Tuple
 from sqlalchemy import and_, func
 from sqlalchemy.orm import Session, joinedload
 
-from ..data_quality import is_valid_price, is_valid_quantity
+from ..data_quality import sanitize_row
 from ..models.database import Order, Position
 from .analyzer import PositionAnalyzerService
 
@@ -65,14 +65,14 @@ class OrderService:
             ext_id = row.get("external_order_id")
             if not ext_id:
                 continue
-            if not is_valid_quantity(row.get("quantity")) or not is_valid_price(
-                row.get("price")
-            ):
+            cleaned = sanitize_row(row)
+            if cleaned is None:
                 print(
                     f"Skipping invalid order {ext_id} on {exchange}: "
                     f"qty={row.get('quantity')} price={row.get('price')}"
                 )
                 continue
+            row = cleaned
             exists = (
                 self.db.query(Order)
                 .filter(

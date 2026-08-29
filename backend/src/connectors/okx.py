@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from ..data_quality import ConnectorFetchError, is_valid_price
+from ..data_quality import ConnectorFetchError, positive_finite
 from .base import BaseConnector
 
 # OKX order history is split between a 7-day endpoint and a 3-month archive.
@@ -110,7 +110,7 @@ class OkxConnector(BaseConnector):
             return None
         if quantity <= 0:
             return None
-        if not is_valid_price(price):
+        if positive_finite(price) is None:
             return None
         base = market_pair.split("/")[0] if "/" in market_pair else market_pair
         return {
@@ -227,8 +227,9 @@ class OkxConnector(BaseConnector):
                 try:
                     ticker = self.exchange.fetch_ticker(pair)
                     last = ticker.get("last") if isinstance(ticker, dict) else None
-                    if is_valid_price(last):
-                        prices[symbol] = float(last)
+                    parsed_last = positive_finite(last)
+                    if parsed_last is not None:
+                        prices[symbol] = parsed_last
                     else:
                         print(f"Ignoring invalid OKX price for {pair}: {last}")
                 except Exception as e:

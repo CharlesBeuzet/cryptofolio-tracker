@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from ..data_quality import ConnectorFetchError, is_valid_price
+from ..data_quality import ConnectorFetchError, positive_finite
 
 
 class BaseConnector(ABC):
@@ -167,7 +167,7 @@ class BaseConnector(ABC):
                 close = float(candle[4])
             except (TypeError, ValueError):
                 continue
-            if not all(is_valid_price(v) for v in (open_, high, low, close)):
+            if not all(positive_finite(v) for v in (open_, high, low, close)):
                 continue
             points.append(
                 {

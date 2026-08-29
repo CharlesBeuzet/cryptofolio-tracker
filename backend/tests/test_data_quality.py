@@ -16,9 +16,9 @@ from src.connectors.binance import BinanceConnector
 from src.connectors.okx import OkxConnector
 from src.data_quality import (
     ConnectorFetchError,
-    is_valid_price,
-    sanitize_balances,
-    sanitize_prices,
+    positive_finite,
+    sanitize_row,
+    sanitize_rows,
     snapshot_skip_reason,
 )
 from src.models.database import Asset, Base, Position, PositionMetrics, PortfolioSnapshot
@@ -88,21 +88,24 @@ class _FakeConnector:
 
 
 class SanitizeHelpersTests(unittest.TestCase):
-    def test_sanitize_prices_drops_zero_nan_and_negative(self):
-        cleaned = sanitize_prices(
-            {
-                "BTC": 100.0,
-                "ETH": 0,
-                "SOL": float("nan"),
-                "DOGE": -1,
-                "XRP": float("inf"),
-                "": 12.0,
-            }
-        )
-        self.assertEqual(cleaned, {"BTC": 100.0})
+    def test_sanitize_rows_keeps_valid_price_or_quantity(self):
+        prices = {
+            row["symbol"]: row["price"]
+            for row in sanitize_rows(
+                {"symbol": symbol, "price": raw}
+                for symbol, raw in {
+                    "BTC": 100.0,
+                    "ETH": 0,
+                    "SOL": float("nan"),
+                    "DOGE": -1,
+                    "XRP": float("inf"),
+                    "": 12.0,
+                }.items()
+            )
+        }
+        self.assertEqual(prices, {"BTC": 100.0})
 
-    def test_sanitize_balances_drops_invalid_rows(self):
-        cleaned = sanitize_balances(
+        cleaned = sanitize_rows(
             [
                 {"symbol": "BTC", "quantity": 0.5, "exchange": "binance"},
                 {"symbol": "ETH", "quantity": 0, "exchange": "binance"},
@@ -114,6 +117,15 @@ class SanitizeHelpersTests(unittest.TestCase):
         self.assertEqual(len(cleaned), 1)
         self.assertEqual(cleaned[0]["symbol"], "BTC")
         self.assertEqual(cleaned[0]["quantity"], 0.5)
+
+    def test_sanitize_row_requires_both_price_and_quantity_when_present(self):
+        self.assertIsNotNone(
+            sanitize_row({"symbol": "BTC", "quantity": 1.0, "price": 50_000.0})
+        )
+        self.assertIsNone(
+            sanitize_row({"symbol": "BTC", "quantity": 1.0, "price": 0})
+        )
+        self.assertIsNone(sanitize_row({"symbol": "BTC"}))
 
     def test_snapshot_skip_reason_rejects_zero_with_missing_prices(self):
         reason = snapshot_skip_reason(
@@ -135,10 +147,11 @@ class SanitizeHelpersTests(unittest.TestCase):
             )
         )
 
-    def test_is_valid_price_rejects_nan(self):
-        self.assertFalse(is_valid_price(float("nan")))
-        self.assertFalse(is_valid_price(0))
-        self.assertTrue(is_valid_price(1.0))
+    def test_positive_finite_rejects_nan_zero_and_negative(self):
+        self.assertIsNone(positive_finite(float("nan")))
+        self.assertIsNone(positive_finite(0))
+        self.assertIsNone(positive_finite(-1))
+        self.assertEqual(positive_finite(1.0), 1.0)
 
 
 class AssetsSyncQualityTests(unittest.IsolatedAsyncioTestCase):
