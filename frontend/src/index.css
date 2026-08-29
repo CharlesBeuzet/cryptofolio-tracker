@@ -103,12 +103,29 @@ body {
     @apply h-px w-full bg-sillage-line;
   }
 
+  /* Outer scroller: keeps the pill shape while 2Y/5Y remain reachable on narrow screens. */
+  .seg-scroll {
+    @apply min-w-0 max-w-full overflow-x-auto border border-sillage-line rounded-lg;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+  }
+
+  .seg-scroll::-webkit-scrollbar {
+    height: 4px;
+  }
+
+  .seg-scroll::-webkit-scrollbar-thumb {
+    background: var(--line);
+    border-radius: 4px;
+  }
+
   .seg {
-    @apply inline-flex border border-sillage-line rounded-lg overflow-hidden max-w-full;
+    @apply flex w-max min-w-full;
   }
 
   .segb {
-    @apply px-2.5 sm:px-3 py-2 sm:py-[5px] min-h-[36px] sm:min-h-0 font-mono text-[11px] text-sillage-soft cursor-pointer border-r border-sillage-line last:border-r-0 flex items-center justify-center;
+    @apply px-2 sm:px-3 py-2 sm:py-[5px] min-h-[36px] sm:min-h-0 font-mono text-[11px] text-sillage-soft cursor-pointer border-r border-sillage-line last:border-r-0 flex items-center justify-center whitespace-nowrap flex-1 basis-0 shrink-0;
   }
 
   .segb.on {
@@ -207,7 +224,7 @@ body {
   }
 
   .page-head {
-    @apply flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-end mb-[18px];
+    @apply flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-end mb-[18px] min-w-0;
   }
 
   .page-title {

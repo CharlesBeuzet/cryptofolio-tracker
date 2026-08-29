@@ -45,7 +45,7 @@ export default function Home() {
   return (
     <div>
       <div className="page-head">
-        <div>
+        <div className="min-w-0">
           <div className="lbl">§1 · Overview</div>
           <div className="page-title">Consolidated positions</div>
         </div>
