@@ -146,6 +146,11 @@ export default function Asset() {
 
   const avgEntryPrice = asset?.avgEntryPrice ?? 0
   const costBasis = asset?.costBasis ?? 0
+  const cashInTrade = venues.reduce(
+    (sum: number, p: { metrics?: { cashInTrade?: number | null } }) =>
+      sum + (p.metrics?.cashInTrade ?? 0),
+    0,
+  )
   const marketValue = asset?.value ?? 0
   const holdings = asset?.quantity ?? 0
 
@@ -260,6 +265,7 @@ export default function Asset() {
             {[
               ['Market value', formatUsdPrecise(marketValue)],
               ['Cost basis', formatUsdPrecise(costBasis)],
+              ['Cash in trade', formatUsdPrecise(cashInTrade)],
               ['Avg entry', formatTokenPrice(avgEntryPrice)],
               ...(avgExitPrice != null
                 ? [['Avg sell', formatTokenPrice(avgExitPrice)] as const]

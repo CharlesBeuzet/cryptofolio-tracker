@@ -70,6 +70,7 @@ export default function Position() {
   const position = data.position
   const assetTabs = groupPositionsByAsset(portfolioData?.portfolio?.positions || [])
   const costBasis = position.avgEntryPrice * position.quantity
+  const cashInTrade = position.metrics?.cashInTrade ?? 0
   const unrealized = position.pnl || 0
   const isPositive = unrealized >= 0
 
@@ -188,6 +189,7 @@ export default function Position() {
             {[
               ['Market value', formatUsdPrecise(position.value)],
               ['Cost basis', formatUsdPrecise(costBasis)],
+              ['Cash in trade', formatUsdPrecise(cashInTrade)],
               ['Avg entry', formatTokenPrice(position.avgEntryPrice)],
               ...(position.metrics?.avgExitPrice != null
                 ? [['Avg sell', formatTokenPrice(position.metrics.avgExitPrice)] as const]

@@ -91,6 +91,7 @@ export const GET_POSITION = gql`
       }
       metrics {
         avgExitPrice
+        cashInTrade
       }
       orders {
         id
@@ -130,6 +131,9 @@ export const GET_ASSET = gql`
         firstBoughtAt
         exchange
         durationDays
+        metrics {
+          cashInTrade
+        }
       }
       orders {
         id
