@@ -1,9 +1,10 @@
 """Portfolio service for aggregating and calculating portfolio data."""
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_
 
+from ..utils.data_quality import positive_finite, snapshot_skip_reason
 from ..models.database import (
     Asset,
     Position,
@@ -24,19 +25,76 @@ class PortfolioService:
                 joinedload(Position.asset),
                 joinedload(Position.orders),
                 joinedload(Position.metrics),
+                joinedload(Position.tag),
             )
             .filter(Position.status == "open")
         )
 
-    def get_portfolio_value(self) -> float:
-        """Calculate total portfolio value."""
+    def get_portfolio_valuation(self) -> Tuple[float, int, int]:
+        """Return (total_value, open_position_count, missing_price_count)."""
         positions = self._open_positions_query().all()
         total_value = 0.0
+        missing_price_count = 0
         for position in positions:
+            qty = position.quantity
+            parsed_qty = positive_finite(qty)
+            if parsed_qty is None:
+                continue
             price = position.asset.current_price if position.asset else None
-            if price:
-                total_value += position.quantity * price
+            parsed_price = positive_finite(price)
+            if parsed_price is None:
+                missing_price_count += 1
+                continue
+            total_value += parsed_qty * parsed_price
+        return total_value, len(positions), missing_price_count
+
+    def get_portfolio_value(self) -> float:
+        """Calculate total portfolio value from positions with a usable price."""
+        total_value, _, _ = self.get_portfolio_valuation()
         return total_value
+
+    def record_snapshot(self, min_interval_hours: float = 5.0) -> Optional[PortfolioSnapshot]:
+        """Persist the current portfolio total value as a historical snapshot.
+
+        Returns the new snapshot, or None if skipped because a recent one exists
+        or because the computed value fails the quality gate (e.g. a zero
+        total while holdings have no usable prices).
+        """
+        if min_interval_hours > 0:
+            cutoff = datetime.utcnow() - timedelta(hours=min_interval_hours)
+            recent = (
+                self.db.query(PortfolioSnapshot)
+                .filter(PortfolioSnapshot.timestamp >= cutoff)
+                .first()
+            )
+            if recent:
+                print("Portfolio snapshot skipped (recent snapshot exists).")
+                return None
+
+        total_value, open_count, missing_prices = self.get_portfolio_valuation()
+        last = (
+            self.db.query(PortfolioSnapshot)
+            .order_by(PortfolioSnapshot.timestamp.desc())
+            .first()
+        )
+        skip = snapshot_skip_reason(
+            total_value,
+            open_position_count=open_count,
+            missing_price_count=missing_prices,
+            last_value=last.total_value if last else None,
+        )
+        if skip:
+            print(f"Portfolio snapshot skipped ({skip}).")
+            return None
+
+        snapshot = PortfolioSnapshot(
+            total_value=total_value,
+            timestamp=datetime.utcnow(),
+        )
+        self.db.add(snapshot)
+        self.db.commit()
+        self.db.refresh(snapshot)
+        return snapshot
 
     def get_todays_pnl(self) -> Dict[str, float]:
         """Calculate today's P&L."""
@@ -81,6 +139,7 @@ class PortfolioService:
                 joinedload(Position.asset),
                 joinedload(Position.orders),
                 joinedload(Position.metrics),
+                joinedload(Position.tag),
             )
             .filter(Position.id == position_id)
             .first()
@@ -89,14 +148,15 @@ class PortfolioService:
     def get_portfolio_history(
         self, days: int = 180
     ) -> List[Dict]:
-        """Get portfolio value history for the last N days."""
-        cutoff_date = datetime.utcnow() - timedelta(days=days)
-        snapshots = (
-            self.db.query(PortfolioSnapshot)
-            .filter(PortfolioSnapshot.timestamp >= cutoff_date)
-            .order_by(PortfolioSnapshot.timestamp.asc())
-            .all()
-        )
+        """Get portfolio value history for the last N days.
+
+        Pass days <= 0 for Max: return all stored snapshots with no cutoff.
+        """
+        query = self.db.query(PortfolioSnapshot)
+        if days > 0:
+            cutoff_date = datetime.utcnow() - timedelta(days=days)
+            query = query.filter(PortfolioSnapshot.timestamp >= cutoff_date)
+        snapshots = query.order_by(PortfolioSnapshot.timestamp.asc()).all()
         return [
             {"timestamp": s.timestamp, "value": s.total_value} for s in snapshots
         ]

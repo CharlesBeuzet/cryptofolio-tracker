@@ -58,7 +58,7 @@ When fully exited (`order_derived_qty = 0`): `unrealised_pnl = 0`, `realised_pnl
 | Field | Formula | Notes |
 |-------|---------|-------|
 | `cost_basis` | `avg_entry_price × order_derived_qty` | Remaining book cost of unsold units |
-| `cash_in_trade` | `total_buy_cost − total_sell_proceeds` | Net capital deployed minus proceeds withdrawn. When fully exited after a **loss**, this stays **positive** (e.g. bought $1,000, sold $800 → +$200). After a **profit**, it can be **negative**. |
+| `cash_in_trade` | `max(0, total_buy_cost − total_sell_proceeds)` | Net capital still in the trade. Capped at **0** once sales have repaid the stake — further sales are profit. After a **loss**, this stays **positive** (e.g. bought $1,000, sold $800 → +$200). |
 
 ## Incremental update rules
 
@@ -117,3 +117,7 @@ If `order_derived_qty` diverges from `positions.quantity` (exchange balance), a 
 If an old database still has legacy columns on `positions` (`avg_entry_price`, `pnl`, `pnl_percent`), delete `portfolio.db` in development and re-sync, or rebuild that table manually.
 
 After schema is correct, the scheduler backfills metrics from order history on the next sync cycle.
+
+---
+
+← [Docs hub](README.md) · [Features](features.md)

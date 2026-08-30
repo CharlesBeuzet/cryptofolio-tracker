@@ -1,184 +1,105 @@
 # Crypto Portfolio Tracker
 
-A lightweight crypto portfolio tracking application designed to run on Raspberry Pi 5. Track your positions across multiple exchanges (Binance, Coinbase) and hot wallets.
+**Your entire crypto life — exchanges, wallets, P&L — on a machine you own.**
 
-## Features
+Stop tabbing between Binance, OKX, Coinbase, and block explorers. Stop trusting a SaaS dashboard with your balances. Run a private portfolio tracker on a Raspberry Pi (or any machine), refresh hourly, and see the full picture in one place.
 
-- **Portfolio Overview**: View total portfolio value, today's P&L, asset distribution, and position rankings
-- **Performance Analysis**: Track portfolio value evolution over time with BTC comparison
-- **Position Details**: In-depth analysis of individual positions with order history
-- **Multi-Source Tracking**: Aggregate data from Binance, Coinbase, and hot wallets
-- **Hourly Updates**: Automatic data synchronization every hour
+---
 
-## Technology Stack
+### Why people install it
 
-### Backend
-- Python 3.11+
-- FastAPI with Strawberry GraphQL
-- SQLite database
-- ccxt for exchange APIs
-- web3.py for blockchain wallet queries
+| | |
+|---|---|
+| **One view** | Total NAV, today's P&L, allocation, and ranked positions — not five browser tabs. |
+| **Your keys stay home** | API secrets live in a local config file. No cloud account. No telemetry. |
+| **Built for a Pi** | SQLite, a single Docker container, one published port. Designed for Raspberry Pi 4/5. |
+| **Real analytics** | Average-cost entry, realised / unrealised P&L, order history per position. |
+| **Multi-source by default** | Binance · OKX · Ethereum hot wallets — aggregated into one portfolio. |
 
-### Frontend
-- React 18 with TypeScript
-- Vite build tool
-- Tailwind CSS for styling (SILLAGE design system)
-- Apollo Client for GraphQL
-- Recharts for data visualization
+---
 
-## Setup Instructions
+### What you get
 
-### Prerequisites
+- **Portfolio overview** — value, daily P&L, distribution, rankings  
+- **Performance over time** — NAV evolution and theses by venue / tag  
+- **Position deep-dives** — charts, metrics, and full order history  
+- **Conviction tags** — label positions by thesis; group Theses by tag  
+- **Settings** — edit connectors and tags in the UI (secrets stay masked)  
+- **Hourly sync** — connectors pull balances and orders on a schedule  
+- **Self-hosted UI** — React dashboard with dark / light themes  
 
-- Python 3.11 or higher
-- Node.js 18 or higher
-- npm or yarn
+Want the full list? → **[Features](docs/features.md)**
 
-### Backend Setup
+Curious how the pieces fit together? → **[How it works](docs/how-it-works.md)**
 
-1. Navigate to the backend directory:
+---
+
+### Install in minutes
+
+On a Raspberry Pi with Docker:
+
 ```bash
-cd backend
+mkdir -p data
+cp settings/config.example.yaml data/config.yaml
+# edit data/config.yaml with read-only exchange keys + wallet addresses
+touch data/portfolio.db
+docker compose up -d --build
 ```
 
-2. Create a virtual environment (recommended):
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
+Open `http://<pi-ip>:8080` — you're live. After first run you can also manage connectors under **Settings → Connections**.
 
-3. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
+→ **[Full installation guide](docs/installation.md)** (Docker on Pi · local development)  
+→ **[Configuration](docs/configuration.md)** (exchanges, wallets, security)  
+→ **[Settings](docs/settings.md)** (Connections UI and config API)  
+→ **[Usage & GraphQL API](docs/usage.md)**
 
-4. Configure your API keys and wallet addresses:
-```bash
-cd ../settings
-cp config.example.yaml config.yaml
-# Edit config.yaml with your actual credentials
-```
+---
 
-5. Initialize the database:
-```bash
-cd ../backend
-python -m src.main
-# This will create the SQLite database and start the server
-```
+### Documentation
 
-The backend will run on `http://localhost:8000` and the GraphQL endpoint will be available at `http://localhost:8000/graphql`
+| Guide | What you'll find |
+|-------|------------------|
+| [Features](docs/features.md) | What the product does, page by page |
+| [How it works](docs/how-it-works.md) | Architecture, stack, data flow, project layout |
+| [Installation](docs/installation.md) | Docker (Pi) and local backend / frontend setup |
+| [Configuration](docs/configuration.md) | API keys, wallets, security practices |
+| [Settings](docs/settings.md) | Connections editor, masked secrets, config API |
+| [Usage](docs/usage.md) | Day-to-day use and GraphQL examples |
+| [Troubleshooting](docs/troubleshooting.md) | Common fixes and Pi performance tips |
+| [Position metrics](docs/position-metrics.md) | Average-cost P&L and analytics model |
+| [Position tags](docs/position-tags.md) | Conviction tags per asset × exchange |
+| [Docs hub](docs/README.md) | Index of all documentation |
 
-### Frontend Setup
+Component notes: [backend](backend/readme.md) · [frontend](frontend/readme.md) · [settings](settings/readme.md)
 
-1. Navigate to the frontend directory:
-```bash
-cd frontend
-```
+---
 
-2. Install dependencies:
-```bash
-npm install
-```
+### Stack at a glance
 
-3. Start the development server:
-```bash
-npm run dev
-```
+**Backend** — Python · FastAPI · Strawberry GraphQL · SQLite · ccxt · web3.py  
 
-The frontend will run on `http://localhost:5173`
+**Frontend** — React · TypeScript · Vite · Tailwind · Apollo · Recharts  
 
-## Configuration
+Details in **[How it works](docs/how-it-works.md)**.
 
-Edit `settings/config.yaml` (create from `config.example.yaml`) to configure:
+---
 
-- **Binance**: API key and secret
-- **Coinbase**: API key, secret, and passphrase
-- **Hot Wallets**: Ethereum addresses and token contracts to track
+### Philosophy
 
-**Important**: Never commit `config.yaml` to version control. It contains sensitive API keys.
+Your portfolio data is yours. This app runs where you put it, talks only to the exchanges and RPCs you configure, and stores everything in a local SQLite file. Read-only API keys are enough. Wallet tracking needs public addresses only — never private keys.
 
-## Project Structure
+There is no reason to hand your balances and holdings to a SaaS portfolio dashboard. That creates an unnecessary data leak: a third party sees your net worth and positions, and that data can be shared, subpoenaed, or disclosed under government requests. Self-hosting keeps valuation data on a machine you control.
 
-```
-cryptofolio-tracker/
-├── backend/
-│   ├── src/
-│   │   ├── connectors/     # Data source connectors
-│   │   ├── graphql/        # GraphQL schema and resolvers
-│   │   ├── models/         # Database models
-│   │   ├── services/       # Business logic
-│   │   └── main.py         # FastAPI application entry point
-│   └── requirements.txt
-├── frontend/
-│   ├── src/
-│   │   ├── components/     # React components
-│   │   ├── graphql/        # GraphQL queries and client
-│   │   ├── pages/          # Page components
-│   │   └── App.tsx
-│   └── package.json
-└── settings/
-    ├── config.example.yaml # Configuration template
-    └── config.yaml          # Your actual config (gitignored)
-```
+---
 
-## Usage
+### License
 
-1. Start the backend server (from `backend/` directory):
-```bash
-python -m src.main
-```
+This project is released under the [MIT License](LICENSE).
 
-2. Start the frontend development server (from `frontend/` directory):
-```bash
-npm run dev
-```
+You may use it, fork it, modify it, and open pull requests — including for commercial use — as long as you keep the copyright notice and license text (attribution to this repository / author). See [LICENSE](LICENSE) for the full terms.
 
-3. Open your browser to `http://localhost:5173`
+---
 
-4. The scheduler will automatically update portfolio data every hour. You can also manually trigger updates by calling the GraphQL API.
-
-## GraphQL API
-
-The GraphQL endpoint is available at `http://localhost:8000/graphql`. You can use GraphQL Playground or any GraphQL client to explore the API.
-
-Example query:
-```graphql
-query {
-  portfolio {
-    totalValue
-    todaysPnl
-    positions {
-      symbol
-      quantity
-      value
-      pnl
-    }
-  }
-}
-```
-
-## Security Notes
-
-- All API keys are stored locally in `settings/config.yaml` (gitignored)
-- The backend runs locally and is not exposed to the internet by default
-- Use read-only API keys for exchanges when possible
-- Hot wallet tracking only requires public addresses (no private keys needed)
-
-## Performance Considerations for Raspberry Pi 5
-
-- SQLite database (no separate database server)
-- Lightweight dependencies
-- Efficient data fetching with batch requests
-- Frontend code splitting for faster loads
-- Hourly updates to reduce API rate limiting
-
-## Troubleshooting
-
-- **Database not found**: Run the backend once to initialize the database
-- **Connection errors**: Check that your API keys in `config.yaml` are correct
-- **No data showing**: Ensure the scheduler has run at least once (runs hourly, or restart backend)
-- **CORS errors**: Make sure backend is running on port 8000 and frontend on 5173
-
-## License
+**Ready?** Start with the **[installation guide](docs/installation.md)**.
 
 Author: Charles Beuzet

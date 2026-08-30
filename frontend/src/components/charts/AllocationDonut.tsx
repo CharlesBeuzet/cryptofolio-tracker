@@ -1,39 +1,51 @@
 import { useMemo } from 'react'
 import { assetColor } from '../../utils/format'
+import { groupPositionsByAsset, type PositionLike } from '../../utils/groupPositionsByAsset'
 
-interface Position {
+interface AllocationSlice {
   symbol: string
   value: number
 }
 
 interface AllocationDonutProps {
-  positions: Position[]
+  /** Raw venue positions (grouped by symbol) or already-aggregated asset slices. */
+  positions: Array<PositionLike | AllocationSlice>
 }
 
 export default function AllocationDonut({ positions }: AllocationDonutProps) {
-  const sorted = useMemo(
-    () => [...positions].filter((p) => p.value > 0).sort((a, b) => b.value - a.value),
-    [positions],
-  )
+  const assets = useMemo(() => {
+    const first = positions[0]
+    // Venue rows from GraphQL carry a numeric position id; asset rollups do not.
+    if (first && 'id' in first && typeof first.id === 'number') {
+      return groupPositionsByAsset(positions as PositionLike[])
+        .filter((a) => a.value > 0)
+        .map((a) => ({ symbol: a.symbol, value: a.value }))
+    }
 
-  const totalValue = sorted.reduce((sum, p) => sum + p.value, 0)
+    return [...positions]
+      .filter((p) => p.value > 0)
+      .map((p) => ({ symbol: p.symbol, value: p.value }))
+      .sort((a, b) => b.value - a.value)
+  }, [positions])
+
+  const totalValue = assets.reduce((sum, p) => sum + p.value, 0)
 
   const segments = useMemo(() => {
     let acc = 0
-    return sorted.map((pos, i) => {
+    return assets.map((pos, i) => {
       const pct = totalValue > 0 ? (pos.value / totalValue) * 100 : 0
       const start = acc
       acc += pct
       return { ...pos, color: assetColor(i), pct, start, end: acc }
     })
-  }, [sorted, totalValue])
+  }, [assets, totalValue])
 
   const donutBg =
     segments.length > 0
       ? `conic-gradient(${segments.map((s) => `${s.color} ${s.start.toFixed(2)}% ${s.end.toFixed(2)}%`).join(', ')})`
       : 'var(--line)'
 
-  if (sorted.length === 0) {
+  if (assets.length === 0) {
     return <div className="flex items-center justify-center h-48 text-sillage-soft text-sm">No positions</div>
   }
 
@@ -42,7 +54,7 @@ export default function AllocationDonut({ positions }: AllocationDonutProps) {
       <div className="relative flex items-center justify-center">
         <div className="w-[148px] h-[148px] rounded-full" style={{ background: donutBg }} />
         <div className="absolute inset-[22px] rounded-full flex flex-col items-center justify-center bg-sillage-card">
-          <div className="font-mono font-semibold text-xl">{sorted.length}</div>
+          <div className="font-mono font-semibold text-xl">{assets.length}</div>
           <div className="lbl text-[9px]">assets</div>
         </div>
       </div>

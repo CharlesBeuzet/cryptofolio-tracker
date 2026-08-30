@@ -1,0 +1,45 @@
+---
+description: Classify every code change into an impact tier (patch, minor, major, core) before opening a pull request or summarizing a change for review, using objective repo signals rather than subjective judgment.
+alwaysApply: false
+---
+
+# PR impact classification
+
+Before opening a pull request, or whenever asked to summarize a set of changes for review, classify the change into exactly one tier below. Compute the signals first — do not guess by feel.
+
+## Signals to compute
+- `git diff --stat`: files changed, lines changed
+- Whether any changed file sits under a sensitive path:
+  - `settings/**` — exchange/wallet credentials (`config.example.yaml`; live keys live in gitignored `config.yaml`)
+  - `backend/src/models/**` — SQLAlchemy schema, `init_db()`, and `portfolio.db` at repo root
+  - `backend/src/connectors/**` — exchange/RPC integrations (Binance, OKX, `BaseConnector` contract)
+  - `backend/src/graphql/**` — Strawberry GraphQL API exposed at `/graphql`
+  - `backend/src/services/{scheduler,portfolio,analyzer,metrics_helpers}.py` — sync, valuation, and PnL pipeline
+  - `frontend/src/graphql/**` — Apollo query documents (client contract with the backend schema)
+- Whether any public interface changed:
+  - GraphQL types, queries, or fields in `backend/src/graphql/schema.py`
+  - FastAPI routes in `backend/src/main.py` (`/`, `/health`, `/graphql` mount)
+  - SQLAlchemy model columns/tables in `backend/src/models/database.py`
+  - `BaseConnector` abstract methods or connector return-shape conventions
+  - GraphQL operations in `frontend/src/graphql/queries.ts`
+- Whether a new external dependency was added (`backend/requirements.txt`, `frontend/package.json`)
+- Whether the change is covered by tests — this repo has no automated test suite yet; note when sync/calculation logic changed without a documented manual test plan
+
+## Tiers
+
+- Patch — no logic change, or one obvious fix. 2 or fewer files. No interface or schema change. No new dependency.
+- Minor — additive, contained to one module or feature. 5 or fewer files. No public interface change. No new dependency. Tests included.
+- Major — changes a public interface or signature used elsewhere, adds a dependency, touches more than 5 files or more than one module, or introduces a pattern not already used in the codebase.
+- Core — touches a sensitive path above, changes SQLAlchemy schema or `init_db()` behavior against live `portfolio.db`, alters exchange sync or PnL calculation logic, or anything you are less than 90% confident is safe and reversible.
+
+If signals point to different tiers, use the higher one.
+
+## Always include in the PR description
+1. `Tier: <label>` with a one-line justification naming the specific signal that decided it. Example: "Major — adds fields to `PositionMetricsType` in `schema.py` and matching selections in `queries.ts`."
+2. **What changed** — 2 to 4 plain-language bullets.
+3. **Why this approach** — Major/Core only: what alternatives you considered and why you picked this one.
+4. **Known limitations / assumptions** — Major/Core only: anything you assumed, anything you didn't handle, edge cases left open.
+5. **Risk & rollback** — Major/Core only: what could break, how to revert.
+6. **Teach-me note** — always, one short paragraph: explain any concept, pattern, or library used that the reviewer might not already know. Write for someone learning, not just approving.
+
+Never mark something Patch or Minor because it was quick to write. The tier reflects blast radius and risk to the reviewer, not how much effort it took you.

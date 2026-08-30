@@ -1,0 +1,141 @@
+---
+description: Multi-task decomposition and automatic branch → commit → push → PR pipeline
+alwaysApply: true
+---
+
+# Multi-task pipeline
+
+This rule extends `01-git-workflow.mdc` and `02-auto-branch-on-modification.mdc`.  
+It overrides the "explicit user approval" requirement from `01-git-workflow.mdc` **only** in the context of a planned multi-task sequence that the user has already confirmed (see §1 below).
+
+---
+
+## §1 — When to decompose into sub-tasks
+
+Decompose when the user's request contains **any** of the following signals:
+- Multiple distinct changes listed (e.g. "add X, fix Y, and refactor Z")
+- Vague but large scope (e.g. "clean up the auth module", "migrate to the new API")
+- Changes spanning more than one domain (e.g. frontend + backend + docs)
+- Estimated scope > ~1 hour of work or > ~3 files touched
+
+**Do NOT decompose** for single, clearly scoped requests (one file, one concern). Apply `02-auto-branch-on-modification.mdc` directly instead.
+
+---
+
+## §2 — Decomposition protocol
+
+Before writing any code, output a plan in this exact format and **wait for user confirmation**:
+
+```
+📋 Task plan — N sub-tasks
+
+1. [type] <title> → branch: <type>/<slug>
+   <one sentence: what changes and why>
+
+2. [type] <title> → branch: <type>/<slug>
+   <one sentence: what changes and why>
+
+...
+
+⚠️ Dependencies (if any):
+- Sub-task 2 requires sub-task 1 to be merged before branching.
+
+Ready to start? I'll execute each sub-task fully (branch → commit → push → PR) before moving to the next.
+```
+
+Rules for the plan:
+- Each sub-task must have a **single, independently reviewable purpose**.
+- Sub-task titles follow Conventional Commits format: `type(scope): description`.
+- Branch slugs follow `02-auto-branch-on-modification.mdc` naming rules.
+- Flag any dependency between sub-tasks explicitly.
+- Aim for 2–6 sub-tasks. If more are needed, group related micro-changes.
+
+---
+
+## §3 — Execution pipeline (per sub-task)
+
+Once the user confirms the plan, execute each sub-task in sequence using this pipeline. Do not skip steps or batch multiple sub-tasks together.
+
+### Step 1 — Branch (from `02-auto-branch-on-modification.mdc`)
+```bash
+git checkout develop
+git pull
+git checkout -b <type>/<slug>
+```
+
+### Step 2 — Implement
+Make only the changes scoped to this sub-task. Do not touch files that belong to another sub-task.
+
+### Step 3 — Run pre-flight check
+```bash
+git status
+git diff --stat
+```
+If tests exist and are runnable, run them. If they fail, **stop and report** — do not commit.
+
+### Step 4 — Commit
+```bash
+git add -A
+git commit -m "<type>(<scope>): <description>"
+```
+Follow Conventional Commits exactly (see `01-git-workflow.mdc` §2).
+
+### Step 5 — Push
+```bash
+git push origin HEAD
+```
+
+### Step 6 — PR (targeting `develop`)
+Run the full diff analysis as specified in `01-git-workflow.mdc` §4, then:
+```bash
+gh pr create \
+  --base develop \
+  --title "<type>(<scope>): <description>" \
+  --body "<generated detailed body>" \
+  --draft
+```
+The PR body must include: **Summary**, **Key changes**, **File-level overview**, **Test plan**.  
+Always create as **draft**. Do not mark ready-for-review unless the user asks.
+
+### Step 7 — Report and continue
+Output this block before starting the next sub-task:
+
+```
+✅ <Sub-task title>
+   Branch : <type>/<slug>
+   Commit : <type>(<scope>): <description>
+   PR     : <URL>
+   Status : Draft — awaiting your review
+
+⏭️ Next: <next sub-task title> (or "All done" if last)
+```
+
+Then immediately start the next sub-task **without waiting**, unless:
+- A dependency requires the previous PR to be merged first → pause and say so.
+- A test failed → pause and report.
+
+---
+
+## §4 — Dependency handling
+
+If sub-task B depends on sub-task A being merged:
+
+1. Complete sub-task A's full pipeline (branch → PR).
+2. Output:
+```
+⏸️ Pausing — sub-task B (<title>) depends on sub-task A being merged into develop.
+   Please review and merge the PR above, then tell me to continue.
+```
+3. Wait for explicit user instruction ("continue", "go ahead", etc.) before branching sub-task B.
+4. When resuming, always `git pull develop` before creating the new branch.
+
+---
+
+## §5 — Boundaries and safeguards
+
+- **Never push directly to `develop` or `main`.**
+- **Never merge a PR.** That is always the user's action.
+- **Never batch** two sub-tasks into one branch or one commit.
+- If the working tree is dirty when starting a new sub-task, stop and report — do not proceed.
+- If `gh` CLI is unavailable, push the branch and output the manual PR URL:  
+  `https://github.com/<org>/<repo>/compare/develop...<branch-name>`
