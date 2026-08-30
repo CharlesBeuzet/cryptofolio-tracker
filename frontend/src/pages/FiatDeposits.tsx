@@ -1,10 +1,11 @@
 import { useQuery } from '@apollo/client'
-import { useMemo } from 'react'
-import { ComposedChart, Line, ResponsiveContainer, Tooltip, YAxis } from 'recharts'
+import { useEffect, useMemo, useState } from 'react'
+import { ComposedChart, Line, ReferenceLine, ResponsiveContainer, XAxis, YAxis } from 'recharts'
 import { GET_FIAT_DEPOSITS, GET_FIAT_DEPOSITS_SUMMARY, GET_PORTFOLIO_HISTORY } from '../graphql/queries'
 import { formatUsd, formatUsdPrecise } from '../utils/format'
 import { buildOnRampChartData } from '../utils/onRampChart'
 import { format } from 'date-fns'
+import ChartScrubOverlay from '../components/charts/ChartScrubOverlay'
 
 interface FiatDepositRow {
   id: number
@@ -24,7 +25,10 @@ export default function FiatDeposits() {
   const { data: summaryData } = useQuery(GET_FIAT_DEPOSITS_SUMMARY)
   const { data: historyData } = useQuery(GET_PORTFOLIO_HISTORY, { variables: { days: 365 } })
 
-  const rows: FiatDepositRow[] = data?.fiatDeposits ?? []
+  const rows: FiatDepositRow[] = useMemo(
+    () => data?.fiatDeposits ?? [],
+    [data?.fiatDeposits],
+  )
   const sorted = useMemo(
     () => [...rows].sort((a, b) => new Date(a.depositedAt).getTime() - new Date(b.depositedAt).getTime()),
     [rows],
@@ -34,6 +38,15 @@ export default function FiatDeposits() {
     () => buildOnRampChartData(historyData?.portfolioHistory || [], sorted),
     [historyData, sorted],
   )
+  const plotData = useMemo(
+    () => chartData.map((point, index) => ({ ...point, i: index })),
+    [chartData],
+  )
+  const [activeIndex, setActiveIndex] = useState<number | null>(null)
+
+  useEffect(() => {
+    setActiveIndex(null)
+  }, [chartData])
 
   if (loading) {
     return (
@@ -61,6 +74,10 @@ export default function FiatDeposits() {
   const navHistory = historyData?.portfolioHistory || []
   const latestNav = navHistory.length > 0 ? navHistory[navHistory.length - 1].totalValue : 0
   const netMultiple = totalOnRamped > 0 ? latestNav / totalOnRamped : 0
+  const lastPoint = chartData[chartData.length - 1]
+  const inspected = activeIndex != null ? chartData[activeIndex] : undefined
+  const readout = inspected ?? lastPoint
+  const inspecting = inspected != null
 
   let cumulative = 0
   const ledger = sorted.map((r) => {
@@ -82,36 +99,49 @@ export default function FiatDeposits() {
 
       <div className="flex gap-4 sm:gap-5 items-stretch flex-col lg:flex-row">
         <div className="panel flex-1 min-w-0">
-          <div className="lbl mb-3">Fig 3 · Cumulative on-ramp vs net asset value</div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-baseline mb-3">
+            <div className="lbl">Fig 3 · Cumulative on-ramp vs net asset value</div>
+            {readout && (
+              <div
+                className={`font-mono text-[11px] tabular-nums flex flex-wrap gap-x-3 gap-y-1 sm:justify-end ${
+                  inspecting ? 'text-sillage-ink' : 'text-sillage-soft'
+                }`}
+              >
+                <span>
+                  {inspecting ? readout.date : `last ${readout.date}`}
+                </span>
+                <span>NAV {formatUsd(readout.nav)}</span>
+                <span>on-ramp {formatUsd(readout.deposits)}</span>
+              </div>
+            )}
+          </div>
           {chartData.length === 0 ? (
             <div className="h-[180px] sm:h-[220px] flex items-center justify-center text-sillage-soft text-sm">
               No chart data yet
             </div>
           ) : (
-            <div className="h-[180px] sm:h-[220px] w-full">
+            <div className="relative h-[180px] sm:h-[220px] w-full chart-plot">
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                <ComposedChart data={plotData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <XAxis dataKey="i" type="number" domain={['dataMin', 'dataMax']} hide />
                   <YAxis hide domain={['auto', 'auto']} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'var(--card)',
-                      border: '1px solid var(--line)',
-                      borderRadius: '8px',
-                      fontFamily: 'IBM Plex Mono, monospace',
-                      fontSize: '11px',
-                    }}
-                    formatter={(value: number, name: string) => [
-                      formatUsd(value),
-                      name === 'nav' ? 'Net asset value' : 'Cumulative on-ramp',
-                    ]}
-                    labelFormatter={(label) => String(label)}
-                  />
+                  {activeIndex != null && (
+                    <ReferenceLine
+                      x={activeIndex}
+                      stroke="var(--soft)"
+                      strokeWidth={1}
+                      strokeOpacity={0.55}
+                      ifOverflow="extendDomain"
+                    />
+                  )}
                   <Line
                     type="monotone"
                     dataKey="nav"
                     stroke="var(--green)"
                     strokeWidth={1.8}
                     dot={false}
+                    activeDot={false}
+                    isAnimationActive={false}
                   />
                   <Line
                     type="stepAfter"
@@ -120,9 +150,12 @@ export default function FiatDeposits() {
                     strokeWidth={1.6}
                     strokeDasharray="4 3"
                     dot={false}
+                    activeDot={false}
+                    isAnimationActive={false}
                   />
                 </ComposedChart>
               </ResponsiveContainer>
+              <ChartScrubOverlay pointCount={plotData.length} onIndex={setActiveIndex} />
             </div>
           )}
           <div className="font-mono text-[11px] flex flex-wrap gap-x-[18px] gap-y-1 mt-3">

@@ -4,7 +4,8 @@ import { useQuery } from '@apollo/client'
 import { GET_PORTFOLIO, GET_SYNCED_VENUES } from '../../graphql/queries'
 import { useTheme } from '../../context/ThemeContext'
 import { formatPct, formatUsd, pnlColorClass } from '../../utils/format'
-import { groupPositionsByAsset } from '../../utils/groupPositionsByAsset'
+import { excludeCashLikePositions } from '../../utils/cashLikeAssets'
+import { groupPositionsByAsset, type PositionLike } from '../../utils/groupPositionsByAsset'
 import Logo from './Logo'
 
 interface LayoutProps {
@@ -94,7 +95,9 @@ const navLinks = (
               key={item.path}
               to={(() => {
                 if (item.path !== '/position' || !portfolio?.positions?.length) return item.path
-                const top = groupPositionsByAsset(portfolio.positions)[0]?.symbol
+                const top = groupPositionsByAsset(
+                  excludeCashLikePositions(portfolio.positions as PositionLike[]),
+                )[0]?.symbol
                 return top ? `/asset/${encodeURIComponent(top)}` : item.path
               })()}
               className={`navi no-underline ${active ? 'on' : ''}`}
