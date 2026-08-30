@@ -78,7 +78,7 @@ class Position(Base):
         uselist=False,
         cascade="all, delete-orphan",
     )
-    valuations = relationship(
+    valuations = relationship(  # manual positions only; synced use metrics
         "PositionValuation",
         back_populates="position",
         cascade="all, delete-orphan",

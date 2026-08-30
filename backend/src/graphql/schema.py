@@ -207,8 +207,8 @@ def _position_to_type(pos: Position) -> PositionType:
     """Map a Position ORM object to GraphQL type."""
     metrics = pos.metrics
     orders = [_order_to_type(o) for o in pos.orders]
-    valuations = [_valuation_to_type(v) for v in (pos.valuations or [])]
     if is_manual_position(pos):
+        valuations = [_valuation_to_type(v) for v in (pos.valuations or [])]
         pnl, pnl_percent = manual_pnl(pos)
         avg_entry = manual_avg_entry(pos)
         market_value = 0.0
@@ -219,6 +219,7 @@ def _position_to_type(pos: Position) -> PositionType:
         asset_price = (market_value / qty) if qty else None
         book_cost = manual_cost_basis(pos)
     else:
+        valuations = []
         asset_price = pos.asset.current_price if pos.asset else None
         pnl = metrics.unrealised_pnl if metrics else 0.0
         pnl_percent = metrics.unrealised_pnl_percent if metrics else 0.0
