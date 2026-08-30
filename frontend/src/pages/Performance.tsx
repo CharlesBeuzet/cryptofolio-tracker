@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@apollo/client'
 import { Link } from 'react-router-dom'
 import { GET_PORTFOLIO } from '../graphql/queries'
+import { excludeCashLikePositions } from '../utils/cashLikeAssets'
 import { assetColor, formatPct, formatUsd, formatUsdPrecise, pnlColorClass } from '../utils/format'
 
 interface Tag {
@@ -169,7 +170,9 @@ function ThesisPanels({ theses }: { theses: ThesisGroup[] }) {
 export default function Performance() {
   const { data, loading } = useQuery(GET_PORTFOLIO)
 
-  const positions: Position[] = data?.portfolio?.positions || []
+  const positions: Position[] = excludeCashLikePositions(
+    (data?.portfolio?.positions || []) as Position[],
+  )
   const totalBook = positions.reduce((s, p) => s + p.value, 0)
 
   const venueTheses = useMemo(

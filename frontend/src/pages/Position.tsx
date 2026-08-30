@@ -6,7 +6,8 @@ import { GET_POSITION, GET_PORTFOLIO, GET_ASSET_PRICE_HISTORY } from '../graphql
 import AssetPriceChart from '../components/charts/AssetPriceChart'
 import RangeSegment, { type RangeKey, rangeToDays } from '../components/common/RangeSegment'
 import { assetColor, formatPct, formatTokenPrice, formatUsdPrecise, pnlColorClass } from '../utils/format'
-import { groupPositionsByAsset } from '../utils/groupPositionsByAsset'
+import { excludeCashLikePositions } from '../utils/cashLikeAssets'
+import { groupPositionsByAsset, type PositionLike } from '../utils/groupPositionsByAsset'
 
 export default function Position() {
   const { id } = useParams<{ id: string }>()
@@ -68,7 +69,9 @@ export default function Position() {
   }
 
   const position = data.position
-  const assetTabs = groupPositionsByAsset(portfolioData?.portfolio?.positions || [])
+  const assetTabs = groupPositionsByAsset(
+    excludeCashLikePositions((portfolioData?.portfolio?.positions || []) as PositionLike[]),
+  )
   const costBasis = position.avgEntryPrice * position.quantity
   const unrealized = position.pnl || 0
   const isPositive = unrealized >= 0
