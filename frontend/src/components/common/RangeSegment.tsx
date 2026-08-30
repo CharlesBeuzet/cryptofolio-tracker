@@ -1,3 +1,5 @@
+import { useEffect, useRef } from 'react'
+
 const RANGES = ['24h', '7d', '30d', '90d', '1Y', '2Y', '5Y'] as const
 export type RangeKey = (typeof RANGES)[number]
 
@@ -35,9 +37,28 @@ export function rangeLabel(range: RangeKey): string {
 }
 
 export default function RangeSegment({ value, onChange }: RangeSegmentProps) {
+  const scrollerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const scroller = scrollerRef.current
+    if (!scroller) return
+    const selected = scroller.querySelector<HTMLElement>('[aria-pressed="true"]')
+    if (!selected) return
+
+    const scrollerBox = scroller.getBoundingClientRect()
+    const selectedBox = selected.getBoundingClientRect()
+    const fullyVisible =
+      selectedBox.left >= scrollerBox.left && selectedBox.right <= scrollerBox.right
+    if (fullyVisible) return
+
+    const nextLeft =
+      scroller.scrollLeft + (selectedBox.left - scrollerBox.left) - (scrollerBox.width - selectedBox.width) / 2
+    scroller.scrollTo({ left: Math.max(0, nextLeft), behavior: 'smooth' })
+  }, [value])
+
   return (
-    <div className="overflow-x-auto max-w-full -mx-0.5 px-0.5 self-start sm:self-auto">
-      <div className="seg" role="group" aria-label="Time range">
+    <div ref={scrollerRef} className="seg-scroll" role="group" aria-label="Time range">
+      <div className="seg">
         {RANGES.map((r) => (
           <button
             key={r}
