@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { format } from 'date-fns'
 import { GET_POSITION, GET_PORTFOLIO, GET_ASSET_PRICE_HISTORY } from '../graphql/queries'
 import AssetPriceChart from '../components/charts/AssetPriceChart'
+import AssetSwitcher from '../components/common/AssetSwitcher'
 import RangeSegment, { type RangeKey, rangeToDays } from '../components/common/RangeSegment'
 import { assetColor, formatPct, formatTokenPrice, formatUsdPrecise, pnlColorClass } from '../utils/format'
 import { excludeCashLikePositions } from '../utils/cashLikeAssets'
@@ -117,19 +118,11 @@ export default function Position() {
         <RangeSegment value={range} onChange={setRange} />
       </div>
 
-      <div className="flex gap-2 flex-wrap mb-[18px] overflow-x-auto pb-0.5 -mx-0.5 px-0.5">
-        {assetTabs.map((tab, i) => (
-          <button
-            key={tab.symbol}
-            type="button"
-            className={`atab ${tab.symbol === position.symbol.toUpperCase() ? 'on' : ''}`}
-            onClick={() => navigate(`/asset/${encodeURIComponent(tab.symbol)}`)}
-          >
-            <span className="sw" style={{ background: assetColor(i) }} />
-            {tab.symbol}
-          </button>
-        ))}
-      </div>
+      <AssetSwitcher
+        assets={assetTabs}
+        currentSymbol={position.symbol}
+        onSelect={(symbol) => navigate(`/asset/${encodeURIComponent(symbol)}`)}
+      />
 
       <div className="flex gap-4 sm:gap-5 items-stretch flex-col lg:flex-row">
         <div className="panel flex-1 min-w-0">
