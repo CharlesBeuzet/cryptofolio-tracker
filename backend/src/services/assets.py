@@ -2,11 +2,10 @@
 from datetime import datetime
 from typing import Any, Dict, List, Set
 
-from sqlalchemy import and_, func
+from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
 from ..models.database import Asset, Position
-from .manual_positions import SOURCE_MANUAL, SOURCE_SYNCED
 from .portfolio import PortfolioService
 
 
@@ -74,7 +73,7 @@ class AssetsService:
             and_(
                 Position.exchange == exchange,
                 Position.status == "open",
-                func.coalesce(Position.source, SOURCE_SYNCED) != SOURCE_MANUAL,
+                Position.source != "manual",
             )
         )
         if seen_symbols:

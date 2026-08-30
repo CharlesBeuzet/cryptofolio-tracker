@@ -2,21 +2,17 @@
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from ..models.database import Asset, Position, PositionValuation
 
-SOURCE_SYNCED = "synced"
-SOURCE_MANUAL = "manual"
-
 
 def position_source(position: Position) -> str:
-    return getattr(position, "source", None) or SOURCE_SYNCED
+    return getattr(position, "source", None) or "synced"
 
 
 def is_manual_position(position: Position) -> bool:
-    return position_source(position) == SOURCE_MANUAL
+    return position_source(position) == "manual"
 
 
 def sorted_valuations(position: Position) -> List[PositionValuation]:
@@ -148,7 +144,7 @@ class ManualPositionService:
             Position.symbol == symbol,
             Position.exchange == exchange,
             Position.status == "open",
-            func.coalesce(Position.source, SOURCE_SYNCED) == SOURCE_MANUAL,
+            Position.source == "manual",
         )
         if exclude_id is not None:
             query = query.filter(Position.id != exclude_id)
@@ -204,7 +200,7 @@ class ManualPositionService:
             first_bought_at=stamp,
             exchange=venue,
             status="open",
-            source=SOURCE_MANUAL,
+            source="manual",
             display_name=name,
             external_url=url,
         )

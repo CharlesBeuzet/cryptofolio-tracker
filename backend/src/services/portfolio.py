@@ -2,14 +2,14 @@
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import and_, func
+from sqlalchemy import and_
 
 from ..models.database import (
     Asset,
     Position,
     PortfolioSnapshot,
 )
-from .manual_positions import SOURCE_MANUAL, SOURCE_SYNCED, is_manual_position, position_market_value
+from .manual_positions import is_manual_position, position_market_value
 
 
 class PortfolioService:
@@ -168,7 +168,7 @@ class PortfolioService:
                 and_(
                     Position.symbol == symbol,
                     Position.exchange == exchange,
-                    func.coalesce(Position.source, SOURCE_SYNCED) != SOURCE_MANUAL,
+                    Position.source != "manual",
                 )
             )
             .first()
@@ -192,7 +192,7 @@ class PortfolioService:
                 first_bought_at=datetime.utcnow(),
                 exchange=exchange,
                 status="open",
-                source=SOURCE_SYNCED,
+                source="synced",
             )
             self.db.add(position)
 

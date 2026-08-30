@@ -129,7 +129,7 @@ class OrderService:
                     Position.symbol == symbol,
                     Position.exchange == exchange,
                     Position.status == "open",
-                    Position.source == "synced",
+                Position.source == "synced",
                 )
                 .first()
             )

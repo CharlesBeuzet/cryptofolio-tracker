@@ -13,8 +13,6 @@ from src.models.database import Asset, Base, Position, PositionMetrics
 from src.services.analyzer import PositionAnalyzerService
 from src.services.assets import AssetsService
 from src.services.manual_positions import (
-    SOURCE_MANUAL,
-    SOURCE_SYNCED,
     ManualPositionService,
     manual_cost_basis,
     manual_pnl,
@@ -57,7 +55,7 @@ class ManualPositionTests(unittest.TestCase):
     def test_create_and_valuations_drive_value_cost_and_pnl(self) -> None:
         t0 = datetime(2026, 1, 1)
         pos = self._create(value=1000.0, quantity=10.0, recorded_at=t0)
-        self.assertEqual(pos.source, SOURCE_MANUAL)
+        self.assertEqual(pos.source, "manual")
         self.assertEqual(pos.display_name, "EstateGuru")
         self.assertEqual(pos.external_url, "https://example.com")
         self.assertAlmostEqual(position_market_value(pos), 1000.0)
@@ -88,7 +86,7 @@ class ManualPositionTests(unittest.TestCase):
             first_bought_at=datetime.utcnow(),
             exchange="binance",
             status="open",
-            source=SOURCE_SYNCED,
+            source="synced",
         )
         self.db.add(synced)
         self.db.commit()
@@ -129,7 +127,7 @@ class ManualPositionTests(unittest.TestCase):
             first_bought_at=datetime.utcnow(),
             exchange="okx",
             status="open",
-            source=SOURCE_SYNCED,
+            source="synced",
         )
         self.db.add(synced)
         self.db.commit()
