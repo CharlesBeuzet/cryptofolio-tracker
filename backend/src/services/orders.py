@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session, joinedload
 
 from ..models.database import Order, Position
 from .analyzer import PositionAnalyzerService
-from .manual_positions import SOURCE_MANUAL, SOURCE_SYNCED
 
 SYNC_OVERLAP_HOURS = 2
 QUOTE_CURRENCIES = ("USDT", "USDC")
@@ -37,7 +36,7 @@ class OrderService:
             .filter(
                 Position.exchange == connector.name,
                 Position.status == "open",
-                func.coalesce(Position.source, SOURCE_SYNCED) != SOURCE_MANUAL,
+                Position.source == "synced",
             )
             .distinct()
             .all()
@@ -102,7 +101,7 @@ class OrderService:
                 Position.symbol == symbol,
                 Position.exchange == exchange,
                 Position.status == "open",
-                func.coalesce(Position.source, SOURCE_SYNCED) != SOURCE_MANUAL,
+                Position.source == "synced",
             )
             .first()
         )
@@ -130,7 +129,7 @@ class OrderService:
                     Position.symbol == symbol,
                     Position.exchange == exchange,
                     Position.status == "open",
-                    func.coalesce(Position.source, SOURCE_SYNCED) != SOURCE_MANUAL,
+                    Position.source == "synced",
                 )
                 .first()
             )
