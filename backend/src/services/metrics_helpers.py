@@ -10,8 +10,8 @@ def cost_basis(metrics: PositionMetrics) -> float:
 
 
 def cash_in_trade(metrics: PositionMetrics) -> float:
-    """Net capital deployed minus proceeds withdrawn (USD). Positive after a loss when fully exited."""
-    return metrics.total_buy_cost - metrics.total_sell_proceeds
+    """Net capital still in the trade (USD). Capped at 0 once sales have repaid the stake."""
+    return max(0.0, metrics.total_buy_cost - metrics.total_sell_proceeds)
 
 
 def has_qty_mismatch(metrics: PositionMetrics, balance_qty: float) -> bool:

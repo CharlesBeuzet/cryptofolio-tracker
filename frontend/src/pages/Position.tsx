@@ -73,6 +73,8 @@ export default function Position() {
     excludeCashLikePositions((portfolioData?.portfolio?.positions || []) as PositionLike[]),
   )
   const costBasis = position.avgEntryPrice * position.quantity
+  const cashInTrade = position.metrics?.cashInTrade ?? 0
+  const realisedPnl = position.metrics?.realisedPnl ?? 0
   const unrealized = position.pnl || 0
   const isPositive = unrealized >= 0
 
@@ -188,22 +190,32 @@ export default function Position() {
           </div>
 
           <div className="border-t border-sillage-line mt-[18px]">
-            {[
-              ['Market value', formatUsdPrecise(position.value)],
-              ['Cost basis', formatUsdPrecise(costBasis)],
-              ['Avg entry', formatTokenPrice(position.avgEntryPrice)],
-              ...(position.metrics?.avgExitPrice != null
-                ? [['Avg sell', formatTokenPrice(position.metrics.avgExitPrice)] as const]
-                : []),
-              ['Holdings', position.quantity.toLocaleString(undefined, { maximumFractionDigits: 8 })],
-              ['Duration', `${durationDays} days`],
-            ].map(([label, val], idx, arr) => (
+            {(
+              [
+                ['Market value', formatUsdPrecise(position.value)],
+                ['Cost basis', formatUsdPrecise(costBasis)],
+                ['Cash in trade', formatUsdPrecise(cashInTrade)],
+                [
+                  'Realised P&L',
+                  `${realisedPnl >= 0 ? '+' : ''}${formatUsdPrecise(realisedPnl)}`,
+                  pnlColorClass(realisedPnl),
+                ],
+                ['Avg entry', formatTokenPrice(position.avgEntryPrice)],
+                ...(position.metrics?.avgExitPrice != null
+                  ? [['Avg sell', formatTokenPrice(position.metrics.avgExitPrice)] as const]
+                  : []),
+                ['Holdings', position.quantity.toLocaleString(undefined, { maximumFractionDigits: 8 })],
+                ['Duration', `${durationDays} days`],
+              ] as [string, string, string?][]
+            ).map(([label, val, valClass], idx, arr) => (
               <div
                 key={label}
                 className={`flex justify-between gap-3 py-2.5 ${idx < arr.length - 1 ? 'border-b border-sillage-line' : ''}`}
               >
                 <span className="lbl flex-shrink-0">{label}</span>
-                <span className="font-mono tabular-nums text-xs text-right break-all">{val}</span>
+                <span className={`font-mono tabular-nums text-xs text-right break-all ${valClass ?? ''}`}>
+                  {val}
+                </span>
               </div>
             ))}
           </div>
