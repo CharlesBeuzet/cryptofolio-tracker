@@ -230,4 +230,17 @@ body {
   .page-title {
     @apply font-serif text-[22px] sm:text-[26px] leading-none mt-[7px];
   }
+
+  /* Chart plot: block long-press selection / callout, allow vertical page scroll. */
+  .chart-plot,
+  .chart-plot * {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  .chart-plot {
+    touch-action: pan-y;
+    cursor: crosshair;
+  }
 }

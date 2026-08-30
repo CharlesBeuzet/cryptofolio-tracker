@@ -1,8 +1,9 @@
 import { useQuery } from '@apollo/client'
-import { Fragment, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { format } from 'date-fns'
 import { GET_PORTFOLIO, GET_PORTFOLIO_HISTORY, GET_FIAT_DEPOSITS_SUMMARY } from '../graphql/queries'
-import PortfolioValueChart from '../components/charts/PortfolioValueChart'
+import PortfolioValueChart, { type NavInspectPoint } from '../components/charts/PortfolioValueChart'
 import AllocationDonut from '../components/charts/AllocationDonut'
 import RangeSegment, { rangeLabel, rangeToDays, type RangeKey } from '../components/common/RangeSegment'
 import { assetColor, formatPct, formatUsd, formatUsdPrecise, pnlColorClass } from '../utils/format'
@@ -11,6 +12,7 @@ import { appendLiveNavPoint } from '../utils/portfolioChart'
 
 export default function Home() {
   const [range, setRange] = useState<RangeKey>('90d')
+  const [inspected, setInspected] = useState<NavInspectPoint | null>(null)
   const navigate = useNavigate()
 
   const { data: portfolioData, loading: portfolioLoading } = useQuery(GET_PORTFOLIO)
@@ -18,6 +20,17 @@ export default function Home() {
     variables: { days: rangeToDays(range) },
   })
   const { data: fiatSummaryData } = useQuery(GET_FIAT_DEPOSITS_SUMMARY)
+
+  useEffect(() => {
+    setInspected(null)
+  }, [range])
+
+  const rawHistory = historyData?.portfolioHistory
+  const liveTotal = portfolioData?.portfolio?.totalValue
+  const chartHistory = useMemo(() => {
+    const points = rawHistory || []
+    return liveTotal != null ? appendLiveNavPoint(points, liveTotal) : points
+  }, [rawHistory, liveTotal])
 
   if (portfolioLoading || historyLoading) {
     return (
@@ -28,19 +41,20 @@ export default function Home() {
   }
 
   const portfolio = portfolioData?.portfolio
-  const history = historyData?.portfolioHistory || []
   const positions = portfolio?.positions || []
   const totalValue = portfolio?.totalValue || 0
   const assets = groupPositionsByAsset(positions)
   const totalBook = assets.reduce((s, a) => s + a.value, 0)
-  const chartHistory =
-    portfolio != null ? appendLiveNavPoint(history, portfolio.totalValue) : history
 
   const fiatTotal = (fiatSummaryData?.fiatDepositsSummary?.totalsByCurrency || []).reduce(
     (s: number, r: { totalAmount: number }) => s + r.totalAmount,
     0,
   )
   const pnl = totalValue - fiatTotal
+  const heroValue = inspected?.totalValue ?? totalValue
+  const heroLabel = inspected
+    ? format(new Date(inspected.timestamp), 'MMM dd, yyyy')
+    : rangeLabel(range)
 
   return (
     <div>
@@ -54,9 +68,9 @@ export default function Home() {
 
       <div className="panel p-0 overflow-hidden relative">
         <div className="px-4 pt-4 sm:px-6 sm:pt-5 lg:absolute lg:left-6 lg:top-5 lg:z-10 lg:pointer-events-none lg:px-0 lg:pt-0">
-          <div className="lbl">Net asset value · {rangeLabel(range)}</div>
+          <div className="lbl">Net asset value · {heroLabel}</div>
           <div className="font-serif text-[32px] sm:text-[40px] lg:text-[46px] leading-none mt-1.5">
-            {formatUsd(totalValue)}
+            {formatUsd(heroValue)}
           </div>
           <div className="font-mono text-[11px] sm:text-xs mt-[7px] text-sillage-soft break-words">
             NAV = deposits + P&amp;L ⟶{' '}
@@ -66,7 +80,7 @@ export default function Home() {
           </div>
         </div>
         <div className="mt-2 lg:mt-0 h-[200px] sm:h-[250px]">
-          <PortfolioValueChart data={chartHistory} height="100%" />
+          <PortfolioValueChart data={chartHistory} height="100%" onPointInspect={setInspected} />
         </div>
       </div>
 
