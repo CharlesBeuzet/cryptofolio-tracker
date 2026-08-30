@@ -151,6 +151,11 @@ export default function Asset() {
       sum + (p.metrics?.cashInTrade ?? 0),
     0,
   )
+  const realisedPnl = venues.reduce(
+    (sum: number, p: { metrics?: { realisedPnl?: number | null } }) =>
+      sum + (p.metrics?.realisedPnl ?? 0),
+    0,
+  )
   const marketValue = asset?.value ?? 0
   const holdings = asset?.quantity ?? 0
 
@@ -262,26 +267,33 @@ export default function Asset() {
           </div>
 
           <div className="border-t border-sillage-line mt-[18px]">
-            {[
-              ['Market value', formatUsdPrecise(marketValue)],
-              ['Cost basis', formatUsdPrecise(costBasis)],
-              ['Cash in trade', formatUsdPrecise(cashInTrade)],
-              ['Avg entry', formatTokenPrice(avgEntryPrice)],
-              ...(avgExitPrice != null
-                ? [['Avg sell', formatTokenPrice(avgExitPrice)] as const]
-                : []),
+            {(
               [
-                'Holdings',
-                holdings.toLocaleString(undefined, { maximumFractionDigits: 8 }),
-              ],
-              ['Duration', `${durationDays} days`],
-            ].map(([label, val], idx, arr) => (
+                ['Market value', formatUsdPrecise(marketValue)],
+                ['Cost basis', formatUsdPrecise(costBasis)],
+                ['Cash in trade', formatUsdPrecise(cashInTrade)],
+                [
+                  'Realised P&L',
+                  `${realisedPnl >= 0 ? '+' : ''}${formatUsdPrecise(realisedPnl)}`,
+                  pnlColorClass(realisedPnl),
+                ],
+                ['Avg entry', formatTokenPrice(avgEntryPrice)],
+                ...(avgExitPrice != null
+                  ? [['Avg sell', formatTokenPrice(avgExitPrice)] as const]
+                  : []),
+                [
+                  'Holdings',
+                  holdings.toLocaleString(undefined, { maximumFractionDigits: 8 }),
+                ],
+                ['Duration', `${durationDays} days`],
+              ] as [string, string, string?][]
+            ).map(([label, val, valClass], idx, arr) => (
               <div
                 key={label}
                 className={`flex justify-between py-2.5 ${idx < arr.length - 1 ? 'border-b border-sillage-line' : ''}`}
               >
                 <span className="lbl">{label}</span>
-                <span className="font-mono tabular-nums text-xs">{val}</span>
+                <span className={`font-mono tabular-nums text-xs ${valClass ?? ''}`}>{val}</span>
               </div>
             ))}
           </div>
