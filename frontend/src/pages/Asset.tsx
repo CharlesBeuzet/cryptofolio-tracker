@@ -9,7 +9,7 @@ import PortfolioValueChart from '../components/charts/PortfolioValueChart'
 import ValuationTable from '../components/portfolio/ValuationTable'
 import AssetSwitcher from '../components/common/AssetSwitcher'
 import RangeSegment, { type RangeKey, rangeToDays } from '../components/common/RangeSegment'
-import { assetColor, formatPct, formatTokenPrice, formatUsdPrecise, pnlColorClass } from '../utils/format'
+import { formatPct, formatTokenPrice, formatUsdPrecise, pnlColorClass } from '../utils/format'
 import { excludeCashLikePositions } from '../utils/cashLikeAssets'
 import { groupPositionsByAsset, type PositionLike } from '../utils/groupPositionsByAsset'
 

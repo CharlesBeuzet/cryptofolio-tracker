@@ -20,7 +20,6 @@ export default function PortfolioValueChart({
   data,
   height = 250,
   overlay,
-  valueLabel = 'NAV',
   onPointInspect,
 }: PortfolioValueChartProps) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null)
@@ -80,19 +79,6 @@ export default function PortfolioValueChart({
           </defs>
           <XAxis dataKey="i" type="number" domain={['dataMin', 'dataMax']} hide />
           <YAxis hide domain={['auto', 'auto']} />
-          <Tooltip
-            contentStyle={{
-              backgroundColor: 'var(--card)',
-              border: '1px solid var(--line)',
-              borderRadius: '8px',
-              fontFamily: 'IBM Plex Mono, monospace',
-              fontSize: '11px',
-            }}
-            formatter={(value: number) => [
-              `$${value.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,
-              valueLabel,
-            ]}
-          />
           {activePoint != null && (
             <ReferenceLine
               x={activePoint.i}
