@@ -166,7 +166,9 @@ export const GET_ASSET = gql`
           valueAmount
           quantity
           createdAt
+        }
         metrics {
+          avgExitPrice
           cashInTrade
           realisedPnl
         }

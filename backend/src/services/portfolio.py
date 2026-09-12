@@ -10,7 +10,7 @@ from ..models.database import (
     Position,
     PortfolioSnapshot,
 )
-from .manual_positions import is_manual_position, position_market_value
+from .manual_positions import is_manual_position, manual_pnl, position_market_value
 
 
 class PortfolioService:
@@ -37,14 +37,15 @@ class PortfolioService:
         positions = self._open_positions_query().all()
         total_value = 0.0
         missing_price_count = 0
-        for position in position:
-          if is_manual_position(position):
-              parsed = positive_finite(position_market_value(position))
-              if parsed is None:
-                  missing_price_count += 1
-                  continue
-              total_value += parsed
-              continue
+        for position in positions:
+            if is_manual_position(position):
+                parsed = positive_finite(position_market_value(position))
+                if parsed is None:
+                    missing_price_count += 1
+                    continue
+                total_value += parsed
+                continue
+
             parsed_qty = positive_finite(position.quantity)
             if parsed_qty is None:
                 continue

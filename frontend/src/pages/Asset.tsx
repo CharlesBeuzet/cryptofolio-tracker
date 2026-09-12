@@ -306,31 +306,26 @@ export default function Asset() {
           </div>
 
           <div className="border-t border-sillage-line mt-[18px]">
-            {[
-              ['Market value', formatUsdPrecise(marketValue)],
-              ['Cost basis', formatUsdPrecise(costBasis)],
-              ...(allManual
-                ? []
-                : [
-                    ['Avg entry', formatTokenPrice(avgEntryPrice)] as const,
-                    ...(avgExitPrice != null
-                      ? [['Avg sell', formatTokenPrice(avgExitPrice)] as const]
-                      : []),
-                  ]),
             {(
               [
                 ['Market value', formatUsdPrecise(marketValue)],
                 ['Cost basis', formatUsdPrecise(costBasis)],
-                ['Cash in trade', formatUsdPrecise(cashInTrade)],
-                [
-                  'Realised P&L',
-                  `${realisedPnl >= 0 ? '+' : ''}${formatUsdPrecise(realisedPnl)}`,
-                  pnlColorClass(realisedPnl),
-                ],
-                ['Avg entry', formatTokenPrice(avgEntryPrice)],
-                ...(avgExitPrice != null
-                  ? [['Avg sell', formatTokenPrice(avgExitPrice)] as const]
-                  : []),
+                ...(allManual
+                  ? []
+                  : [
+                      ['Cash in trade', formatUsdPrecise(cashInTrade)] as [string, string, string?],
+                      [
+                        'Realised P&L',
+                        `${realisedPnl >= 0 ? '+' : ''}${formatUsdPrecise(realisedPnl)}`,
+                        pnlColorClass(realisedPnl),
+                      ] as [string, string, string?],
+                      ['Avg entry', formatTokenPrice(avgEntryPrice)] as [string, string, string?],
+                      ...(avgExitPrice != null
+                        ? ([
+                            ['Avg sell', formatTokenPrice(avgExitPrice)],
+                          ] as [string, string, string?][])
+                        : []),
+                    ]),
                 [
                   'Holdings',
                   holdings.toLocaleString(undefined, { maximumFractionDigits: 8 }),
