@@ -7,9 +7,11 @@ import { ADD_POSITION_VALUATION, DELETE_POSITION_VALUATION } from '../graphql/mu
 import AssetPriceChart from '../components/charts/AssetPriceChart'
 import PortfolioValueChart from '../components/charts/PortfolioValueChart'
 import ValuationTable from '../components/portfolio/ValuationTable'
+import AssetSwitcher from '../components/common/AssetSwitcher'
 import RangeSegment, { type RangeKey, rangeToDays } from '../components/common/RangeSegment'
-import { assetColor, formatPct, formatTokenPrice, formatUsdPrecise, pnlColorClass } from '../utils/format'
-import { groupPositionsByAsset } from '../utils/groupPositionsByAsset'
+import { formatPct, formatTokenPrice, formatUsdPrecise, pnlColorClass } from '../utils/format'
+import { excludeCashLikePositions } from '../utils/cashLikeAssets'
+import { groupPositionsByAsset, type PositionLike } from '../utils/groupPositionsByAsset'
 
 export default function Position() {
   const { id } = useParams<{ id: string }>()
@@ -75,8 +77,12 @@ export default function Position() {
   }
 
   const position = data.position
-  const assetTabs = groupPositionsByAsset(portfolioData?.portfolio?.positions || [])
+  const assetTabs = groupPositionsByAsset(
+    excludeCashLikePositions((portfolioData?.portfolio?.positions || []) as PositionLike[]),
+  )
   const costBasis = position.costBasis ?? position.avgEntryPrice * position.quantity
+  const cashInTrade = position.metrics?.cashInTrade ?? 0
+  const realisedPnl = position.metrics?.realisedPnl ?? 0
   const unrealized = position.pnl || 0
   const isPositive = unrealized >= 0
   const title = isManual && position.displayName ? position.displayName : position.symbol
@@ -97,7 +103,6 @@ export default function Position() {
       totalValue: v.valueAmount,
     }))
 
-  // Prefer earliest buy fill for this venue; fall back to position open date.
   const firstBoughtAt =
     orders
       .filter((o: { type: string }) => o.type === 'buy')
@@ -157,7 +162,7 @@ export default function Position() {
   return (
     <div>
       <div className="page-head mb-4">
-        <div>
+        <div className="min-w-0">
           <div className="lbl">§2 · Position detail</div>
           <div className="flex items-center gap-3 mt-2 flex-wrap">
             <div className="page-title mt-0">{title}</div>
@@ -188,19 +193,11 @@ export default function Position() {
         {!isManual && <RangeSegment value={range} onChange={setRange} />}
       </div>
 
-      <div className="flex gap-2 flex-wrap mb-[18px] overflow-x-auto pb-0.5 -mx-0.5 px-0.5">
-        {assetTabs.map((tab, i) => (
-          <button
-            key={tab.symbol}
-            type="button"
-            className={`atab ${tab.symbol === position.symbol.toUpperCase() ? 'on' : ''}`}
-            onClick={() => navigate(`/asset/${encodeURIComponent(tab.symbol)}`)}
-          >
-            <span className="sw" style={{ background: assetColor(i) }} />
-            {tab.symbol}
-          </button>
-        ))}
-      </div>
+      <AssetSwitcher
+        assets={assetTabs}
+        currentSymbol={position.symbol}
+        onSelect={(symbol) => navigate(`/asset/${encodeURIComponent(symbol)}`)}
+      />
 
       <div className="flex gap-4 sm:gap-5 items-stretch flex-col lg:flex-row">
         <div className="panel flex-1 min-w-0">
@@ -277,26 +274,42 @@ export default function Position() {
           </div>
 
           <div className="border-t border-sillage-line mt-[18px]">
-            {[
-              ['Market value', formatUsdPrecise(position.value)],
-              ['Cost basis', formatUsdPrecise(costBasis)],
-              ...(isManual
-                ? []
-                : [
-                    ['Avg entry', formatTokenPrice(position.avgEntryPrice)] as const,
-                    ...(position.metrics?.avgExitPrice != null
-                      ? [['Avg sell', formatTokenPrice(position.metrics.avgExitPrice)] as const]
-                      : []),
-                  ]),
-              ['Holdings', position.quantity.toLocaleString(undefined, { maximumFractionDigits: 8 })],
-              ['Duration', `${durationDays} days`],
-            ].map(([label, val], idx, arr) => (
+            {(
+              [
+                ['Market value', formatUsdPrecise(position.value)],
+                ['Cost basis', formatUsdPrecise(costBasis)],
+                ...(isManual
+                  ? []
+                  : [
+                      ['Cash in trade', formatUsdPrecise(cashInTrade)] as [string, string, string?],
+                      [
+                        'Realised P&L',
+                        `${realisedPnl >= 0 ? '+' : ''}${formatUsdPrecise(realisedPnl)}`,
+                        pnlColorClass(realisedPnl),
+                      ] as [string, string, string?],
+                      ['Avg entry', formatTokenPrice(position.avgEntryPrice)] as [
+                        string,
+                        string,
+                        string?,
+                      ],
+                      ...(position.metrics?.avgExitPrice != null
+                        ? ([
+                            ['Avg sell', formatTokenPrice(position.metrics.avgExitPrice)],
+                          ] as [string, string, string?][])
+                        : []),
+                    ]),
+                ['Holdings', position.quantity.toLocaleString(undefined, { maximumFractionDigits: 8 })],
+                ['Duration', `${durationDays} days`],
+              ] as [string, string, string?][]
+            ).map(([label, val, valClass], idx, arr) => (
               <div
                 key={label}
                 className={`flex justify-between gap-3 py-2.5 ${idx < arr.length - 1 ? 'border-b border-sillage-line' : ''}`}
               >
                 <span className="lbl flex-shrink-0">{label}</span>
-                <span className="font-mono tabular-nums text-xs text-right break-all">{val}</span>
+                <span className={`font-mono tabular-nums text-xs text-right break-all ${valClass ?? ''}`}>
+                  {val}
+                </span>
               </div>
             ))}
           </div>

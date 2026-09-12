@@ -4,6 +4,7 @@ from typing import List, Optional
 
 from sqlalchemy.orm import Session, joinedload
 
+from ..utils.data_quality import positive_finite
 from ..models.database import Order, Position, PositionMetrics
 from .manual_positions import is_manual_position
 from .metrics_helpers import QTY_EPSILON, has_qty_mismatch
@@ -90,7 +91,7 @@ class PositionAnalyzerService:
     def _refresh_market(
         self, metrics: PositionMetrics, current_price: Optional[float]
     ) -> None:
-        if metrics.order_derived_qty > QTY_EPSILON and current_price is not None:
+        if metrics.order_derived_qty > QTY_EPSILON and positive_finite(current_price):
             metrics.holding_value = metrics.order_derived_qty * current_price
             remaining_cost = metrics.avg_entry_price * metrics.order_derived_qty
             metrics.unrealised_pnl = metrics.holding_value - remaining_cost
@@ -100,10 +101,11 @@ class PositionAnalyzerService:
                 ) * 100
             else:
                 metrics.unrealised_pnl_percent = 0.0
-        else:
+        elif metrics.order_derived_qty <= QTY_EPSILON:
             metrics.holding_value = 0.0
             metrics.unrealised_pnl = 0.0
             metrics.unrealised_pnl_percent = 0.0
+        # else: keep last holding_value / unrealised PnL (quote missing or invalid)
 
         metrics.total_pnl = metrics.realised_pnl + metrics.unrealised_pnl
         if metrics.total_buy_cost > QTY_EPSILON:
@@ -128,7 +130,8 @@ class PositionAnalyzerService:
             .first()
         )
         if position and position.asset:
-            return position.asset.current_price
+            price = position.asset.current_price
+            return positive_finite(price)
         return None
 
     def _log_qty_mismatch(self, position: Position, metrics: PositionMetrics) -> None:
@@ -175,8 +178,11 @@ class PositionAnalyzerService:
         metrics = self.ensure_metrics(position_id)
         if current_price is None:
             current_price = self._position_price(position_id)
-        if current_price is None and metrics.order_derived_qty > QTY_EPSILON:
-            print(f"Warning: no current price for position {position_id}; unrealised PnL set to 0.")
+        if positive_finite(current_price) is None and metrics.order_derived_qty > QTY_EPSILON:
+            print(
+                f"Warning: no usable current price for position {position_id}; "
+                "keeping last unrealised PnL."
+            )
         self._refresh_market(metrics, current_price)
         self.db.commit()
         return metrics
@@ -250,6 +256,8 @@ class PositionAnalyzerService:
             if is_manual_position(position):
                 continue
             price = position.asset.current_price if position.asset else None
-            self.refresh_market_metrics(position.id, price)
+            self.refresh_market_metrics(
+                position.id, positive_finite(price)
+            )
             count += 1
         return count

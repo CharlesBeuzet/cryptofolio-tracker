@@ -7,9 +7,11 @@ import { ADD_POSITION_VALUATION, DELETE_POSITION_VALUATION } from '../graphql/mu
 import AssetPriceChart from '../components/charts/AssetPriceChart'
 import PortfolioValueChart from '../components/charts/PortfolioValueChart'
 import ValuationTable from '../components/portfolio/ValuationTable'
+import AssetSwitcher from '../components/common/AssetSwitcher'
 import RangeSegment, { type RangeKey, rangeToDays } from '../components/common/RangeSegment'
 import { assetColor, formatPct, formatTokenPrice, formatUsdPrecise, pnlColorClass } from '../utils/format'
-import { groupPositionsByAsset } from '../utils/groupPositionsByAsset'
+import { excludeCashLikePositions } from '../utils/cashLikeAssets'
+import { groupPositionsByAsset, type PositionLike } from '../utils/groupPositionsByAsset'
 
 interface AssetOrder {
   id: number
@@ -94,7 +96,9 @@ export default function Asset() {
   }, [allOrders])
 
   const assetTabs = useMemo(() => {
-    const positions = portfolioData?.portfolio?.positions || []
+    const positions = excludeCashLikePositions(
+      (portfolioData?.portfolio?.positions || []) as PositionLike[],
+    )
     return groupPositionsByAsset(positions)
   }, [portfolioData?.portfolio?.positions])
 
@@ -157,13 +161,23 @@ export default function Asset() {
 
   const avgEntryPrice = asset?.avgEntryPrice ?? 0
   const costBasis = asset?.costBasis ?? 0
+  const cashInTrade = venues.reduce(
+    (sum: number, p: { metrics?: { cashInTrade?: number | null } }) =>
+      sum + (p.metrics?.cashInTrade ?? 0),
+    0,
+  )
+  const realisedPnl = venues.reduce(
+    (sum: number, p: { metrics?: { realisedPnl?: number | null } }) =>
+      sum + (p.metrics?.realisedPnl ?? 0),
+    0,
+  )
   const marketValue = asset?.value ?? 0
   const holdings = asset?.quantity ?? 0
 
   return (
     <div>
-      <div className="flex justify-between items-end mb-4">
-        <div>
+      <div className="page-head mb-4">
+        <div className="min-w-0">
           <div className="lbl">§2 · Asset detail</div>
           <div className="flex items-center gap-3 mt-2 flex-wrap">
             <div className="font-serif text-[26px] leading-none">{displaySymbol}</div>
@@ -199,19 +213,11 @@ export default function Asset() {
         {!allManual && <RangeSegment value={range} onChange={setRange} />}
       </div>
 
-      <div className="flex gap-2.5 flex-wrap mb-[18px]">
-        {assetTabs.map((tab, i) => (
-          <button
-            key={tab.symbol}
-            type="button"
-            className={`atab ${tab.symbol === displaySymbol ? 'on' : ''}`}
-            onClick={() => navigate(`/asset/${encodeURIComponent(tab.symbol)}`)}
-          >
-            <span className="sw" style={{ background: assetColor(i) }} />
-            {tab.symbol}
-          </button>
-        ))}
-      </div>
+      <AssetSwitcher
+        assets={assetTabs}
+        currentSymbol={displaySymbol}
+        onSelect={(nextSymbol) => navigate(`/asset/${encodeURIComponent(nextSymbol)}`)}
+      />
 
       <div className="flex gap-5 items-stretch flex-col lg:flex-row">
         <div className="panel flex-1 min-w-0">
@@ -311,18 +317,33 @@ export default function Asset() {
                       ? [['Avg sell', formatTokenPrice(avgExitPrice)] as const]
                       : []),
                   ]),
+            {(
               [
-                'Holdings',
-                holdings.toLocaleString(undefined, { maximumFractionDigits: 8 }),
-              ],
-              ['Duration', `${durationDays} days`],
-            ].map(([label, val], idx, arr) => (
+                ['Market value', formatUsdPrecise(marketValue)],
+                ['Cost basis', formatUsdPrecise(costBasis)],
+                ['Cash in trade', formatUsdPrecise(cashInTrade)],
+                [
+                  'Realised P&L',
+                  `${realisedPnl >= 0 ? '+' : ''}${formatUsdPrecise(realisedPnl)}`,
+                  pnlColorClass(realisedPnl),
+                ],
+                ['Avg entry', formatTokenPrice(avgEntryPrice)],
+                ...(avgExitPrice != null
+                  ? [['Avg sell', formatTokenPrice(avgExitPrice)] as const]
+                  : []),
+                [
+                  'Holdings',
+                  holdings.toLocaleString(undefined, { maximumFractionDigits: 8 }),
+                ],
+                ['Duration', `${durationDays} days`],
+              ] as [string, string, string?][]
+            ).map(([label, val, valClass], idx, arr) => (
               <div
                 key={label}
                 className={`flex justify-between py-2.5 ${idx < arr.length - 1 ? 'border-b border-sillage-line' : ''}`}
               >
                 <span className="lbl">{label}</span>
-                <span className="font-mono tabular-nums text-xs">{val}</span>
+                <span className={`font-mono tabular-nums text-xs ${valClass ?? ''}`}>{val}</span>
               </div>
             ))}
           </div>

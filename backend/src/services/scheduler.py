@@ -196,8 +196,6 @@ class DataUpdateScheduler:
                     f"Portfolio snapshot recorded: "
                     f"${snapshot.total_value:,.2f} at {snapshot.timestamp.isoformat()}"
                 )
-            else:
-                print("Portfolio snapshot skipped (recent snapshot exists).")
         except Exception as e:
             print(f"Error recording portfolio snapshot: {type(e).__name__}: {e}")
             db.rollback()

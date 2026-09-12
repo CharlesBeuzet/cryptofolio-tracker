@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Set
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
+from ..utils.data_quality import ConnectorFetchError, positive_finite, sanitize_rows
 from ..models.database import Asset, Position
 from .portfolio import PortfolioService
 
@@ -30,7 +31,17 @@ class AssetsService:
         try:
             prices = await connector.fetch_prices(list(symbols))
         except Exception as e:
+            # Prices are best-effort: keep last known quotes rather than
+            # aborting a successful balance fetch.
             print(f"Error fetching prices from {connector.name}: {e}")
+            prices = {}
+        prices = {
+            row["symbol"]: row["price"]
+            for row in sanitize_rows(
+                {"symbol": symbol, "price": raw}
+                for symbol, raw in (prices or {}).items()
+            )
+        }
         _apply_stablecoin_usd_prices(prices, symbols)
         return prices
 
@@ -45,8 +56,9 @@ class AssetsService:
                 self.db.add(asset)
                 updated += 1
             price = prices.get(symbol)
-            if price:
-                asset.current_price = price
+            parsed_price = positive_finite(price)
+            if parsed_price is not None:
+                asset.current_price = parsed_price
                 asset.last_updated = datetime.utcnow()
                 updated += 1
         if updated:
@@ -60,7 +72,7 @@ class AssetsService:
         seen_symbols: Set[str] = set()
 
         for balance in balances:
-            if balance.get("quantity", 0) <= 0:
+            if positive_finite(balance.get("quantity")) is None:
                 continue
             symbol = balance["symbol"]
             seen_symbols.add(symbol)
@@ -90,11 +102,20 @@ class AssetsService:
         return {"opened": opened, "closed": closed}
 
     async def sync_from_connector(self, connector: Any) -> Dict[str, int]:
-        """Fetch balances and prices from one connector, then sync assets and positions."""
+        """Fetch balances and prices from one connector, then sync assets and positions.
+
+        A failed balance fetch must raise (typically ConnectorFetchError) so
+        existing positions are not closed from an empty fallback list.
+        """
         exchange = connector.name
         print(f"Syncing assets from {exchange} ...")
-        balances = await connector.fetch_balances()
-        symbols = [b["symbol"] for b in balances if b.get("quantity", 0) > 0]
+        raw_balances = await connector.fetch_balances()
+        balances = sanitize_rows(raw_balances)
+        if raw_balances and not balances:
+            raise ConnectorFetchError(
+                f"{exchange} balances: response contained no valid rows"
+            )
+        symbols = [b["symbol"] for b in balances]
         prices = await self._fetch_prices(connector, symbols)
         assets_updated = self._sync_assets(balances, prices)
         position_counts = self._sync_positions(balances, exchange)

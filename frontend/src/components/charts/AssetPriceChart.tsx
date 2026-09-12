@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback, useEffect } from 'react'
+import { useMemo, useState, useCallback, useEffect, useLayoutEffect } from 'react'
 import {
   CartesianGrid,
   ComposedChart,
@@ -12,6 +12,8 @@ import {
 } from 'recharts'
 import { format } from 'date-fns'
 import { formatTokenPrice } from '../../utils/format'
+import ChartScrubOverlay from './ChartScrubOverlay'
+import { nearestTimeIndex, type PlotBounds } from './nearestChartIndex'
 
 interface PricePoint {
   timestamp: string
@@ -66,7 +68,7 @@ interface CandlestickLayerProps {
   yAxisMap?: Record<string, AxisMapEntry>
   data?: CandleDatum[]
   offset?: { left?: number; width?: number; height?: number }
-  onCandleHover?: (payload: { timestamp: number; close: number } | null) => void
+  onPlotBounds?: (bounds: PlotBounds) => void
 }
 
 function buildDemoOrders(priceHistory: PricePoint[]): Order[] {
@@ -102,8 +104,8 @@ function computeYDomain(candles: CandleDatum[], markerPrices: number[] = []): [n
   const min = Math.min(...values)
   const max = Math.max(...values)
   const span = max - min
-  // Extra headroom so buy/sell arrows (offset in px from the wick) are not clipped.
-  const pad = span > 0 ? span * 0.14 : Math.max(Math.abs(min) * 0.01, 1)
+  // Extra headroom so buy/sell pins (offset in px from the wick) are not clipped.
+  const pad = span > 0 ? span * 0.12 : Math.max(Math.abs(min) * 0.01, 1)
   return [min - pad, max + pad]
 }
 
@@ -123,11 +125,17 @@ function findNearestCandle(candles: CandleDatum[], timestamp: number): CandleDat
   return nearest
 }
 
-function CandlestickLayer({ xAxisMap, yAxisMap, data, offset, onCandleHover }: CandlestickLayerProps) {
+function CandlestickLayer({ xAxisMap, yAxisMap, data, offset, onPlotBounds }: CandlestickLayerProps) {
   const xAxis = xAxisMap ? Object.values(xAxisMap)[0] : undefined
   const yAxis = yAxisMap ? Object.values(yAxisMap)[0] : undefined
   const xScale = xAxis?.scale
   const yScale = yAxis?.scale
+
+  useLayoutEffect(() => {
+    const left = offset?.left ?? 0
+    const width = offset?.width ?? 0
+    if (width > 0) onPlotBounds?.({ left, width })
+  }, [offset?.left, offset?.width, onPlotBounds])
 
   if (!xScale || !yScale || !data?.length) return null
 
@@ -138,7 +146,7 @@ function CandlestickLayer({ xAxisMap, yAxisMap, data, offset, onCandleHover }: C
   const bodyWidth = Math.max(2, slot * 0.62)
 
   return (
-    <g className="candlestick-layer">
+    <g className="candlestick-layer" pointerEvents="none">
       {data.map((candle) => {
         const x = xScale(candle.timestamp)
         const yHigh = yScale(candle.high)
@@ -152,20 +160,6 @@ function CandlestickLayer({ xAxisMap, yAxisMap, data, offset, onCandleHover }: C
 
         return (
           <g key={candle.timestamp}>
-            <rect
-              x={x - slot / 2}
-              y={0}
-              width={Math.max(slot, 12)}
-              height={offset?.height ?? 0}
-              fill="transparent"
-              onMouseEnter={() =>
-                onCandleHover?.({ timestamp: candle.timestamp, close: candle.close })
-              }
-              onTouchStart={(e) => {
-                e.preventDefault()
-                onCandleHover?.({ timestamp: candle.timestamp, close: candle.close })
-              }}
-            />
             <line
               x1={x}
               y1={yHigh}
@@ -173,7 +167,6 @@ function CandlestickLayer({ xAxisMap, yAxisMap, data, offset, onCandleHover }: C
               y2={yLow}
               stroke={color}
               strokeWidth={1}
-              pointerEvents="none"
             />
             <rect
               x={x - bodyWidth / 2}
@@ -183,7 +176,6 @@ function CandlestickLayer({ xAxisMap, yAxisMap, data, offset, onCandleHover }: C
               fill={color}
               stroke={color}
               strokeWidth={0.5}
-              pointerEvents="none"
             />
           </g>
         )
@@ -192,10 +184,10 @@ function CandlestickLayer({ xAxisMap, yAxisMap, data, offset, onCandleHover }: C
   )
 }
 
-/** Pixel gap between the candle wick tip and the arrow tip. */
-const ORDER_ARROW_GAP = 18
-const ORDER_ARROW_HALF_W = 10
-const ORDER_ARROW_HEIGHT = 20
+/** Pixel gap between the candle wick and the pin stem. */
+const PIN_GAP = 4
+const PIN_RADIUS = 9
+const PIN_STEM = 5
 
 function OrderPin({
   cx,
@@ -211,54 +203,34 @@ function OrderPin({
   const isBuy = payload?.type === 'buy'
   const color = isBuy ? 'var(--green)' : 'var(--down)'
   const label = isBuy ? 'B' : 'S'
+  // Buy sits below the candle; sell sits above. Stem points at the wick.
+  const dir: 1 | -1 = isBuy ? 1 : -1
+  const stemStart = cy + dir * PIN_GAP
+  const stemEnd = stemStart + dir * PIN_STEM
+  const bodyCy = stemEnd + dir * PIN_RADIUS
 
-  // Buy sits below the candle (arrow ▲); sell sits above (arrow ▼).
-  // Tip points toward the price so the marker never overlaps the wick/body.
-  // Label sits in the wide base of the triangle.
-  if (isBuy) {
-    const tipY = cy + ORDER_ARROW_GAP
-    const baseY = tipY + ORDER_ARROW_HEIGHT
-    const labelY = tipY + ORDER_ARROW_HEIGHT * 0.68
-    return (
-      <g>
-        <path
-          d={`M${cx},${tipY} L${cx + ORDER_ARROW_HALF_W},${baseY} L${cx - ORDER_ARROW_HALF_W},${baseY} Z`}
-          fill={color}
-          stroke="var(--card)"
-          strokeWidth={1.2}
-          strokeLinejoin="round"
-        />
-        <text
-          x={cx}
-          y={labelY}
-          textAnchor="middle"
-          dominantBaseline="middle"
-          fill="var(--mkink)"
-          fontSize={9}
-          fontWeight={700}
-          fontFamily="IBM Plex Mono, monospace"
-        >
-          {label}
-        </text>
-      </g>
-    )
-  }
-
-  const tipY = cy - ORDER_ARROW_GAP
-  const baseY = tipY - ORDER_ARROW_HEIGHT
-  const labelY = tipY - ORDER_ARROW_HEIGHT * 0.68
   return (
-    <g>
-      <path
-        d={`M${cx},${tipY} L${cx + ORDER_ARROW_HALF_W},${baseY} L${cx - ORDER_ARROW_HALF_W},${baseY} Z`}
+    <g pointerEvents="none">
+      <line
+        x1={cx}
+        y1={stemStart}
+        x2={cx}
+        y2={stemEnd}
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
+      <circle
+        cx={cx}
+        cy={bodyCy}
+        r={PIN_RADIUS}
         fill={color}
         stroke="var(--card)"
-        strokeWidth={1.2}
-        strokeLinejoin="round"
+        strokeWidth={1.5}
       />
       <text
         x={cx}
-        y={labelY}
+        y={bodyCy + 0.5}
         textAnchor="middle"
         dominantBaseline="middle"
         fill="var(--mkink)"
@@ -286,6 +258,7 @@ export default function AssetPriceChart({
   onCandleHover,
 }: AssetPriceChartProps) {
   const [activeTimestamp, setActiveTimestamp] = useState<number | null>(null)
+  const [plotBounds, setPlotBounds] = useState<PlotBounds | null>(null)
   const [narrowViewport, setNarrowViewport] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(max-width: 639px)').matches,
   )
@@ -306,10 +279,11 @@ export default function AssetPriceChart({
     [onCandleHover],
   )
 
-  const handleChartMouseLeave = useCallback(() => {
-    setActiveTimestamp(null)
-    onCandleHover?.(null)
-  }, [onCandleHover])
+  const handlePlotBounds = useCallback((bounds: PlotBounds) => {
+    setPlotBounds((prev) =>
+      prev && prev.left === bounds.left && prev.width === bounds.width ? prev : bounds,
+    )
+  }, [])
 
   const displayOrders = useMemo(() => {
     if (orders.length > 0) return orders
@@ -329,13 +303,36 @@ export default function AssetPriceChart({
     [priceHistory],
   )
 
+  const timestamps = useMemo(() => candleData.map((candle) => candle.timestamp), [candleData])
+
+  const getIndex = useCallback(
+    (ratio: number) => nearestTimeIndex(timestamps, ratio),
+    [timestamps],
+  )
+
+  const handleScrubIndex = useCallback(
+    (index: number | null) => {
+      if (index == null) {
+        handleCandleHover(null)
+        return
+      }
+      const candle = candleData[index]
+      if (!candle) {
+        handleCandleHover(null)
+        return
+      }
+      handleCandleHover({ timestamp: candle.timestamp, close: candle.close })
+    },
+    [candleData, handleCandleHover],
+  )
+
   const orderData = useMemo(
     () =>
       displayOrders.map((order) => {
         const timestamp = new Date(order.executedAt).getTime()
         const candle = findNearestCandle(candleData, timestamp)
         const isBuy = order.type === 'buy'
-        // Anchor outside the candle wick so arrows never sit inside the body.
+        // Anchor outside the candle wick so pins never sit inside the body.
         const anchorPrice = candle
           ? isBuy
             ? Math.min(order.price, candle.low)
@@ -360,8 +357,8 @@ export default function AssetPriceChart({
   )
 
   useEffect(() => {
-    setActiveTimestamp(null)
-  }, [candleData])
+    handleCandleHover(null)
+  }, [candleData, handleCandleHover])
 
   if (loading) {
     return (
@@ -409,19 +406,16 @@ export default function AssetPriceChart({
   }
 
   return (
-    <div
-      className="relative h-[220px] sm:h-[300px] w-full touch-pan-y"
-      onMouseLeave={handleChartMouseLeave}
-    >
+    <div className="relative h-[220px] sm:h-[300px] w-full chart-plot">
       {isMock && (
-        <div className="absolute top-0 right-0 z-10 font-mono text-[9px] uppercase tracking-wider text-sillage-soft">
+        <div className="absolute top-0 right-0 z-10 pointer-events-none font-mono text-[9px] uppercase tracking-wider text-sillage-soft">
           demo data
         </div>
       )}
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart
           data={candleData}
-          margin={{ top: 16, right: narrowViewport ? 4 : 12, left: 0, bottom: 0 }}
+          margin={{ top: 18, right: narrowViewport ? 4 : 12, left: 0, bottom: 4 }}
         >
           <CartesianGrid stroke="var(--line)" strokeDasharray="0" vertical={false} />
           <XAxis
@@ -473,7 +467,7 @@ export default function AssetPriceChart({
           )}
           <Customized
             component={(props: CandlestickLayerProps) => (
-              <CandlestickLayer {...props} onCandleHover={handleCandleHover} />
+              <CandlestickLayer {...props} onPlotBounds={handlePlotBounds} />
             )}
           />
           {activeTimestamp != null && (
@@ -535,6 +529,12 @@ export default function AssetPriceChart({
           ))}
         </ComposedChart>
       </ResponsiveContainer>
+      <ChartScrubOverlay
+        pointCount={candleData.length}
+        plotBounds={plotBounds}
+        getIndex={getIndex}
+        onIndex={handleScrubIndex}
+      />
     </div>
   )
 }

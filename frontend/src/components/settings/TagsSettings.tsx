@@ -2,6 +2,7 @@ import { FormEvent, useMemo, useState } from 'react'
 import { useMutation, useQuery } from '@apollo/client'
 import { GET_PORTFOLIO, GET_TAGS } from '../../graphql/queries'
 import { CREATE_TAG, DELETE_TAG, SET_POSITION_TAG, UPDATE_TAG } from '../../graphql/mutations'
+import { excludeCashLikePositions } from '../../utils/cashLikeAssets'
 import { assetColor } from '../../utils/format'
 
 interface Tag {
@@ -36,7 +37,9 @@ export default function TagsSettings() {
 
   const tags: Tag[] = tagsData?.tags ?? []
   const positions: PositionRow[] = useMemo(() => {
-    const list = portfolioData?.portfolio?.positions ?? []
+    const list = excludeCashLikePositions(
+      (portfolioData?.portfolio?.positions ?? []) as PositionRow[],
+    )
     return [...list].sort((a: PositionRow, b: PositionRow) => {
       const sym = a.symbol.localeCompare(b.symbol)
       if (sym !== 0) return sym
