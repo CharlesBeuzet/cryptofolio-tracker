@@ -37,6 +37,7 @@ class OrderService:
             .filter(
                 Position.exchange == connector.name,
                 Position.status == "open",
+                Position.source == "synced",
             )
             .distinct()
             .all()
@@ -109,6 +110,7 @@ class OrderService:
                 Position.symbol == symbol,
                 Position.exchange == exchange,
                 Position.status == "open",
+                Position.source == "synced",
             )
             .first()
         )
@@ -136,6 +138,7 @@ class OrderService:
                     Position.symbol == symbol,
                     Position.exchange == exchange,
                     Position.status == "open",
+                Position.source == "synced",
                 )
                 .first()
             )

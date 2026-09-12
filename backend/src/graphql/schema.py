@@ -5,7 +5,7 @@ import strawberry
 from sqlalchemy import func
 from strawberry.fastapi import GraphQLRouter
 
-from ..models.database import Position, Order, PortfolioSnapshot, Asset, PositionMetrics, Tag, SessionLocal
+from ..models.database import Position, Order, PortfolioSnapshot, Asset, PositionMetrics, PositionValuation, Tag, SessionLocal
 from ..config.loader import list_configured_venues
 from ..services.portfolio import PortfolioService
 from ..services.fiat_deposits import FiatDepositService
@@ -13,6 +13,14 @@ from ..services.price_history import PriceHistoryService
 from ..services.metrics_helpers import cost_basis, cash_in_trade
 from ..services import config_settings as config_settings_service
 from ..services.tags import TagService
+from ..services.manual_positions import (
+    ManualPositionService,
+    is_manual_position,
+    manual_avg_entry,
+    manual_cost_basis,
+    manual_pnl,
+    position_source,
+)
 
 
 @strawberry.type
@@ -103,6 +111,17 @@ class TagType:
 
 
 @strawberry.type
+class PositionValuationType:
+    """User-entered mark-to-market snapshot for a manual position."""
+
+    id: int
+    recorded_at: datetime
+    value_amount: float
+    quantity: Optional[float]
+    created_at: datetime
+
+
+@strawberry.type
 class PositionType:
     """Position GraphQL type."""
     id: int
@@ -115,13 +134,23 @@ class PositionType:
     first_bought_at: datetime
     exchange: Optional[str]
     status: str
+    source: str
+    display_name: Optional[str]
+    external_url: Optional[str]
+    cost_basis: float
     tag: Optional[TagType]
     orders: List[OrderType]
     metrics: Optional[PositionMetricsType]
+    valuations: List[PositionValuationType]
 
     @strawberry.field
     def value(self) -> float:
         """Calculate position value."""
+        if self.source == "manual":
+            if self.valuations:
+                latest = max(self.valuations, key=lambda v: (v.recorded_at, v.id))
+                return latest.value_amount
+            return 0.0
         if self.current_price:
             return self.quantity * self.current_price
         return 0.0
@@ -164,25 +193,58 @@ def _tag_to_type(tag: Optional[Tag]) -> Optional[TagType]:
     )
 
 
+def _valuation_to_type(valuation: PositionValuation) -> PositionValuationType:
+    return PositionValuationType(
+        id=valuation.id,
+        recorded_at=valuation.recorded_at,
+        value_amount=valuation.value_amount,
+        quantity=valuation.quantity,
+        created_at=valuation.created_at,
+    )
+
+
 def _position_to_type(pos: Position) -> PositionType:
     """Map a Position ORM object to GraphQL type."""
-    asset_price = pos.asset.current_price if pos.asset else None
     metrics = pos.metrics
     orders = [_order_to_type(o) for o in pos.orders]
+    if is_manual_position(pos):
+        valuations = [_valuation_to_type(v) for v in (pos.valuations or [])]
+        pnl, pnl_percent = manual_pnl(pos)
+        avg_entry = manual_avg_entry(pos)
+        market_value = 0.0
+        if valuations:
+            latest = max(valuations, key=lambda v: (v.recorded_at, v.id))
+            market_value = latest.value_amount
+        qty = pos.quantity or 0.0
+        asset_price = (market_value / qty) if qty else None
+        book_cost = manual_cost_basis(pos)
+    else:
+        valuations = []
+        asset_price = pos.asset.current_price if pos.asset else None
+        pnl = metrics.unrealised_pnl if metrics else 0.0
+        pnl_percent = metrics.unrealised_pnl_percent if metrics else 0.0
+        avg_entry = metrics.avg_entry_price if metrics else 0.0
+        book_cost = cost_basis(metrics) if metrics else 0.0
+
     return PositionType(
         id=pos.id,
         symbol=pos.symbol,
         quantity=pos.quantity,
-        avg_entry_price=metrics.avg_entry_price if metrics else 0.0,
+        avg_entry_price=avg_entry,
         current_price=asset_price,
-        pnl=metrics.unrealised_pnl if metrics else 0.0,
-        pnl_percent=metrics.unrealised_pnl_percent if metrics else 0.0,
+        pnl=pnl,
+        pnl_percent=pnl_percent,
         first_bought_at=pos.first_bought_at,
         exchange=pos.exchange,
         status=pos.status,
+        source=position_source(pos),
+        display_name=pos.display_name if is_manual_position(pos) else None,
+        external_url=pos.external_url if is_manual_position(pos) else None,
+        cost_basis=book_cost,
         tag=_tag_to_type(pos.tag),
         orders=orders,
         metrics=_metrics_to_type(metrics) if metrics else None,
+        valuations=valuations,
     )
 
 
@@ -737,6 +799,101 @@ class Mutation:
             service = PortfolioService(db)
             full = service.get_position_by_id(pos.id) or pos
             return _position_to_type(full)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+        finally:
+            db.close()
+
+    @strawberry.mutation
+    def create_manual_position(
+        self,
+        display_name: str,
+        symbol: str,
+        exchange: str,
+        external_url: Optional[str] = None,
+        initial_value: Optional[float] = None,
+        initial_quantity: Optional[float] = None,
+        recorded_at: Optional[datetime] = None,
+    ) -> PositionType:
+        db = SessionLocal()
+        try:
+            pos = ManualPositionService(db).create(
+                display_name=display_name,
+                symbol=symbol,
+                exchange=exchange,
+                external_url=external_url,
+                initial_value=initial_value,
+                initial_quantity=initial_quantity,
+                recorded_at=recorded_at,
+            )
+            return _position_to_type(pos)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+        finally:
+            db.close()
+
+    @strawberry.mutation
+    def update_manual_position(
+        self,
+        id: int,
+        display_name: Optional[str] = None,
+        symbol: Optional[str] = None,
+        exchange: Optional[str] = None,
+        external_url: Optional[str] = None,
+    ) -> PositionType:
+        db = SessionLocal()
+        try:
+            pos = ManualPositionService(db).update(
+                position_id=id,
+                display_name=display_name,
+                symbol=symbol,
+                exchange=exchange,
+                external_url=external_url,
+            )
+            return _position_to_type(pos)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+        finally:
+            db.close()
+
+    @strawberry.mutation
+    def delete_manual_position(self, id: int) -> bool:
+        db = SessionLocal()
+        try:
+            return ManualPositionService(db).delete(id)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+        finally:
+            db.close()
+
+    @strawberry.mutation
+    def add_position_valuation(
+        self,
+        position_id: int,
+        value_amount: float,
+        recorded_at: Optional[datetime] = None,
+        quantity: Optional[float] = None,
+    ) -> PositionType:
+        db = SessionLocal()
+        try:
+            pos = ManualPositionService(db).add_valuation(
+                position_id=position_id,
+                value_amount=value_amount,
+                recorded_at=recorded_at,
+                quantity=quantity,
+            )
+            return _position_to_type(pos)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+        finally:
+            db.close()
+
+    @strawberry.mutation
+    def delete_position_valuation(self, id: int) -> PositionType:
+        db = SessionLocal()
+        try:
+            pos = ManualPositionService(db).delete_valuation(id)
+            return _position_to_type(pos)
         except ValueError as exc:
             raise ValueError(str(exc)) from exc
         finally:

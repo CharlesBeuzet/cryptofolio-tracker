@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from ..utils.data_quality import positive_finite
 from ..models.database import Order, Position, PositionMetrics
+from .manual_positions import is_manual_position
 from .metrics_helpers import QTY_EPSILON, has_qty_mismatch
 
 
@@ -218,6 +219,8 @@ class PositionAnalyzerService:
         count = 0
         positions = self.db.query(Position).all()
         for position in positions:
+            if is_manual_position(position):
+                continue
             metrics = (
                 self.db.query(PositionMetrics)
                 .filter(PositionMetrics.position_id == position.id)
@@ -250,6 +253,8 @@ class PositionAnalyzerService:
             .all()
         )
         for position in positions:
+            if is_manual_position(position):
+                continue
             price = position.asset.current_price if position.asset else None
             self.refresh_market_metrics(
                 position.id, positive_finite(price)

@@ -12,6 +12,7 @@ interface PortfolioValueChartProps {
   compareBtc?: boolean
   height?: number | string
   overlay?: React.ReactNode
+  valueLabel?: string
   onPointInspect?: (point: NavInspectPoint | null) => void
 }
 

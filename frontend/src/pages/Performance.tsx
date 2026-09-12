@@ -20,6 +20,7 @@ interface Position {
   exchange: string | null
   avgEntryPrice: number
   quantity: number
+  source?: string | null
   tag: Tag | null
 }
 
@@ -133,6 +134,7 @@ function ThesisCard({ thesis: t }: { thesis: ThesisGroup }) {
               >
                 <span className="tk flex-1">{p.symbol}</span>
                 <span className="chip mr-2">{p.exchange || 'other'}</span>
+                {p.source === 'manual' && <span className="chip manual mr-2">manual</span>}
                 {p.tag && <span className="chip mr-2">{p.tag.name}</span>}
                 <span className="font-mono tabular-nums text-xs text-sillage-soft">
                   {formatUsdPrecise(p.value)}
