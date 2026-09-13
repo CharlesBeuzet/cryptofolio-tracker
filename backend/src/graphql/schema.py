@@ -206,7 +206,14 @@ def _valuation_to_type(valuation: PositionValuation) -> PositionValuationType:
 def _position_to_type(pos: Position) -> PositionType:
     """Map a Position ORM object to GraphQL type."""
     metrics = pos.metrics
-    orders = [_order_to_type(o) for o in pos.orders]
+    orders = [
+        _order_to_type(o)
+        for o in sorted(
+            pos.orders,
+            key=lambda o: (o.executed_at, o.id),
+            reverse=True,
+        )
+    ]
     if is_manual_position(pos):
         valuations = [_valuation_to_type(v) for v in (pos.valuations or [])]
         pnl, pnl_percent = manual_pnl(pos)
@@ -538,7 +545,7 @@ class Query:
             orders = (
                 db.query(Order)
                 .filter(Order.position_id.in_(position_ids))
-                .order_by(Order.executed_at.desc())
+                .order_by(Order.executed_at.desc(), Order.id.desc())
                 .all()
             )
 

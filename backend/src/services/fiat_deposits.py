@@ -78,7 +78,7 @@ class FiatDepositService:
     def list_deposits(self, limit: int = 500) -> List[FiatDeposit]:
         return (
             self.db.query(FiatDeposit)
-            .order_by(FiatDeposit.deposited_at.desc())
+            .order_by(FiatDeposit.deposited_at.desc(), FiatDeposit.id.desc())
             .limit(limit)
             .all()
         )
