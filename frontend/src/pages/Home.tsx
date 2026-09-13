@@ -54,6 +54,7 @@ function OverviewAssetRow({
                   {venue.exchange}
                 </span>
               )}
+              {venue.source === 'manual' && <span className="chip manual">manual</span>}
               {venue.tag?.name && <span className="chip tag">{venue.tag.name}</span>}
             </Fragment>
           ))}
