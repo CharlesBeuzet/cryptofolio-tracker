@@ -87,6 +87,11 @@ body {
     background: var(--gsoft);
   }
 
+  .chip.manual {
+    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+    color: var(--accent);
+  }
+
   .chip.cl {
     @apply cursor-pointer;
   }

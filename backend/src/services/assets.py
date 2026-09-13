@@ -82,7 +82,11 @@ class AssetsService:
             opened += 1
 
         query = self.db.query(Position).filter(
-            and_(Position.exchange == exchange, Position.status == "open")
+            and_(
+                Position.exchange == exchange,
+                Position.status == "open",
+                Position.source != "manual",
+            )
         )
         if seen_symbols:
             query = query.filter(~Position.symbol.in_(seen_symbols))

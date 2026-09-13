@@ -5,6 +5,8 @@ export interface PositionTagLike {
   description?: string | null
 }
 
+export type PositionSource = 'synced' | 'manual'
+
 /** Venue-level slice of an open position (one exchange / wallet). */
 export interface PositionLike {
   id: number
@@ -15,6 +17,9 @@ export interface PositionLike {
   pnl?: number | null
   pnlPercent?: number | null
   exchange?: string | null
+  source?: PositionSource | string | null
+  displayName?: string | null
+  costBasis?: number | null
   tag?: PositionTagLike | null
 }
 
@@ -25,6 +30,8 @@ export interface AssetVenue {
   value: number
   pnl: number
   pnlPercent: number
+  source: PositionSource | string
+  displayName: string | null
   tag: PositionTagLike | null
 }
 
@@ -36,7 +43,7 @@ export interface GroupedAsset {
   pnl: number
   /** Weighted unrealised % from consolidated cost basis (not an average of %). */
   pnlPercent: number
-  /** Σ(avg entry × qty) across venues that have an entry price. */
+  /** Σ cost basis across venues. */
   costBasis: number
   /** costBasis / quantity when both are positive. */
   avgEntryPrice: number
@@ -71,6 +78,12 @@ export function groupPositionsByAsset(positions: PositionLike[]): GroupedAsset[]
     const pnl = p.pnl || 0
     const avgEntry = p.avgEntryPrice || 0
     const exchange = (p.exchange || '—').trim() || '—'
+    const venueCost =
+      p.costBasis != null && p.costBasis > 0
+        ? p.costBasis
+        : avgEntry > 0 && quantity > 0
+          ? avgEntry * quantity
+          : 0
 
     let group = bySymbol.get(symbol)
     if (!group) {
@@ -81,9 +94,7 @@ export function groupPositionsByAsset(positions: PositionLike[]): GroupedAsset[]
     group.quantity += quantity
     group.value += value
     group.pnl += pnl
-    if (avgEntry > 0 && quantity > 0) {
-      group.costBasis += avgEntry * quantity
-    }
+    group.costBasis += venueCost
     group.venues.push({
       id: p.id,
       exchange,
@@ -91,6 +102,8 @@ export function groupPositionsByAsset(positions: PositionLike[]): GroupedAsset[]
       value,
       pnl,
       pnlPercent: p.pnlPercent || 0,
+      source: p.source || 'synced',
+      displayName: p.displayName ?? null,
       tag: p.tag ?? null,
     })
   }

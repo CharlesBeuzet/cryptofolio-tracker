@@ -16,6 +16,7 @@ interface PositionRow {
   symbol: string
   exchange: string | null
   value: number
+  source?: string | null
   tag: Tag | null
 }
 
@@ -241,6 +242,9 @@ export default function TagsSettings() {
                   <div className="w-20 tk">{p.symbol}</div>
                   <div className="w-28">
                     <span className="chip">{p.exchange || 'other'}</span>
+                    {p.source === 'manual' && (
+                      <span className="chip manual ml-1">manual</span>
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <select
