@@ -20,6 +20,7 @@ interface Position {
   exchange: string | null
   avgEntryPrice: number
   quantity: number
+  costBasis?: number | null
   source?: string | null
   tag: Tag | null
 }
@@ -60,7 +61,15 @@ function buildGroups(
   return Object.entries(groups)
     .map(([key, list], gi) => {
       const totalValue = list.reduce((s, p) => s + p.value, 0)
-      const totalCost = list.reduce((s, p) => s + p.avgEntryPrice * p.quantity, 0)
+      const totalCost = list.reduce((s, p) => {
+        const cost =
+          p.costBasis != null && p.costBasis > 0
+            ? p.costBasis
+            : p.avgEntryPrice > 0 && p.quantity > 0
+              ? p.avgEntryPrice * p.quantity
+              : 0
+        return s + cost
+      }, 0)
       const pnlPct = totalCost > 0 ? ((totalValue - totalCost) / totalCost) * 100 : 0
       const sample = list[0]
       return {
