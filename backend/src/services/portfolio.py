@@ -10,6 +10,7 @@ from ..models.database import (
     Position,
     PortfolioSnapshot,
 )
+from .manual_positions import is_manual_position, manual_pnl, position_market_value
 
 
 class PortfolioService:
@@ -26,6 +27,7 @@ class PortfolioService:
                 joinedload(Position.orders),
                 joinedload(Position.metrics),
                 joinedload(Position.tag),
+                joinedload(Position.valuations),
             )
             .filter(Position.status == "open")
         )
@@ -36,8 +38,15 @@ class PortfolioService:
         total_value = 0.0
         missing_price_count = 0
         for position in positions:
-            qty = position.quantity
-            parsed_qty = positive_finite(qty)
+            if is_manual_position(position):
+                parsed = positive_finite(position_market_value(position))
+                if parsed is None:
+                    missing_price_count += 1
+                    continue
+                total_value += parsed
+                continue
+
+            parsed_qty = positive_finite(position.quantity)
             if parsed_qty is None:
                 continue
             price = position.asset.current_price if position.asset else None
@@ -115,9 +124,12 @@ class PortfolioService:
             pnl_percent = (pnl / snapshot.total_value * 100) if snapshot.total_value > 0 else 0
         else:
             positions = self._open_positions_query().all()
-            pnl = sum(
-                (p.metrics.total_pnl if p.metrics else 0.0) for p in positions
-            )
+            pnl = 0.0
+            for position in positions:
+                if is_manual_position(position):
+                    pnl += manual_pnl(position)[0]
+                elif position.metrics:
+                    pnl += position.metrics.total_pnl
             pnl_percent = (
                 (pnl / (current_value - pnl) * 100) if (current_value - pnl) > 0 else 0
             )
@@ -140,6 +152,7 @@ class PortfolioService:
                 joinedload(Position.orders),
                 joinedload(Position.metrics),
                 joinedload(Position.tag),
+                joinedload(Position.valuations),
             )
             .filter(Position.id == position_id)
             .first()
@@ -196,7 +209,13 @@ class PortfolioService:
         position = (
             self.db.query(Position)
             .options(joinedload(Position.asset))
-            .filter(and_(Position.symbol == symbol, Position.exchange == exchange))
+            .filter(
+                and_(
+                    Position.symbol == symbol,
+                    Position.exchange == exchange,
+                    Position.source != "manual",
+                )
+            )
             .first()
         )
 
@@ -218,6 +237,7 @@ class PortfolioService:
                 first_bought_at=datetime.utcnow(),
                 exchange=exchange,
                 status="open",
+                source="synced",
             )
             self.db.add(position)
 

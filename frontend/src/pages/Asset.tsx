@@ -1,12 +1,15 @@
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { useQuery } from '@apollo/client'
-import { useState, useMemo, useEffect } from 'react'
+import { useMutation, useQuery } from '@apollo/client'
+import { Fragment, useState, useMemo, useEffect } from 'react'
 import { format } from 'date-fns'
 import { GET_ASSET, GET_PORTFOLIO, GET_ASSET_PRICE_HISTORY } from '../graphql/queries'
+import { ADD_POSITION_VALUATION, DELETE_POSITION_VALUATION } from '../graphql/mutations'
 import AssetPriceChart from '../components/charts/AssetPriceChart'
+import PortfolioValueChart from '../components/charts/PortfolioValueChart'
+import ValuationTable from '../components/portfolio/ValuationTable'
 import AssetSwitcher from '../components/common/AssetSwitcher'
 import RangeSegment, { type RangeKey, rangeToDays } from '../components/common/RangeSegment'
-import { assetColor, formatPct, formatTokenPrice, formatUsdPrecise, pnlColorClass } from '../utils/format'
+import { formatPct, formatTokenPrice, formatUsdPrecise, pnlColorClass } from '../utils/format'
 import { excludeCashLikePositions } from '../utils/cashLikeAssets'
 import { groupPositionsByAsset, type PositionLike } from '../utils/groupPositionsByAsset'
 
@@ -28,17 +31,22 @@ export default function Asset() {
   const [hoveredCandle, setHoveredCandle] = useState<{ timestamp: number; close: number } | null>(
     null,
   )
+  const [busy, setBusy] = useState(false)
 
   const { data: portfolioData } = useQuery(GET_PORTFOLIO)
-  const { data, loading, error } = useQuery(GET_ASSET, {
+  const { data, loading, error, refetch } = useQuery(GET_ASSET, {
     variables: { symbol },
     skip: !symbol,
   })
+  const [addValuation] = useMutation(ADD_POSITION_VALUATION)
+  const [deleteValuation] = useMutation(DELETE_POSITION_VALUATION)
 
   const assetData = data?.asset
   const venues = assetData?.positions || []
   const grouped = useMemo(() => groupPositionsByAsset(venues), [venues])
   const asset = grouped[0]
+  const allManual =
+    venues.length > 0 && venues.every((p: { source?: string }) => p.source === 'manual')
 
   const primaryExchange =
     venues.find((p: { id: number }) => p.id === asset?.primaryId)?.exchange ||
@@ -53,7 +61,7 @@ export default function Asset() {
 
   const { data: priceData, loading: priceLoading } = useQuery(GET_ASSET_PRICE_HISTORY, {
     variables: { symbol, days, exchange: primaryExchange },
-    skip: !symbol || !primaryExchange,
+    skip: !symbol || !primaryExchange || allManual,
   })
 
   const priceHistory = priceData?.assetPriceHistory?.points || []
@@ -139,7 +147,10 @@ export default function Asset() {
         new Map(
           allOrders
             .filter((o) => o.exchange)
-            .map((o) => [o.exchange!.toLowerCase(), { id: o.id, exchange: o.exchange! }]),
+            .map((o) => [
+              o.exchange!.toLowerCase(),
+              { id: o.id, exchange: o.exchange!, source: 'synced' as const },
+            ]),
         ).values(),
       )
 
@@ -171,8 +182,8 @@ export default function Asset() {
           <div className="flex items-center gap-3 mt-2 flex-wrap">
             <div className="font-serif text-[26px] leading-none">{displaySymbol}</div>
             {venueChips.map((venue) => (
+              <Fragment key={venue.id}>
               <span
-                key={venue.id}
                 role={asset ? 'link' : undefined}
                 tabIndex={asset ? 0 : undefined}
                 className={asset ? 'chip cl' : 'chip'}
@@ -194,10 +205,12 @@ export default function Asset() {
               >
                 {venue.exchange}
               </span>
+              {venue.source === 'manual' && <span className="chip manual">manual</span>}
+              </Fragment>
             ))}
           </div>
         </div>
-        <RangeSegment value={range} onChange={setRange} />
+        {!allManual && <RangeSegment value={range} onChange={setRange} />}
       </div>
 
       <AssetSwitcher
@@ -208,48 +221,78 @@ export default function Asset() {
 
       <div className="flex gap-5 items-stretch flex-col lg:flex-row">
         <div className="panel flex-1 min-w-0">
-          <div className="flex justify-between items-center mb-3.5">
-            <div className="lbl">Fig 2 · Price · order markers</div>
-            <div className="font-mono text-[11px] flex gap-4 flex-wrap justify-end">
-              <span>
-                <span className="text-sillage-green font-bold">B</span> buy
-              </span>
-              <span>
-                <span className="text-sillage-accent font-bold">S</span> sell
-              </span>
-              <span className="text-sillage-soft">
-                <span className="text-sillage-green">—</span> avg entry
-              </span>
-              {avgExitPrice != null && (
-                <span className="text-sillage-soft">
-                  <span className="text-sillage-accent">—</span> avg sell
-                </span>
-              )}
-              {hoveredCandle ? (
-                <span className="text-sillage-ink tabular-nums">
-                  {format(new Date(hoveredCandle.timestamp), 'MMM dd, yyyy')} ·{' '}
-                  {formatTokenPrice(hoveredCandle.close)}
-                </span>
-              ) : (
-                currentPrice != null && (
-                  <span className="text-sillage-soft">last {formatTokenPrice(currentPrice)}</span>
-                )
-              )}
-            </div>
-          </div>
-          <AssetPriceChart
-            symbol={displaySymbol}
-            priceHistory={priceHistory}
-            orders={ordersInRange}
-            avgEntryPrice={avgEntryPrice}
-            avgExitPrice={avgExitPrice}
-            isMock={isMock}
-            loading={priceLoading}
-            resolutionStatus={resolutionStatus}
-            ambiguityMessage={ambiguityMessage}
-            candidates={candidates}
-            onCandleHover={setHoveredCandle}
-          />
+          {allManual ? (
+            <>
+              <div className="flex justify-between items-center mb-3.5">
+                <div className="lbl">Fig 2 · Mark-to-market</div>
+                <div className="font-mono text-[11px] text-sillage-soft">
+                  last {formatUsdPrecise(marketValue)}
+                </div>
+              </div>
+              <div className="h-[220px]">
+                <PortfolioValueChart
+                  data={[...(venues[0]?.valuations || [])]
+                    .sort(
+                      (
+                        a: { recordedAt: string },
+                        b: { recordedAt: string },
+                      ) => new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime(),
+                    )
+                    .map((v: { recordedAt: string; valueAmount: number }) => ({
+                      timestamp: v.recordedAt,
+                      totalValue: v.valueAmount,
+                    }))}
+                  height="100%"
+                  valueLabel="Value"
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex justify-between items-center mb-3.5">
+                <div className="lbl">Fig 2 · Price · order markers</div>
+                <div className="font-mono text-[11px] flex gap-4 flex-wrap justify-end">
+                  <span>
+                    <span className="text-sillage-green font-bold">B</span> buy
+                  </span>
+                  <span>
+                    <span className="text-sillage-accent font-bold">S</span> sell
+                  </span>
+                  <span className="text-sillage-soft">
+                    <span className="text-sillage-green">—</span> avg entry
+                  </span>
+                  {avgExitPrice != null && (
+                    <span className="text-sillage-soft">
+                      <span className="text-sillage-accent">—</span> avg sell
+                    </span>
+                  )}
+                  {hoveredCandle ? (
+                    <span className="text-sillage-ink tabular-nums">
+                      {format(new Date(hoveredCandle.timestamp), 'MMM dd, yyyy')} ·{' '}
+                      {formatTokenPrice(hoveredCandle.close)}
+                    </span>
+                  ) : (
+                    currentPrice != null && (
+                      <span className="text-sillage-soft">last {formatTokenPrice(currentPrice)}</span>
+                    )
+                  )}
+                </div>
+              </div>
+              <AssetPriceChart
+                symbol={displaySymbol}
+                priceHistory={priceHistory}
+                orders={ordersInRange}
+                avgEntryPrice={avgEntryPrice}
+                avgExitPrice={avgExitPrice}
+                isMock={isMock}
+                loading={priceLoading}
+                resolutionStatus={resolutionStatus}
+                ambiguityMessage={ambiguityMessage}
+                candidates={candidates}
+                onCandleHover={setHoveredCandle}
+              />
+            </>
+          )}
         </div>
 
         <div className="panel w-full lg:w-[286px] flex-shrink-0">
@@ -267,16 +310,22 @@ export default function Asset() {
               [
                 ['Market value', formatUsdPrecise(marketValue)],
                 ['Cost basis', formatUsdPrecise(costBasis)],
-                ['Cash in trade', formatUsdPrecise(cashInTrade)],
-                [
-                  'Realised P&L',
-                  `${realisedPnl >= 0 ? '+' : ''}${formatUsdPrecise(realisedPnl)}`,
-                  pnlColorClass(realisedPnl),
-                ],
-                ['Avg entry', formatTokenPrice(avgEntryPrice)],
-                ...(avgExitPrice != null
-                  ? [['Avg sell', formatTokenPrice(avgExitPrice)] as const]
-                  : []),
+                ...(allManual
+                  ? []
+                  : [
+                      ['Cash in trade', formatUsdPrecise(cashInTrade)] as [string, string, string?],
+                      [
+                        'Realised P&L',
+                        `${realisedPnl >= 0 ? '+' : ''}${formatUsdPrecise(realisedPnl)}`,
+                        pnlColorClass(realisedPnl),
+                      ] as [string, string, string?],
+                      ['Avg entry', formatTokenPrice(avgEntryPrice)] as [string, string, string?],
+                      ...(avgExitPrice != null
+                        ? ([
+                            ['Avg sell', formatTokenPrice(avgExitPrice)],
+                          ] as [string, string, string?][])
+                        : []),
+                    ]),
                 [
                   'Holdings',
                   holdings.toLocaleString(undefined, { maximumFractionDigits: 8 }),
@@ -298,15 +347,69 @@ export default function Asset() {
             <div className="lbl mb-[7px]">Across · {venueLabel}</div>
             <div className="cap leading-relaxed">
               {firstBoughtAt
-                ? `First bought ${format(new Date(firstBoughtAt), 'MMM dd, yyyy')}. `
+                ? `First ${allManual ? 'marked' : 'bought'} ${format(new Date(firstBoughtAt), 'MMM dd, yyyy')}. `
                 : ''}
-              Orders below include every venue that traded this asset. Click a venue tag for a
-              single-exchange view.
+              {allManual
+                ? 'Click a venue tag to add valuation snapshots for a single declared holding.'
+                : 'Orders below include every venue that traded this asset. Click a venue tag for a single-exchange view.'}
             </div>
           </div>
         </div>
       </div>
 
+      {allManual ? (
+        venues.map(
+          (venue: {
+            id: number
+            exchange: string | null
+            valuations?: Array<{
+              id: number
+              recordedAt: string
+              valueAmount: number
+              quantity: number | null
+            }>
+          }) => (
+            <ValuationTable
+              key={venue.id}
+              symbol={displaySymbol}
+              valuations={venue.valuations || []}
+              venue={venue.exchange}
+              showVenue
+              busy={busy}
+              onAdd={async (input) => {
+                setBusy(true)
+                try {
+                  await addValuation({
+                    variables: {
+                      positionId: venue.id,
+                      valueAmount: input.valueAmount,
+                      recordedAt: input.recordedAt,
+                      quantity: input.quantity,
+                    },
+                    refetchQueries: ['GetPortfolio', 'GetAsset', 'GetPosition'],
+                  })
+                  await refetch()
+                } finally {
+                  setBusy(false)
+                }
+              }}
+              onDelete={async (valuationId) => {
+                if (!window.confirm('Delete this valuation?')) return
+                setBusy(true)
+                try {
+                  await deleteValuation({
+                    variables: { id: valuationId },
+                    refetchQueries: ['GetPortfolio', 'GetAsset', 'GetPosition'],
+                  })
+                  await refetch()
+                } finally {
+                  setBusy(false)
+                }
+              }}
+            />
+          ),
+        )
+      ) : (
       <div className="panel mt-5">
         <div className="lbl mb-1">Table 2 · Consolidated order history</div>
         <div className="trow text-sillage-soft border-t-0">
@@ -353,6 +456,7 @@ export default function Asset() {
           })
         )}
       </div>
+      )}
 
       <div className="mt-4 text-center">
         <Link to="/" className="font-mono text-xs text-sillage-soft hover:text-sillage-ink">

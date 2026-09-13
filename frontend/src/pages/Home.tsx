@@ -180,6 +180,67 @@ export default function Home() {
           ) : (
             assets.map((asset, i) => {
               const share = totalBook > 0 ? (asset.value / totalBook) * 100 : 0
+
+              return (
+                <Link
+                  key={asset.symbol}
+                  to={`/asset/${encodeURIComponent(asset.symbol)}`}
+                  className="hrow no-underline text-inherit"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="sw" style={{ background: assetColor(i) }} />
+                      <span className="tk">{asset.symbol}</span>
+                      {asset.venues.map((venue) => (
+                        <Fragment key={venue.id}>
+                          <span
+                            role="link"
+                            tabIndex={0}
+                            className="chip cl"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              navigate(`/position/${venue.id}`)
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                navigate(`/position/${venue.id}`)
+                              }
+                            }}
+                          >
+                            {venue.exchange}
+                          </span>
+                          {venue.source === 'manual' && (
+                            <span className="chip manual">manual</span>
+                          )}
+                          {venue.tag?.name && (
+                            <span className="chip tag">{venue.tag.name}</span>
+                          )}
+                        </Fragment>
+                      ))}
+                    </div>
+                    <div className="text-sillage-soft text-[11px] mt-[3px] ml-[18px] font-mono truncate">
+                      {asset.quantity.toLocaleString(undefined, { maximumFractionDigits: 8 })}
+                    </div>
+                  </div>
+                  <div className="w-[72px] sm:w-24 text-right font-mono tabular-nums text-[12px] sm:text-[13px] flex-shrink-0">
+                    {formatUsdPrecise(asset.value)}
+                  </div>
+                  <div className="hidden sm:block w-20 flex-shrink-0">
+                    <div className="wbar">
+                      <div className="wfill" style={{ width: `${share}%` }} />
+                    </div>
+                    <div className="text-sillage-soft font-mono text-[9px] mt-[3px] text-right tabular-nums">
+                      {share.toFixed(1)}%
+                    </div>
+                  </div>
+                  <div className={`w-[62px] sm:w-[74px] text-right font-mono text-[11px] sm:text-xs tabular-nums flex-shrink-0 ${pnlColorClass(asset.pnl)}`}>
+                    {formatPct(asset.pnlPercent)}
+                  </div>
+                </Link>
+              )
               return <OverviewAssetRow key={asset.symbol} asset={asset} index={i} share={share} />
             })
           )}
