@@ -22,8 +22,11 @@ commands live in `README.md`; only the non-obvious caveats are captured here.
   take ~20-30s. Wait for it before hitting the API.
 - `settings/config.yaml` (copied from `config.example.yaml`) holds exchange/wallet
   credentials. With placeholder/missing credentials the app boots fine but the dashboard
-  shows empty/zero data. There are **no GraphQL mutations**; data only arrives via the
-  scheduler connectors. To demo the UI without real keys, seed the DB directly (Asset +
+  shows empty/zero data. Portfolio balances/orders still arrive only via the scheduler
+  connectors. GraphQL **mutations** exist for user intent: conviction tags
+  (`createTag` / `updateTag` / `deleteTag` / `setPositionTag`) and
+  `updateAppConfig` (Settings Connections; secrets are masked, never returned in
+  cleartext). To demo the UI without real keys, seed the DB directly (Asset +
   Position + Order + PortfolioSnapshot via `src.models.database.SessionLocal`).
 - `cd frontend && npm run lint` currently fails on a **pre-existing** `no-explicit-any`
   error in `src/components/charts/PositionChart.tsx` (ESLint runs with

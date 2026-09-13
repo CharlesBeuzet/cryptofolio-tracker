@@ -9,6 +9,17 @@ binance:
   # Optional: enable testnet
   # sandbox: false
 
+# OKX Exchange Configuration
+okx:
+  api_key: "your_okx_api_key_here"
+  api_secret: "your_okx_api_secret_here"
+  passphrase: "your_okx_passphrase_here"
+  # Optional: REST API hostname where the API key was created (ccxt default: www.okx.com)
+  # Examples: openapi.okx.com (global), my.okx.com (EEA), us.okx.com (US)
+  # hostname: "openapi.okx.com"
+  # Optional: enable demo trading (sandbox)
+  # sandbox: false
+
 # Coinbase Exchange Configuration
 coinbase:
   api_key: "your_coinbase_api_key_here"
@@ -17,36 +28,15 @@ coinbase:
   # Optional: enable sandbox
   # sandbox: false
 
-# Hot Wallets Configuration
-hot_wallets:
-  # Default RPC endpoint (used if chain-specific RPC not provided)
-  default_rpc: "https://eth.llamarpc.com"
-  
-  # Chain-specific RPC URLs (optional, falls back to default_rpc)
-  rpc_urls:
-    ethereum: "https://eth.llamarpc.com"
-    # polygon: "https://polygon-rpc.com"
-    # bsc: "https://bsc-dataseed.binance.org"
-  
-  # List of wallet addresses to track
-  addresses:
-    - address: "0xYourEthereumAddressHere"
-      chain: "ethereum"
-      # Optional: List of ERC-20 tokens to track on this address
-      tokens:
-        - address: "0xTokenContractAddress"
-          symbol: "USDC"
-          decimals: 6
-        - address: "0xAnotherTokenContractAddress"
-          symbol: "DAI"
-          decimals: 18
-    # Add more addresses as needed
-    # - address: "0xAnotherAddress"
-    #   chain: "ethereum"
-    #   tokens: []
+# Ethereum hot wallet (same connector shape as exchanges)
+ethereum:
+  # JSON-RPC endpoint (required)
+  hostname: "https://eth.llamarpc.com"
+  # Public wallet address to track (required)
+  address: "0xYourEthereumAddressHere"
 
 # Notes:
 # - For exchanges: Only provide API keys with read-only permissions for security
-# - For hot wallets: Only public addresses are needed (no private keys required)
-# - RPC endpoints: Free public RPCs are used by default, but you can use your own for better reliability
-
+# - For hot wallets: Provide a public address and RPC hostname (no private keys required)
+# - RPC hostname: Free public RPCs are fine to start; use your own for better reliability
+# - Asset price history is fetched on demand from exchange APIs and never stored in portfolio.db

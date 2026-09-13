@@ -1,0 +1,60 @@
+---
+description: Automatically create a working branch from develop when modifications are requested
+alwaysApply: true
+---
+# Auto-branch on modification requests (from `develop` only)
+
+## When to do this
+- Do this **when the user asks for any code modification** (add/change/fix/refactor/etc.).
+- Do **not** do this for purely informational questions (no code changes), reviews, or explanations.
+
+## Safety / constraints
+- **Only branch from `develop`.**
+- Only auto-switch/create a branch when the working tree is clean (no uncommitted changes).
+- If a suitable working branch already exists (you are already on a non-`develop` branch), **do not create another branch**.
+- Never create branches from `main`/`master`.
+
+## Workflow
+1. Check current state:
+   - `git status`
+   - `git branch --show-current`
+2. If already on a non-`develop` branch, proceed with edits on the current branch.
+3. If on `develop` and the working tree is clean:
+   - Create and switch to a new branch with the naming scheme below.
+
+## Branch naming scheme
+`<type>/<synthetic-branch-name>`
+
+### Allowed types
+Use these types (aligned with Conventional Commits):
+- `feat` for a new feature
+- `fix` for a bug fix
+- `refactor` for restructuring without behavior change
+- `test` for adding/updating tests
+- `docs` for documentation-only changes
+- `chore` for config/deps/CI/maintenance
+
+### Synthetic branch name rules
+Generate a short slug from the subject:
+- lowercase
+- words separated by `-`
+- remove punctuation and stop-words when helpful
+- keep it concise (aim 3–6 words, max ~50 chars)
+
+Examples:
+- "Add JWT authentication" → `feat/jwt-auth`
+- "Correct email validation" → `fix/email-validation`
+- "Split PaymentService into sub-modules" → `refactor/paymentservice-modularize`
+- "Update README usage section" → `docs/readme-usage`
+
+## Commands (PowerShell-safe)
+If on `develop` and clean, create the branch:
+
+```bash
+git checkout develop
+git pull
+git checkout -b <type>/<synthetic-branch-name>
+```
+
+## Notes
+- Branch creation is allowed automatically; **commits and pushes still require explicit user request** (see `01-git-workflow.mdc`).

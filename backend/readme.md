@@ -8,7 +8,7 @@
 
 ## Architecture
 
-Data connectors implement a shared interface. Each provider (Binance, Coinbase, wallet RPC, etc.) is a concrete connector class.
+Data connectors implement a shared interface. Each provider (Binance, OKX, Coinbase, wallet RPC, etc.) is a concrete connector class.
 
 API keys and other authentication values are stored on-premise only to keep credentials local.
 

@@ -181,6 +181,9 @@ portfolio.db
 *.db
 *.db-journal
 
+# Docker host data (config + DB bind mounts)
+data/
+
 # node modules
 */node_modules/*
 node_modules/

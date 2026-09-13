@@ -1,5 +1,6 @@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 import { format } from 'date-fns'
+import { formatTokenPrice } from '../../utils/format'
 
 interface Order {
   executedAt: string
@@ -71,7 +72,7 @@ export default function PositionChart({ position }: PositionChartProps) {
             fontFamily: 'IBM Plex Mono, monospace',
             fontSize: '11px',
           }}
-          formatter={(value: number) => `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          formatter={(value: number) => formatTokenPrice(value)}
         />
         <ReferenceLine
           y={position.avgEntryPrice}

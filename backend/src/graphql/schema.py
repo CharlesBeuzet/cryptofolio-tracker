@@ -2,12 +2,59 @@
 from datetime import datetime
 from typing import List, Optional
 import strawberry
+from sqlalchemy import func
 from strawberry.fastapi import GraphQLRouter
 
-from ..models.database import Position, Order, PortfolioSnapshot, Asset, PositionMetrics, SessionLocal
+from ..models.database import Position, Order, PortfolioSnapshot, Asset, PositionMetrics, PositionValuation, Tag, SessionLocal
+from ..config.loader import list_configured_venues
 from ..services.portfolio import PortfolioService
 from ..services.fiat_deposits import FiatDepositService
+from ..services.price_history import PriceHistoryService
 from ..services.metrics_helpers import cost_basis, cash_in_trade
+from ..services import config_settings as config_settings_service
+from ..services.tags import TagService
+from ..services.manual_positions import (
+    ManualPositionService,
+    is_manual_position,
+    manual_avg_entry,
+    manual_cost_basis,
+    manual_pnl,
+    position_source,
+)
+
+
+@strawberry.type
+class CoinGeckoCandidateType:
+    """One CoinGecko listing that shares a ticker symbol."""
+
+    id: str
+    name: str
+    symbol: str
+
+
+@strawberry.type
+class PricePointType:
+    """Single OHLC price candle."""
+
+    timestamp: datetime
+    open: float
+    high: float
+    low: float
+    close: float
+    price: float
+
+
+@strawberry.type
+class AssetPriceHistoryType:
+    """Market price history for one asset (not persisted)."""
+
+    symbol: str
+    days: int
+    is_mock: bool
+    resolution_status: str
+    ambiguity_message: Optional[str]
+    candidates: List[CoinGeckoCandidateType]
+    points: List[PricePointType]
 
 
 @strawberry.type
@@ -55,6 +102,26 @@ class PositionMetricsType:
 
 
 @strawberry.type
+class TagType:
+    """Conviction tag GraphQL type."""
+
+    id: int
+    name: str
+    description: Optional[str]
+
+
+@strawberry.type
+class PositionValuationType:
+    """User-entered mark-to-market snapshot for a manual position."""
+
+    id: int
+    recorded_at: datetime
+    value_amount: float
+    quantity: Optional[float]
+    created_at: datetime
+
+
+@strawberry.type
 class PositionType:
     """Position GraphQL type."""
     id: int
@@ -67,12 +134,23 @@ class PositionType:
     first_bought_at: datetime
     exchange: Optional[str]
     status: str
+    source: str
+    display_name: Optional[str]
+    external_url: Optional[str]
+    cost_basis: float
+    tag: Optional[TagType]
     orders: List[OrderType]
     metrics: Optional[PositionMetricsType]
+    valuations: List[PositionValuationType]
 
     @strawberry.field
     def value(self) -> float:
         """Calculate position value."""
+        if self.source == "manual":
+            if self.valuations:
+                latest = max(self.valuations, key=lambda v: (v.recorded_at, v.id))
+                return latest.value_amount
+            return 0.0
         if self.current_price:
             return self.quantity * self.current_price
         return 0.0
@@ -105,35 +183,96 @@ def _metrics_to_type(metrics: PositionMetrics) -> PositionMetricsType:
     )
 
 
+def _tag_to_type(tag: Optional[Tag]) -> Optional[TagType]:
+    if not tag:
+        return None
+    return TagType(
+        id=tag.id,
+        name=tag.name,
+        description=tag.description,
+    )
+
+
+def _valuation_to_type(valuation: PositionValuation) -> PositionValuationType:
+    return PositionValuationType(
+        id=valuation.id,
+        recorded_at=valuation.recorded_at,
+        value_amount=valuation.value_amount,
+        quantity=valuation.quantity,
+        created_at=valuation.created_at,
+    )
+
+
 def _position_to_type(pos: Position) -> PositionType:
     """Map a Position ORM object to GraphQL type."""
-    asset_price = pos.asset.current_price if pos.asset else None
     metrics = pos.metrics
     orders = [
-        OrderType(
-            id=o.id,
-            symbol=o.symbol,
-            type=o.type,
-            quantity=o.quantity,
-            price=o.price,
-            executed_at=o.executed_at,
-            exchange=o.exchange,
+        _order_to_type(o)
+        for o in sorted(
+            pos.orders,
+            key=lambda o: (o.executed_at, o.id),
+            reverse=True,
         )
-        for o in pos.orders
     ]
+    if is_manual_position(pos):
+        valuations = [_valuation_to_type(v) for v in (pos.valuations or [])]
+        pnl, pnl_percent = manual_pnl(pos)
+        avg_entry = manual_avg_entry(pos)
+        market_value = 0.0
+        if valuations:
+            latest = max(valuations, key=lambda v: (v.recorded_at, v.id))
+            market_value = latest.value_amount
+        qty = pos.quantity or 0.0
+        asset_price = (market_value / qty) if qty else None
+        book_cost = manual_cost_basis(pos)
+    else:
+        valuations = []
+        asset_price = pos.asset.current_price if pos.asset else None
+        pnl = metrics.unrealised_pnl if metrics else 0.0
+        pnl_percent = metrics.unrealised_pnl_percent if metrics else 0.0
+        avg_entry = metrics.avg_entry_price if metrics else 0.0
+        book_cost = cost_basis(metrics) if metrics else 0.0
+
     return PositionType(
         id=pos.id,
         symbol=pos.symbol,
         quantity=pos.quantity,
-        avg_entry_price=metrics.avg_entry_price if metrics else 0.0,
+        avg_entry_price=avg_entry,
         current_price=asset_price,
-        pnl=metrics.unrealised_pnl if metrics else 0.0,
-        pnl_percent=metrics.unrealised_pnl_percent if metrics else 0.0,
+        pnl=pnl,
+        pnl_percent=pnl_percent,
         first_bought_at=pos.first_bought_at,
         exchange=pos.exchange,
         status=pos.status,
+        source=position_source(pos),
+        display_name=pos.display_name if is_manual_position(pos) else None,
+        external_url=pos.external_url if is_manual_position(pos) else None,
+        cost_basis=book_cost,
+        tag=_tag_to_type(pos.tag),
         orders=orders,
         metrics=_metrics_to_type(metrics) if metrics else None,
+        valuations=valuations,
+    )
+
+
+@strawberry.type
+class AssetDetailType:
+    """Consolidated open venues + all orders for one asset symbol."""
+
+    symbol: str
+    positions: List[PositionType]
+    orders: List[OrderType]
+
+
+def _order_to_type(order: Order) -> OrderType:
+    return OrderType(
+        id=order.id,
+        symbol=order.symbol,
+        type=order.type,
+        quantity=order.quantity,
+        price=order.price,
+        executed_at=order.executed_at,
+        exchange=order.exchange,
     )
 
 
@@ -204,8 +343,140 @@ class FiatDepositRecordType:
 
 
 @strawberry.type
+class SecretFieldType:
+    """Masked secret field for Settings (never returns the raw value)."""
+
+    is_set: bool
+    hint: Optional[str]
+
+
+@strawberry.type
+class ExchangeConnector:
+    """One active connector block from settings/config.yaml (exchange or hot wallet)."""
+
+    name: str
+    label: str
+    configured: bool
+    api_key: SecretFieldType
+    api_secret: SecretFieldType
+    passphrase: SecretFieldType
+    supports_passphrase: bool
+    supports_hostname: bool
+    supports_address: bool
+    sandbox: Optional[bool]
+    hostname: Optional[str]
+    address: Optional[str]
+
+
+@strawberry.type
+class AvailableConnectorType:
+    """A connector implemented in this project that can be added in Settings."""
+
+    name: str
+    label: str
+    supports_passphrase: bool
+    supports_hostname: bool
+    supports_address: bool
+    required_secrets: List[str]
+
+
+@strawberry.type
+class AppConfigType:
+    """UI-safe view of settings/config.yaml."""
+
+    exists: bool
+    relative_path: str
+    available_connectors: List[AvailableConnectorType]
+    exchanges: List[ExchangeConnector]
+
+
+@strawberry.input
+class ExchangeConnectorInput:
+    """Partial update for one connector. Omit secrets (null) to keep current values."""
+
+    name: str
+    api_key: Optional[str] = None
+    api_secret: Optional[str] = None
+    passphrase: Optional[str] = None
+    sandbox: Optional[bool] = None
+    hostname: Optional[str] = None
+    address: Optional[str] = None
+
+
+@strawberry.type
+class UpdateConfigResultType:
+    """Result of saving config.yaml."""
+
+    success: bool
+    message: str
+    config: AppConfigType
+
+
+def _secret_to_type(data: dict) -> SecretFieldType:
+    return SecretFieldType(is_set=bool(data.get("is_set")), hint=data.get("hint"))
+
+
+def _config_to_type(data: dict) -> AppConfigType:
+    exchanges = [
+        ExchangeConnector(
+            name=ex["name"],
+            label=ex.get("label") or ex["name"].title(),
+            configured=ex["configured"],
+            api_key=_secret_to_type(ex["api_key"]),
+            api_secret=_secret_to_type(ex["api_secret"]),
+            passphrase=_secret_to_type(ex["passphrase"]),
+            supports_passphrase=ex["supports_passphrase"],
+            supports_hostname=bool(ex.get("supports_hostname")),
+            supports_address=bool(ex.get("supports_address")),
+            sandbox=ex.get("sandbox"),
+            hostname=ex.get("hostname"),
+            address=ex.get("address"),
+        )
+        for ex in data["exchanges"]
+    ]
+    available = [
+        AvailableConnectorType(
+            name=item["name"],
+            label=item["label"],
+            supports_passphrase=item["supports_passphrase"],
+            supports_hostname=item["supports_hostname"],
+            supports_address=bool(item.get("supports_address")),
+            required_secrets=list(item.get("required_secrets") or []),
+        )
+        for item in data.get("available_connectors") or []
+    ]
+    return AppConfigType(
+        exists=data["exists"],
+        relative_path=data["relative_path"],
+        available_connectors=available,
+        exchanges=exchanges,
+    )
+
+
+@strawberry.type
+class VenueType:
+    """Configured data provider / venue from settings/config.yaml."""
+
+    key: str
+    display_name: str
+    kind: str
+
+
+@strawberry.type
 class Query:
     """GraphQL query root."""
+
+    @strawberry.field
+    def synced_venues(self) -> List[VenueType]:
+        """List data providers declared in settings/config.yaml (sidebar venues)."""
+        return [
+            VenueType(
+                key=venue["key"],
+                display_name=venue["display_name"],
+                kind=venue["kind"],
+            )
+            for venue in list_configured_venues()
+        ]
 
     @strawberry.field
     def portfolio(self) -> PortfolioType:
@@ -253,6 +524,40 @@ class Query:
             db.close()
 
     @strawberry.field
+    def asset(self, symbol: str) -> Optional[AssetDetailType]:
+        """Open venues and their orders for one asset symbol (excludes closed positions)."""
+        symbol_key = (symbol or "").strip().upper()
+        if not symbol_key:
+            return None
+
+        db = SessionLocal()
+        try:
+            service = PortfolioService(db)
+            open_positions = [
+                pos
+                for pos in service.get_positions()
+                if (pos.symbol or "").upper() == symbol_key
+            ]
+            if not open_positions:
+                return None
+
+            position_ids = [pos.id for pos in open_positions]
+            orders = (
+                db.query(Order)
+                .filter(Order.position_id.in_(position_ids))
+                .order_by(Order.executed_at.desc(), Order.id.desc())
+                .all()
+            )
+
+            return AssetDetailType(
+                symbol=symbol_key,
+                positions=[_position_to_type(pos) for pos in open_positions],
+                orders=[_order_to_type(o) for o in orders],
+            )
+        finally:
+            db.close()
+
+    @strawberry.field
     def performance(self) -> PerformanceMetricsType:
         """Get performance metrics."""
         db = SessionLocal()
@@ -269,7 +574,7 @@ class Query:
 
     @strawberry.field
     def portfolio_history(self, days: int = 180) -> List[PortfolioSnapshotType]:
-        """Get portfolio value history."""
+        """Get portfolio value history (days <= 0 = Max / all snapshots)."""
         db = SessionLocal()
         try:
             service = PortfolioService(db)
@@ -346,6 +651,261 @@ class Query:
         finally:
             db.close()
 
+    @strawberry.field
+    async def asset_price_history(
+        self,
+        symbol: str,
+        days: int = 90,
+        exchange: Optional[str] = None,
+    ) -> AssetPriceHistoryType:
+        """Fetch USDT price history from the position's exchange (in-memory cache only).
 
-schema = strawberry.Schema(query=Query)
+        days <= 0 means Max (capped exchange lookback).
+        """
+        service = PriceHistoryService()
+        result = await service.fetch(symbol, days, exchange)
+        return AssetPriceHistoryType(
+            symbol=symbol.upper(),
+            days=days,
+            is_mock=result.is_mock,
+            resolution_status=result.resolution_status,
+            ambiguity_message=result.ambiguity_message,
+            candidates=[
+                CoinGeckoCandidateType(id=c.id, name=c.name, symbol=c.symbol)
+                for c in result.candidates
+            ],
+            points=[
+                PricePointType(
+                    timestamp=row["timestamp"],
+                    open=row["open"],
+                    high=row["high"],
+                    low=row["low"],
+                    close=row["close"],
+                    price=row["price"],
+                )
+                for row in result.points
+            ],
+        )
+
+    @strawberry.field
+    def app_config(self) -> AppConfigType:
+        """Return a masked view of settings/config.yaml for the Settings page."""
+        return _config_to_type(config_settings_service.get_public_config())
+    
+    @strawberry.field
+    def tags(self) -> List[TagType]:
+        """List all conviction tags."""
+        db = SessionLocal()
+        try:
+            return [_tag_to_type(t) for t in TagService(db).list_tags() if t]
+        finally:
+            db.close()
+
+
+@strawberry.type
+class Mutation:
+    """GraphQL mutation root."""
+
+    @strawberry.mutation
+    def update_app_config(
+        self,
+        exchanges: Optional[List[ExchangeConnectorInput]] = None,
+        replace_exchanges: bool = False,
+    ) -> UpdateConfigResultType:
+        """Persist Settings changes to settings/config.yaml (secrets never echoed back)."""
+        try:
+            exchange_payload = None
+            if exchanges is not None:
+                exchange_payload = [
+                    {
+                        "name": ex.name,
+                        "api_key": ex.api_key,
+                        "api_secret": ex.api_secret,
+                        "passphrase": ex.passphrase,
+                        "sandbox": ex.sandbox,
+                        "hostname": ex.hostname,
+                        "address": ex.address,
+                    }
+                    for ex in exchanges
+                ]
+
+            updated = config_settings_service.update_config(
+                exchanges=exchange_payload,
+                replace_exchanges=replace_exchanges,
+            )
+            return UpdateConfigResultType(
+                success=True,
+                message="Configuration saved. Connectors reloaded.",
+                config=_config_to_type(updated),
+            )
+        except ValueError as exc:
+            return UpdateConfigResultType(
+                success=False,
+                message=str(exc),
+                config=_config_to_type(config_settings_service.get_public_config()),
+            )
+        except Exception as exc:
+            return UpdateConfigResultType(
+                success=False,
+                message=f"Failed to save configuration: {exc}",
+                config=_config_to_type(config_settings_service.get_public_config()),
+            )
+    """GraphQL mutation root (tag management)."""
+
+    @strawberry.mutation
+    def create_tag(
+        self,
+        name: str,
+        description: Optional[str] = None,
+    ) -> TagType:
+        db = SessionLocal()
+        try:
+            tag = TagService(db).create_tag(name=name, description=description)
+            return _tag_to_type(tag)  # type: ignore[return-value]
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+        finally:
+            db.close()
+
+    @strawberry.mutation
+    def update_tag(
+        self,
+        id: int,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+    ) -> TagType:
+        db = SessionLocal()
+        try:
+            tag = TagService(db).update_tag(
+                tag_id=id,
+                name=name,
+                description=description,
+            )
+            return _tag_to_type(tag)  # type: ignore[return-value]
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+        finally:
+            db.close()
+
+    @strawberry.mutation
+    def delete_tag(self, id: int) -> bool:
+        db = SessionLocal()
+        try:
+            return TagService(db).delete_tag(id)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+        finally:
+            db.close()
+
+    @strawberry.mutation
+    def set_position_tag(self, position_id: int, tag_id: Optional[int] = None) -> PositionType:
+        db = SessionLocal()
+        try:
+            pos = TagService(db).set_position_tag(position_id, tag_id)
+            # Reload with relationships for GraphQL mapping
+            service = PortfolioService(db)
+            full = service.get_position_by_id(pos.id) or pos
+            return _position_to_type(full)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+        finally:
+            db.close()
+
+    @strawberry.mutation
+    def create_manual_position(
+        self,
+        display_name: str,
+        symbol: str,
+        exchange: str,
+        external_url: Optional[str] = None,
+        initial_value: Optional[float] = None,
+        initial_quantity: Optional[float] = None,
+        recorded_at: Optional[datetime] = None,
+    ) -> PositionType:
+        db = SessionLocal()
+        try:
+            pos = ManualPositionService(db).create(
+                display_name=display_name,
+                symbol=symbol,
+                exchange=exchange,
+                external_url=external_url,
+                initial_value=initial_value,
+                initial_quantity=initial_quantity,
+                recorded_at=recorded_at,
+            )
+            return _position_to_type(pos)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+        finally:
+            db.close()
+
+    @strawberry.mutation
+    def update_manual_position(
+        self,
+        id: int,
+        display_name: Optional[str] = None,
+        symbol: Optional[str] = None,
+        exchange: Optional[str] = None,
+        external_url: Optional[str] = None,
+    ) -> PositionType:
+        db = SessionLocal()
+        try:
+            pos = ManualPositionService(db).update(
+                position_id=id,
+                display_name=display_name,
+                symbol=symbol,
+                exchange=exchange,
+                external_url=external_url,
+            )
+            return _position_to_type(pos)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+        finally:
+            db.close()
+
+    @strawberry.mutation
+    def delete_manual_position(self, id: int) -> bool:
+        db = SessionLocal()
+        try:
+            return ManualPositionService(db).delete(id)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+        finally:
+            db.close()
+
+    @strawberry.mutation
+    def add_position_valuation(
+        self,
+        position_id: int,
+        value_amount: float,
+        recorded_at: Optional[datetime] = None,
+        quantity: Optional[float] = None,
+    ) -> PositionType:
+        db = SessionLocal()
+        try:
+            pos = ManualPositionService(db).add_valuation(
+                position_id=position_id,
+                value_amount=value_amount,
+                recorded_at=recorded_at,
+                quantity=quantity,
+            )
+            return _position_to_type(pos)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+        finally:
+            db.close()
+
+    @strawberry.mutation
+    def delete_position_valuation(self, id: int) -> PositionType:
+        db = SessionLocal()
+        try:
+            pos = ManualPositionService(db).delete_valuation(id)
+            return _position_to_type(pos)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+        finally:
+            db.close()
+
+
+schema = strawberry.Schema(query=Query, mutation=Mutation)
 

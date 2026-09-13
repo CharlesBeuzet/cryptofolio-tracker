@@ -2,6 +2,7 @@
 from datetime import datetime
 
 from sqlalchemy import (
+    CheckConstraint,
     Column,
     DateTime,
     Float,
@@ -31,10 +32,29 @@ class Asset(Base):
     positions = relationship("Position", back_populates="asset")
 
 
+class Tag(Base):
+    """User-defined conviction tag (e.g. VC play, backspot, Majors)."""
+
+    __tablename__ = "tags"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(80), unique=True, nullable=False, index=True)
+    description = Column(String(500), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    positions = relationship("Position", back_populates="tag")
+
+
 class Position(Base):
-    """Exchange-mirrored portfolio position (balance sync). Analytics live in PositionMetrics."""
+    """Portfolio position: exchange-mirrored (synced) or user-declared (manual)."""
 
     __tablename__ = "positions"
+    __table_args__ = (
+        CheckConstraint(
+            "source = 'manual' OR (display_name IS NULL AND external_url IS NULL)",
+            name="ck_positions_manual_only_fields",
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     asset_id = Column(Integer, ForeignKey("assets.id"), nullable=False)
@@ -44,15 +64,46 @@ class Position(Base):
     last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     exchange = Column(String(50), nullable=True)  # binance, coinbase, wallet, etc.
     status = Column(String(10), nullable=False, default="open")  # open | closed
+    tag_id = Column(Integer, ForeignKey("tags.id"), nullable=True, index=True)
+    source = Column(String(16), nullable=False, default="synced")  # synced | manual
+    display_name = Column(String(120), nullable=True)  # manual positions only
+    external_url = Column(String(500), nullable=True)  # manual positions only
 
     asset = relationship("Asset", back_populates="positions")
-    orders = relationship("Order", back_populates="position", cascade="all, delete-orphan")
+    tag = relationship("Tag", back_populates="positions")
+    orders = relationship(
+        "Order",
+        back_populates="position",
+        cascade="all, delete-orphan",
+        order_by="desc(Order.executed_at), desc(Order.id)",
+    )
     metrics = relationship(
         "PositionMetrics",
         back_populates="position",
         uselist=False,
         cascade="all, delete-orphan",
     )
+    valuations = relationship(  # manual positions only; synced use metrics
+        "PositionValuation",
+        back_populates="position",
+        cascade="all, delete-orphan",
+        order_by="PositionValuation.recorded_at",
+    )
+
+
+class PositionValuation(Base):
+    """User-entered mark-to-market snapshot for a manual position."""
+
+    __tablename__ = "position_valuations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    position_id = Column(Integer, ForeignKey("positions.id"), nullable=False, index=True)
+    recorded_at = Column(DateTime, nullable=False, index=True)
+    value_amount = Column(Float, nullable=False)
+    quantity = Column(Float, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    position = relationship("Position", back_populates="valuations")
 
 
 class PositionMetrics(Base):
@@ -161,6 +212,45 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 def init_db():
     """Initialize the database by creating all tables."""
     Base.metadata.create_all(bind=engine)
+    migrate_tags_schema()
+    migrate_manual_positions_schema()
+
+
+def migrate_tags_schema(bind=None):
+    """Ensure tags table exists and positions.tag_id is present (safe for existing DBs)."""
+    eng = bind or engine
+    Base.metadata.create_all(bind=eng, tables=[Tag.__table__])
+    with eng.begin() as conn:
+        cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(positions)")}
+        if "tag_id" not in cols:
+            conn.exec_driver_sql(
+                "ALTER TABLE positions ADD COLUMN tag_id INTEGER REFERENCES tags(id)"
+            )
+        tag_cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(tags)")}
+        if "color" in tag_cols:
+            conn.exec_driver_sql("ALTER TABLE tags DROP COLUMN color")
+        if "sort_order" in tag_cols:
+            conn.exec_driver_sql("ALTER TABLE tags DROP COLUMN sort_order")
+
+
+def migrate_manual_positions_schema(bind=None):
+    """Add manual-position columns and the valuations table (safe for existing DBs)."""
+    eng = bind or engine
+    Base.metadata.create_all(bind=eng, tables=[PositionValuation.__table__])
+    with eng.begin() as conn:
+        cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(positions)")}
+        if "source" not in cols:
+            conn.exec_driver_sql(
+                "ALTER TABLE positions ADD COLUMN source VARCHAR(16) NOT NULL DEFAULT 'synced'"
+            )
+        if "display_name" not in cols:
+            conn.exec_driver_sql(
+                "ALTER TABLE positions ADD COLUMN display_name VARCHAR(120)"
+            )
+        if "external_url" not in cols:
+            conn.exec_driver_sql(
+                "ALTER TABLE positions ADD COLUMN external_url VARCHAR(500)"
+            )
 
 
 def get_db():

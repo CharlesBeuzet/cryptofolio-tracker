@@ -1,0 +1,15 @@
+# Crypto Portfolio Tracker — Raspberry Pi (linux/arm64)
+# Build and run on the Pi to avoid slow QEMU cross-builds from x86.
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cryptofolio-tracker:arm64
+    platform: linux/arm64
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data/portfolio.db:/app/portfolio.db
+      - ./data/config.yaml:/app/settings/config.yaml
+    restart: unless-stopped

@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { formatTokenPrice } from '../../utils/format'
 
 interface Position {
   id: number
@@ -75,7 +76,7 @@ export default function PositionsList({ positions }: PositionsListProps) {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-gray-300">
                   {position.currentPrice
-                    ? `$${position.currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                    ? formatTokenPrice(position.currentPrice)
                     : 'N/A'}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-white font-medium">
