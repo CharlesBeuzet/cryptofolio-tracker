@@ -87,10 +87,12 @@ export default function Position() {
   const isPositive = unrealized >= 0
   const title = isManual && position.displayName ? position.displayName : position.symbol
 
-  const orders = [...(position.orders || [])].sort((a: { executedAt: string }, b: { executedAt: string }) => {
-    const byDate = new Date(b.executedAt).getTime() - new Date(a.executedAt).getTime()
-    return byDate !== 0 ? byDate : b.id - a.id
-  })
+  const orders = [...(position.orders || [])].sort(
+    (a: { id: number; executedAt: string }, b: { id: number; executedAt: string }) => {
+      const byDate = new Date(b.executedAt).getTime() - new Date(a.executedAt).getTime()
+      return byDate !== 0 ? byDate : b.id - a.id
+    },
+  )
 
   const valuations = position.valuations || []
   const chartHistory = [...valuations]
