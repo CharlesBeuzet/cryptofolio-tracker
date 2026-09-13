@@ -17,9 +17,10 @@ interface OrderHistoryProps {
 
 export default function OrderHistory({ orders }: OrderHistoryProps) {
   // Sort orders by execution time (newest first)
-  const sortedOrders = [...orders].sort(
-    (a, b) => new Date(b.executedAt).getTime() - new Date(a.executedAt).getTime()
-  )
+  const sortedOrders = [...orders].sort((a, b) => {
+    const byDate = new Date(b.executedAt).getTime() - new Date(a.executedAt).getTime()
+    return byDate !== 0 ? byDate : b.id - a.id
+  })
 
   if (sortedOrders.length === 0) {
     return (

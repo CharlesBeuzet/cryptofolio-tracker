@@ -29,14 +29,19 @@ export default function FiatDeposits() {
     () => data?.fiatDeposits ?? [],
     [data?.fiatDeposits],
   )
-  const sorted = useMemo(
-    () => [...rows].sort((a, b) => new Date(a.depositedAt).getTime() - new Date(b.depositedAt).getTime()),
+  // Oldest first: chart + running totals need chronological deposits.
+  const chronological = useMemo(
+    () =>
+      [...rows].sort((a, b) => {
+        const byDate = new Date(a.depositedAt).getTime() - new Date(b.depositedAt).getTime()
+        return byDate !== 0 ? byDate : a.id - b.id
+      }),
     [rows],
   )
 
   const chartData = useMemo(
-    () => buildOnRampChartData(historyData?.portfolioHistory || [], sorted),
-    [historyData, sorted],
+    () => buildOnRampChartData(historyData?.portfolioHistory || [], chronological),
+    [historyData, chronological],
   )
   const plotData = useMemo(
     () => chartData.map((point, index) => ({ ...point, i: index })),
@@ -70,7 +75,7 @@ export default function FiatDeposits() {
   )
   const depositCount = summaryData?.fiatDepositsSummary?.includedRecordCount ?? rows.length
   const avgDeposit = depositCount > 0 ? totalOnRamped / depositCount : 0
-  const firstDeposit = sorted[0]
+  const firstDeposit = chronological[0]
   const navHistory = historyData?.portfolioHistory || []
   const latestNav = navHistory.length > 0 ? navHistory[navHistory.length - 1].totalValue : 0
   const netMultiple = totalOnRamped > 0 ? latestNav / totalOnRamped : 0
@@ -80,15 +85,18 @@ export default function FiatDeposits() {
   const inspecting = inspected != null
 
   let cumulative = 0
-  const ledger = sorted.map((r) => {
-    cumulative += r.amount
-    return {
-      ...r,
-      cumulative,
-      label: format(new Date(r.depositedAt), 'MMM dd, yy'),
-      methodLabel: [r.method, r.exchange].filter(Boolean).join(' · ') || r.exchange,
-    }
-  })
+  // Compute running totals oldest→newest, then reverse so the table is latest-first.
+  const ledger = chronological
+    .map((r) => {
+      cumulative += r.amount
+      return {
+        ...r,
+        cumulative,
+        label: format(new Date(r.depositedAt), 'MMM dd, yy'),
+        methodLabel: [r.method, r.exchange].filter(Boolean).join(' · ') || r.exchange,
+      }
+    })
+    .reverse()
 
   return (
     <div>

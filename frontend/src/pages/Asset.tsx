@@ -64,9 +64,10 @@ export default function Asset() {
 
   const allOrders: AssetOrder[] = useMemo(() => {
     const orders = [...(assetData?.orders || [])] as AssetOrder[]
-    return orders.sort(
-      (a, b) => new Date(b.executedAt).getTime() - new Date(a.executedAt).getTime(),
-    )
+    return orders.sort((a, b) => {
+      const byDate = new Date(b.executedAt).getTime() - new Date(a.executedAt).getTime()
+      return byDate !== 0 ? byDate : b.id - a.id
+    })
   }, [assetData?.orders])
 
   const ordersInRange = useMemo(() => {

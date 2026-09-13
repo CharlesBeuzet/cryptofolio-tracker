@@ -61,7 +61,12 @@ class Position(Base):
 
     asset = relationship("Asset", back_populates="positions")
     tag = relationship("Tag", back_populates="positions")
-    orders = relationship("Order", back_populates="position", cascade="all, delete-orphan")
+    orders = relationship(
+        "Order",
+        back_populates="position",
+        cascade="all, delete-orphan",
+        order_by="desc(Order.executed_at), desc(Order.id)",
+    )
     metrics = relationship(
         "PositionMetrics",
         back_populates="position",

@@ -168,7 +168,14 @@ def _position_to_type(pos: Position) -> PositionType:
     """Map a Position ORM object to GraphQL type."""
     asset_price = pos.asset.current_price if pos.asset else None
     metrics = pos.metrics
-    orders = [_order_to_type(o) for o in pos.orders]
+    orders = [
+        _order_to_type(o)
+        for o in sorted(
+            pos.orders,
+            key=lambda o: (o.executed_at, o.id),
+            reverse=True,
+        )
+    ]
     return PositionType(
         id=pos.id,
         symbol=pos.symbol,
@@ -476,7 +483,7 @@ class Query:
             orders = (
                 db.query(Order)
                 .filter(Order.position_id.in_(position_ids))
-                .order_by(Order.executed_at.desc())
+                .order_by(Order.executed_at.desc(), Order.id.desc())
                 .all()
             )
 

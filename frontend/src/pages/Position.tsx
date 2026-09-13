@@ -79,9 +79,10 @@ export default function Position() {
   const unrealized = position.pnl || 0
   const isPositive = unrealized >= 0
 
-  const orders = [...(position.orders || [])].sort(
-    (a, b) => new Date(b.executedAt).getTime() - new Date(a.executedAt).getTime(),
-  )
+  const orders = [...(position.orders || [])].sort((a, b) => {
+    const byDate = new Date(b.executedAt).getTime() - new Date(a.executedAt).getTime()
+    return byDate !== 0 ? byDate : b.id - a.id
+  })
 
   // Prefer earliest buy fill for this venue; fall back to position open date.
   const firstBoughtAt =
