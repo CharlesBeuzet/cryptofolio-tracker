@@ -1,10 +1,13 @@
 """Binance exchange connector."""
 import ccxt
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from ..utils.data_quality import ConnectorFetchError, positive_finite
 from .base import BaseConnector
+
+# Binance allOrders page size cap; myTrades uses the same limit.
+_BINANCE_ORDER_PAGE_LIMIT = 1000
 
 
 class BinanceConnector(BaseConnector):
@@ -92,6 +95,42 @@ class BinanceConnector(BaseConnector):
             "exchange": self.name,
         }
 
+    def _order_ids_from_trades(self, trades: List[Dict[str, Any]]) -> List[str]:
+        """Unique parent order ids in first-seen order from account trades."""
+        ids: List[str] = []
+        seen: set[str] = set()
+        for trade in trades:
+            raw = trade.get("order")
+            if raw is None:
+                raw = trade.get("orderId")
+            if raw is None:
+                continue
+            oid = str(raw)
+            if oid in seen:
+                continue
+            seen.add(oid)
+            ids.append(oid)
+        return ids
+
+    def _fetch_account_trades(
+        self,
+        market_pair: str,
+        since_ms: Optional[int],
+        limit: int,
+        paginate: bool,
+    ) -> List[Dict[str, Any]]:
+        """GET /api/v3/myTrades via ccxt. ``since`` maps to startTime on fill time."""
+        params: Dict[str, Any] = {}
+        if paginate:
+            params["paginate"] = True
+        kwargs: Dict[str, Any] = {
+            "limit": min(max(limit, 1), _BINANCE_ORDER_PAGE_LIMIT),
+            "params": params,
+        }
+        if since_ms is not None:
+            kwargs["since"] = since_ms
+        return self.exchange.fetch_my_trades(market_pair, **kwargs)
+
     def _fetch_executed_orders(
         self,
         market_pair: str,
@@ -99,14 +138,25 @@ class BinanceConnector(BaseConnector):
         limit: int,
         paginate: bool,
     ) -> List[Dict[str, Any]]:
-        """ccxt names this fetch_closed_orders; we treat fully filled orders as executed."""
-        params: Dict[str, Any] = {}
-        if paginate:
-            params["paginate"] = True
-        kwargs: Dict[str, Any] = {"limit": limit, "params": params}
-        if since_ms is not None:
-            kwargs["since"] = since_ms
-        return self.exchange.fetch_closed_orders(market_pair, **kwargs)
+        """Filled spot orders for one pair, discovered by fill time not creation time.
+
+        ``GET /api/v3/allOrders`` (ccxt ``fetch_closed_orders``) maps ``since`` to
+        ``startTime`` on the order's creation time (``time`` / cTime). A limit
+        placed earlier than the scheduler cursor and filled later is omitted —
+        the same trap as OKX ``begin`` / cTime.
+
+        ``GET /api/v3/myTrades`` (ccxt ``fetch_my_trades``) maps ``since`` to
+        ``startTime`` on the trade's execution time (fTime). Unique ``orderId``
+        values are then loaded with ``GET /api/v3/order`` (ccxt ``fetch_order``)
+        so we keep only fully filled orders (ccxt status ``closed``).
+        """
+        trades = self._fetch_account_trades(
+            market_pair, since_ms, limit=limit, paginate=paginate
+        )
+        orders: List[Dict[str, Any]] = []
+        for order_id in self._order_ids_from_trades(trades):
+            orders.append(self.exchange.fetch_order(order_id, market_pair))
+        return orders
 
     def fetch_orders_sync(
         self,
@@ -116,12 +166,16 @@ class BinanceConnector(BaseConnector):
         limit: int = 500,
         paginate: bool = False,
     ) -> List[Dict[str, Any]]:
-        """Fetch executed spot orders for one pair (sync, for scheduler)."""
+        """Fetch executed spot orders for one pair (sync, for scheduler).
+
+        ``since_ms`` is forwarded to ``fetch_my_trades`` (fill time), never to
+        ``fetch_closed_orders`` / allOrders (creation time).
+        """
         try:
             executed_orders = self._fetch_executed_orders(
                 market_pair,
                 since_ms,
-                limit=min(max(limit, 1), 1000),
+                limit=min(max(limit, 1), _BINANCE_ORDER_PAGE_LIMIT),
                 paginate=paginate,
             )
             out: List[Dict[str, Any]] = []
@@ -149,14 +203,14 @@ class BinanceConnector(BaseConnector):
                 for quote in ("USDT", "USDC")
                 if symbol != quote
             ]
-        since_ms = int(
-            (datetime.now(tz=timezone.utc) - timedelta(days=90)).timestamp() * 1000
-        )
         orders: List[Dict] = []
         seen_ids: set[str] = set()
         for market_pair in pairs:
             for row in self.fetch_orders_sync(
-                market_pair, since_ms=since_ms, limit=500, paginate=False
+                market_pair,
+                since_ms=None,
+                limit=_BINANCE_ORDER_PAGE_LIMIT,
+                paginate=False,
             ):
                 ext_id = row.get("external_order_id")
                 if ext_id and ext_id in seen_ids:
