@@ -374,6 +374,7 @@ class BinanceSymbolLoopTests(unittest.TestCase):
         from src.connectors.binance import BinanceConnector
 
         connector = BinanceConnector({"api_key": "k", "api_secret": "s"})
+        connector.exchange.fetch_balance = lambda: {"total": {}}
         seen_pairs: List[str] = []
 
         def fake_sync(market_pair, since_ms, *, limit=500, paginate=False):
@@ -396,6 +397,34 @@ class BinanceSymbolLoopTests(unittest.TestCase):
         self.assertEqual(seen_pairs, ["PUMP/USDT", "PUMP/USDC"])
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["external_order_id"], "usdc-1")
+
+    def test_recent_fetch_includes_live_balance_bases_not_in_hint(self):
+        from src.connectors.binance import BinanceConnector
+
+        connector = BinanceConnector({"api_key": "k", "api_secret": "s"})
+        connector.exchange.fetch_balance = lambda: {
+            "total": {"SOL": 2.0, "USDT": 100.0, "BTC": 0.0}
+        }
+        seen_bases: List[str] = []
+
+        def fake_sync(market_pair, since_ms, *, limit=500, paginate=False):
+            seen_bases.append(market_pair.split("/")[0])
+            return []
+
+        connector.fetch_orders_sync = fake_sync  # type: ignore[method-assign]
+        connector.fetch_recent_orders_sync(["BTC"])
+        self.assertEqual(set(seen_bases), {"BTC", "SOL"})
+
+    def test_balance_fetch_failure_falls_back_to_hint(self):
+        from src.connectors.binance import BinanceConnector
+
+        connector = BinanceConnector({"api_key": "k", "api_secret": "s"})
+
+        def boom():
+            raise RuntimeError("network")
+
+        connector.exchange.fetch_balance = boom
+        self.assertEqual(connector._discover_base_symbols(["ETH"]), ["ETH"])
 
 
 if __name__ == "__main__":

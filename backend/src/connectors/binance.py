@@ -6,10 +6,14 @@ from typing import Any, Dict, List, Optional, Sequence
 from ..utils.data_quality import ConnectorFetchError, positive_finite
 from .base import (
     ARCHIVED_ORDERS_DAYS,
+    QUOTE_CURRENCIES,
     RECENT_ORDERS_DAYS,
     BaseConnector,
     market_pairs_for,
 )
+
+# Quote / fiat buckets that are not spot bases for order lookup.
+_SKIP_ORDER_BASES = frozenset(QUOTE_CURRENCIES) | {"BUSD", "EUR", "FDUSD", "DAI"}
 
 
 class BinanceConnector(BaseConnector):
@@ -141,6 +145,33 @@ class BinanceConnector(BaseConnector):
                 f"binance orders for {market_pair}: {e}"
             ) from e
 
+    def _base_from_symbol(self, symbol: str) -> str:
+        return symbol.split("/")[0] if "/" in symbol else symbol
+
+    def _discover_base_symbols(self, symbols: Sequence[str]) -> List[str]:
+        """Union of caller hint (open positions) and live non-zero spot balances.
+
+        Binance allOrders requires a symbol, so a brand-new holding would be
+        missed if we only looped bases already stored in the DB.
+        """
+        found = {self._base_from_symbol(s) for s in symbols if s}
+        try:
+            balance = self.exchange.fetch_balance()
+        except Exception as e:
+            print(f"Binance: could not expand order symbols from balances: {e}")
+            return sorted(found)
+        totals = balance.get("total") if isinstance(balance, dict) else None
+        if not isinstance(totals, dict):
+            return sorted(found)
+        for sym, amount in totals.items():
+            try:
+                qty = float(amount)
+            except (TypeError, ValueError):
+                continue
+            if qty > 0 and sym not in _SKIP_ORDER_BASES:
+                found.add(sym)
+        return sorted(found)
+
     def _fetch_orders_for_symbols(
         self,
         symbols: Sequence[str],
@@ -148,10 +179,10 @@ class BinanceConnector(BaseConnector):
         *,
         paginate: bool,
     ) -> List[Dict[str, Any]]:
-        """Loop open-position bases across quote pairs; skip unknown markets."""
+        """Loop discovered bases across quote pairs; skip unknown markets."""
         out: List[Dict[str, Any]] = []
         seen_ids: set[str] = set()
-        for symbol in symbols:
+        for symbol in self._discover_base_symbols(symbols):
             for market_pair in market_pairs_for(symbol):
                 try:
                     rows = self.fetch_orders_sync(
@@ -183,7 +214,11 @@ class BinanceConnector(BaseConnector):
     def fetch_recent_orders_sync(
         self, symbols: Sequence[str]
     ) -> List[Dict[str, Any]]:
-        """Executed spot orders in the last 7 days, per open-position symbol."""
+        """Executed spot orders in the last 7 days.
+
+        `symbols` is a hint (open-position bases). Live balances are unioned in
+        so a newly bought coin is fetched even if it is not yet in the DB list.
+        """
         since_ms = int(
             (
                 datetime.now(tz=timezone.utc) - timedelta(days=RECENT_ORDERS_DAYS)
