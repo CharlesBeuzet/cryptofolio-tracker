@@ -219,9 +219,9 @@ class BaseConnector(ABC):
         """
         Executed spot orders completed in the last RECENT_ORDERS_DAYS days.
 
-        Scheduler-safe sync HTTP. `symbols` are a hint (open-position bases).
-        Connectors may ignore them (account-wide APIs) or union them with live
-        account state (e.g. Binance balances) so a newly bought pair is not missed.
+        Scheduler-safe sync HTTP. `symbols` are open-position bases from the DB
+        (created earlier in the same run by balance sync). Connectors may ignore
+        them for account-wide APIs (OKX) or loop the given bases (Binance).
         Providers without order history return [].
 
         Returns:
