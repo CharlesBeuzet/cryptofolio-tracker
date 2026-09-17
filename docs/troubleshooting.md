@@ -9,6 +9,7 @@
 | **Settings save failed** | Read the mutation / UI error message. Invalid required fields (e.g. missing Ethereum RPC `hostname`) are rejected before write. |
 | **Keys changed but sync still fails** | Save in Settings again (triggers connector reload), or restart the backend. Confirm the exchange is reachable from the host. |
 | **No data showing** | Wait for the hourly scheduler, or restart the backend to force a sync. Confirm connectors are declared and configured. |
+| **A filled limit never appears in order history** | Exchange `since` / `startTime` / `begin` filters **creation time (`cTime`)**, not fill time (`fTime`). OKX uses 7-day history without `begin`; Binance uses `myTrades` (fill time) then `fetch_order`. See [How it works](how-it-works.md#point-of-attention--since-filters-creation-time-not-fill-time). |
 | **Intermittent OKX / exchange network errors** | Each sync creates fresh connector sessions and retries once on transient failures. If errors persist, check API hostname / firewall / geo-blocks. |
 | **CORS errors (local)** | Backend on port **8000**, frontend on **5173**. |
 | **Empty Docker UI** | Ensure `data/config.yaml` is filled in and `data/portfolio.db` is a file mount. |
