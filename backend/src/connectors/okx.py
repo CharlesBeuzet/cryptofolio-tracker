@@ -7,9 +7,13 @@ from typing import Any, Dict, List, Optional
 from ..utils.data_quality import ConnectorFetchError, positive_finite
 from .base import BaseConnector
 
+# OKX order history is split between a 7-day endpoint and a 3-month archive.
+_SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
+_OKX_ORDERS_HISTORY = "privateGetTradeOrdersHistory"
+_OKX_ORDERS_HISTORY_ARCHIVE = "privateGetTradeOrdersHistoryArchive"
 # OKX caps closed-order page size at 100 (Binance allows up to 1000).
 _OKX_ORDER_PAGE_LIMIT = 100
-# Walk at most this many pages of the 7-day history window.
+# Walk at most this many pages of the history/archive window.
 _OKX_ORDER_MAX_PAGES = 20
 # OKX fiat deposit history page size cap.
 _OKX_FIAT_DEPOSIT_PAGE_LIMIT = 100
@@ -123,27 +127,41 @@ class OkxConnector(BaseConnector):
             "exchange": self.name,
         }
 
+    def _history_method_for_since(self, since_ms: Optional[int]) -> str:
+        """Pick 7-day history vs 3-month archive from the age of ``since_ms``.
+
+        ``since_ms`` is only an endpoint selector here. It must not be forwarded
+        as OKX ``begin`` / ccxt ``since`` (those filter on creation time).
+        """
+        if since_ms is None:
+            return _OKX_ORDERS_HISTORY
+        now_ms = int(datetime.now(tz=timezone.utc).timestamp() * 1000)
+        if now_ms - since_ms > _SEVEN_DAYS_MS:
+            return _OKX_ORDERS_HISTORY_ARCHIVE
+        return _OKX_ORDERS_HISTORY
+
     def _fetch_executed_orders(
         self,
         market_pair: str,
+        since_ms: Optional[int],
         limit: int,
         paginate: bool,
     ) -> List[Dict[str, Any]]:
-        """Filled spot orders for one pair from OKX 7-day order history.
+        """Filled spot orders for one pair from OKX history or archive.
 
         GET /api/v5/trade/orders-history returns orders *completed* in the last
-        7 days (including limits placed earlier). ``since`` must not be sent:
-        OKX maps it to ``begin`` on creation time (cTime), and ccxt also
-        client-filters ``parse_orders`` on that timestamp. Filtering by pair
-        (instId) is enough for the incremental path.
+        7 days (including limits placed earlier). If ``since_ms`` is older than
+        7 days, switch to ``/trade/orders-history-archive`` (cold start / gap).
+        ``since`` is never sent: OKX maps it to ``begin`` on creation time
+        (cTime), and ccxt also client-filters ``parse_orders`` on that
+        timestamp. Filtering by pair (instId) is enough.
         """
+        method = self._history_method_for_since(since_ms)
         page_limit = min(max(limit, 1), _OKX_ORDER_PAGE_LIMIT)
         collected: List[Dict[str, Any]] = []
         after: Optional[str] = None
         for _ in range(_OKX_ORDER_MAX_PAGES if paginate else 1):
-            params: Dict[str, Any] = {
-                "method": "privateGetTradeOrdersHistory",
-            }
+            params: Dict[str, Any] = {"method": method}
             if after is not None:
                 params["after"] = after
             page = self.exchange.fetch_closed_orders(
@@ -170,13 +188,13 @@ class OkxConnector(BaseConnector):
     ) -> List[Dict[str, Any]]:
         """Fetch executed spot orders for one pair (sync, for scheduler).
 
-        ``since_ms`` is ignored: OKX order history already covers the last
-        7 days of completions when ``begin`` is omitted.
+        ``since_ms`` selects history vs archive when older than 7 days. It is
+        not forwarded as OKX ``begin`` (creation-time filter).
         """
-        _ = since_ms
         try:
             executed_orders = self._fetch_executed_orders(
                 market_pair,
+                since_ms,
                 limit=limit,
                 paginate=paginate,
             )

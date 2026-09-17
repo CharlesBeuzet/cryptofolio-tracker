@@ -5,10 +5,19 @@ Uses mocked ccxt responses — never the live exchange or portfolio.db.
 from __future__ import annotations
 
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from src.connectors.okx import OkxConnector, _OKX_ORDER_PAGE_LIMIT
+from src.connectors.okx import (
+    OkxConnector,
+    _OKX_ORDER_PAGE_LIMIT,
+    _OKX_ORDERS_HISTORY,
+    _OKX_ORDERS_HISTORY_ARCHIVE,
+)
+
+
+def _ms(dt: datetime) -> int:
+    return int(dt.timestamp() * 1000)
 
 
 def _closed_order(
@@ -62,12 +71,9 @@ class OkxOrderHistoryTests(unittest.TestCase):
         return connector
 
     def test_fetch_orders_sync_omits_since_and_uses_history_endpoint(self):
-        created = int(
-            datetime(2026, 8, 22, 14, 22, tzinfo=timezone.utc).timestamp() * 1000
-        )
-        filled = int(
-            datetime(2026, 8, 23, 8, 52, tzinfo=timezone.utc).timestamp() * 1000
-        )
+        now = datetime.now(tz=timezone.utc)
+        created = _ms(now - timedelta(days=10))
+        filled = _ms(now - timedelta(hours=1))
         late_fill = _closed_order(
             "20381",
             created_ms=created,
@@ -79,9 +85,7 @@ class OkxOrderHistoryTests(unittest.TestCase):
         connector = self._connector(exchange)
 
         # Cursor derived from a sibling fill — historically sent as OKX begin.
-        since_ms = int(
-            datetime(2026, 8, 22, 16, 42, tzinfo=timezone.utc).timestamp() * 1000
-        )
+        since_ms = _ms(now - timedelta(hours=2))
         rows = connector.fetch_orders_sync(
             "PUMP/USDC", since_ms=since_ms, paginate=False
         )
@@ -92,7 +96,7 @@ class OkxOrderHistoryTests(unittest.TestCase):
         self.assertIsNone(call["since"])
         self.assertNotIn("since", call["params"])
         self.assertNotIn("begin", call["params"])
-        self.assertEqual(call["params"].get("method"), "privateGetTradeOrdersHistory")
+        self.assertEqual(call["params"].get("method"), _OKX_ORDERS_HISTORY)
         self.assertIsNone(call["params"].get("paginate"))
         self.assertEqual(call["limit"], _OKX_ORDER_PAGE_LIMIT)
 
@@ -102,23 +106,39 @@ class OkxOrderHistoryTests(unittest.TestCase):
         self.assertEqual(rows[0]["type"], "sell")
         self.assertEqual(rows[0]["quantity"], 20381)
         self.assertEqual(rows[0]["price"], 0.0052)
-        self.assertEqual(rows[0]["executed_at"], datetime(2026, 8, 23, 8, 52))
+        self.assertEqual(
+            rows[0]["executed_at"],
+            datetime.fromtimestamp(filled / 1000.0, tz=timezone.utc).replace(
+                tzinfo=None
+            ),
+        )
 
-    def test_old_since_does_not_switch_to_archive(self):
+    def test_old_since_switches_to_archive_without_begin(self):
         exchange = _RecordingExchange(pages=[[]])
         connector = self._connector(exchange)
         nine_days_ms = 9 * 24 * 60 * 60 * 1000
-        now_ms = int(datetime.now(tz=timezone.utc).timestamp() * 1000)
+        now_ms = _ms(datetime.now(tz=timezone.utc))
 
         connector.fetch_orders_sync(
             "BTC/USDT", since_ms=now_ms - nine_days_ms, paginate=False
         )
 
         self.assertEqual(len(exchange.calls), 1)
-        params = exchange.calls[0]["params"]
-        self.assertEqual(params.get("method"), "privateGetTradeOrdersHistory")
-        self.assertNotEqual(
-            params.get("method"), "privateGetTradeOrdersHistoryArchive"
+        call = exchange.calls[0]
+        self.assertEqual(call["params"].get("method"), _OKX_ORDERS_HISTORY_ARCHIVE)
+        self.assertIsNone(call["since"])
+        self.assertNotIn("since", call["params"])
+        self.assertNotIn("begin", call["params"])
+
+    def test_missing_since_stays_on_seven_day_history(self):
+        exchange = _RecordingExchange(pages=[[]])
+        connector = self._connector(exchange)
+
+        connector.fetch_orders_sync("BTC/USDT", since_ms=None, paginate=False)
+
+        self.assertEqual(len(exchange.calls), 1)
+        self.assertEqual(
+            exchange.calls[0]["params"].get("method"), _OKX_ORDERS_HISTORY
         )
         self.assertIsNone(exchange.calls[0]["since"])
 
@@ -129,8 +149,11 @@ class OkxOrderHistoryTests(unittest.TestCase):
         page2 = [_closed_order("last", created_ms=1, filled_ms=2)]
         exchange = _RecordingExchange(pages=[page1, page2])
         connector = self._connector(exchange)
+        recent_since = _ms(datetime.now(tz=timezone.utc) - timedelta(hours=1))
 
-        rows = connector.fetch_orders_sync("ETH/USDT", since_ms=1, paginate=True)
+        rows = connector.fetch_orders_sync(
+            "ETH/USDT", since_ms=recent_since, paginate=True
+        )
 
         self.assertEqual(len(exchange.calls), 2)
         self.assertIsNone(exchange.calls[0]["since"])
@@ -139,7 +162,7 @@ class OkxOrderHistoryTests(unittest.TestCase):
         self.assertEqual(exchange.calls[1]["params"].get("after"), "99")
         self.assertEqual(
             exchange.calls[1]["params"].get("method"),
-            "privateGetTradeOrdersHistory",
+            _OKX_ORDERS_HISTORY,
         )
         self.assertEqual(len(rows), 101)
         self.assertEqual(rows[-1]["external_order_id"], "last")
