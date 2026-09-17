@@ -112,26 +112,19 @@ class DataUpdateScheduler:
 
             order_svc = OrderService(db)
             for connector in connectors:
-                symbols = order_svc.get_symbols_for_connector(connector)
-                for symbol in symbols:
-                    try:
-                        n = await self._with_retry(
-                            f"sync orders for {symbol} from {connector.name}",
-                            lambda c=connector, s=symbol: order_svc.sync_orders_from_connector(
-                                c, s
-                            ),
-                        )
-                        if n:
-                            print(
-                                f"Synced {n} new order(s) for {symbol} "
-                                f"from {connector.name}."
-                            )
-                    except Exception as e:
-                        print(
-                            f"Error syncing orders for {symbol} from {connector.name}: "
-                            f"{type(e).__name__}: {e}"
-                        )
-                        db.rollback()
+                try:
+                    n = await self._with_retry(
+                        f"sync orders from {connector.name}",
+                        lambda c=connector: order_svc.sync_all_orders_from_connector(c),
+                    )
+                    if n:
+                        print(f"Synced {n} new order(s) from {connector.name}.")
+                except Exception as e:
+                    print(
+                        f"Error syncing orders from {connector.name}: "
+                        f"{type(e).__name__}: {e}"
+                    )
+                    db.rollback()
 
             analyzer = PositionAnalyzerService(db)
             try:

@@ -1,6 +1,7 @@
 """Executed spot order sync from exchange connectors."""
+from collections import defaultdict
 from datetime import datetime, timedelta
-from typing import Any, List, Tuple
+from typing import Any, Dict, List, Set, Tuple
 
 from sqlalchemy import and_, func
 from sqlalchemy.orm import Session, joinedload
@@ -145,5 +146,81 @@ class OrderService:
             if position:
                 price = position.asset.current_price if position.asset else None
                 PositionAnalyzerService(self.db).apply_new_orders(position.id, price)
+
+        return total_added
+
+    def _get_open_positions_by_symbol(self, exchange: str) -> Dict[str, Position]:
+        """Return a dict mapping symbol to open synced position for the exchange."""
+        positions = (
+            self.db.query(Position)
+            .filter(
+                Position.exchange == exchange,
+                Position.status == "open",
+                Position.source == "synced",
+            )
+            .all()
+        )
+        return {p.symbol: p for p in positions if p.symbol}
+
+    def sync_all_orders_from_connector(self, connector: Any) -> int:
+        """Fetch and persist executed orders for all open positions on this connector.
+
+        Uses account-wide fetching if the connector supports it (e.g. OKX 7-day window),
+        otherwise falls back to per-symbol fetching. Returns total insert count.
+        """
+        exchange = connector.name
+
+        if not connector.supports_account_wide_order_fetch:
+            symbols = self.get_symbols_for_connector(connector)
+            total = 0
+            for symbol in symbols:
+                total += self.sync_orders_from_connector(connector, symbol)
+            return total
+
+        positions_by_symbol = self._get_open_positions_by_symbol(exchange)
+        if not positions_by_symbol:
+            print(f"No open positions on {exchange}; skipping account-wide order sync.")
+            return 0
+
+        print(
+            f"Syncing orders for {len(positions_by_symbol)} position(s) "
+            f"from {exchange} (account-wide 7-day window)..."
+        )
+        raw_orders = connector.fetch_all_recent_orders_sync()
+        if not raw_orders:
+            print(f"No recent orders returned from {exchange}.")
+            return 0
+
+        orders_by_symbol: Dict[str, List[dict]] = defaultdict(list)
+        for row in raw_orders:
+            symbol = row.get("symbol")
+            if symbol:
+                orders_by_symbol[symbol].append(row)
+
+        total_added = 0
+        updated_position_ids: Set[int] = set()
+
+        for symbol, orders in orders_by_symbol.items():
+            position = positions_by_symbol.get(symbol)
+            if not position:
+                continue
+            added = self._insert_orders(orders, exchange, position)
+            if added:
+                total_added += added
+                updated_position_ids.add(position.id)
+
+        if total_added:
+            self.db.commit()
+            analyzer = PositionAnalyzerService(self.db)
+            for pos_id in updated_position_ids:
+                position = (
+                    self.db.query(Position)
+                    .options(joinedload(Position.asset))
+                    .filter(Position.id == pos_id)
+                    .first()
+                )
+                if position:
+                    price = position.asset.current_price if position.asset else None
+                    analyzer.apply_new_orders(position.id, price)
 
         return total_added

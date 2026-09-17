@@ -211,6 +211,120 @@ class OkxConnector(BaseConnector):
                 orders.append(row)
         return orders
 
+    def _normalize_raw_okx_order(
+        self, raw_order: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """Normalize a raw OKX order response row (without market_pair context).
+
+        OKX raw fields: ordId, instId (e.g. PUMP-USDC), state, side, fillSz, avgPx,
+        uTime (fill time ms).
+        """
+        state = raw_order.get("state")
+        if state != "filled":
+            return None
+        order_id = raw_order.get("ordId")
+        if order_id is None:
+            return None
+        inst_id = raw_order.get("instId") or ""
+        base = inst_id.split("-")[0] if "-" in inst_id else inst_id
+        if not base:
+            return None
+        ts_ms = raw_order.get("uTime") or raw_order.get("cTime")
+        try:
+            if ts_ms is not None:
+                executed_at = datetime.fromtimestamp(
+                    int(ts_ms) / 1000.0, tz=timezone.utc
+                ).replace(tzinfo=None)
+            else:
+                executed_at = datetime.utcnow()
+        except (TypeError, ValueError, OSError):
+            executed_at = datetime.utcnow()
+        try:
+            quantity = float(raw_order.get("fillSz") or raw_order.get("sz") or 0)
+            price = float(raw_order.get("avgPx") or raw_order.get("px") or 0)
+        except (TypeError, ValueError):
+            return None
+        if quantity <= 0:
+            return None
+        if positive_finite(price) is None:
+            return None
+        return {
+            "external_order_id": str(order_id),
+            "symbol": base,
+            "type": "buy" if raw_order.get("side") == "buy" else "sell",
+            "quantity": quantity,
+            "price": price,
+            "executed_at": executed_at,
+            "exchange": self.name,
+        }
+
+    def _fetch_all_spot_orders_7d(self) -> List[Dict[str, Any]]:
+        """Fetch all executed spot orders from the last 7 days (OKX window).
+
+        Uses GET /api/v5/trade/orders-history with instType=SPOT, no instId, no begin.
+        OKX returns orders *completed* in the last 7 days, including orders placed
+        earlier. Paginates with after/before (ordId cursors) when needed.
+        """
+        all_orders: List[Dict[str, Any]] = []
+        seen_ids: set[str] = set()
+        after_cursor: Optional[str] = None
+
+        while True:
+            params: Dict[str, Any] = {
+                "instType": "SPOT",
+                "limit": str(_OKX_ORDER_PAGE_LIMIT),
+            }
+            if after_cursor:
+                params["after"] = after_cursor
+
+            try:
+                resp = self.exchange.request(
+                    "trade/orders-history",
+                    "private",
+                    "GET",
+                    params,
+                )
+            except Exception as e:
+                print(f"Error fetching OKX account-wide orders: {e}")
+                raise ConnectorFetchError(f"okx account-wide orders: {e}") from e
+
+            rows = self._okx_response_rows(resp, "trade/orders-history")
+            if not rows:
+                break
+
+            page_count = 0
+            for raw_order in rows:
+                if not isinstance(raw_order, dict):
+                    continue
+                order_id = raw_order.get("ordId")
+                if not order_id or order_id in seen_ids:
+                    continue
+                seen_ids.add(order_id)
+                normalized = self._normalize_raw_okx_order(raw_order)
+                if normalized:
+                    all_orders.append(normalized)
+                    page_count += 1
+                after_cursor = order_id
+
+            if len(rows) < _OKX_ORDER_PAGE_LIMIT:
+                break
+
+        return all_orders
+
+    def fetch_all_recent_orders_sync(self) -> List[Dict[str, Any]]:
+        """Fetch all executed spot orders from the last 7 days (OKX-specific).
+
+        OKX's /trade/orders-history endpoint returns orders *completed* in the last
+        7 days, which includes orders placed earlier. This avoids the bug where
+        using max(fill_time) as `begin` misses late fills of earlier limits.
+        """
+        return self._fetch_all_spot_orders_7d()
+
+    @property
+    def supports_account_wide_order_fetch(self) -> bool:
+        """OKX supports and prefers account-wide order fetching."""
+        return True
+
     async def fetch_prices(self, symbols: List[str]) -> Dict[str, float]:
         """Fetch current prices from OKX.
 

@@ -199,3 +199,26 @@ class BaseConnector(ABC):
         """
         return []
 
+    def fetch_all_recent_orders_sync(self) -> List[Dict[str, Any]]:
+        """
+        Fetch all recent executed spot orders for the account (scheduler-safe sync HTTP).
+
+        This method returns all executed orders within the provider's recent window
+        (e.g. 7 days for OKX) without symbol filtering. Connectors that support
+        account-wide fetching should override this method.
+
+        Returns:
+            Normalized rows: external_order_id, symbol (base), type, quantity, price,
+            executed_at (datetime), exchange. Returns empty list if not supported.
+        """
+        return []
+
+    @property
+    def supports_account_wide_order_fetch(self) -> bool:
+        """Whether this connector supports account-wide order fetching.
+
+        Returns True if fetch_all_recent_orders_sync is implemented and preferred
+        over per-symbol fetching for incremental sync.
+        """
+        return False
+
