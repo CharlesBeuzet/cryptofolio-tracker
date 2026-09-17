@@ -172,10 +172,12 @@ class OkxConnector(BaseConnector):
             collected.extend(page)
             if not paginate or len(page) < page_limit:
                 break
-            last_id = page[-1].get("id")
-            if last_id is None or str(last_id) == after:
+            # ccxt sorts by timestamp ascending, so page[0] is the oldest order.
+            # OKX `after` cursor retrieves records earlier than the given ordId.
+            oldest_id = page[0].get("id")
+            if oldest_id is None or str(oldest_id) == after:
                 break
-            after = str(last_id)
+            after = str(oldest_id)
         return collected
 
     def fetch_orders_sync(

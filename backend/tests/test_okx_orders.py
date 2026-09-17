@@ -143,6 +143,8 @@ class OkxOrderHistoryTests(unittest.TestCase):
         self.assertIsNone(exchange.calls[0]["since"])
 
     def test_paginate_walks_ordid_after_without_since(self):
+        # ccxt sorts by timestamp ascending, so page[0] is the oldest order.
+        # OKX `after` cursor retrieves records earlier than the given ordId.
         page1 = [
             _closed_order(str(i), created_ms=1, filled_ms=2) for i in range(100)
         ]
@@ -159,7 +161,8 @@ class OkxOrderHistoryTests(unittest.TestCase):
         self.assertIsNone(exchange.calls[0]["since"])
         self.assertIsNone(exchange.calls[1]["since"])
         self.assertNotIn("after", exchange.calls[0]["params"])
-        self.assertEqual(exchange.calls[1]["params"].get("after"), "99")
+        # page[0] is the oldest order (ccxt sorts ascending by timestamp).
+        self.assertEqual(exchange.calls[1]["params"].get("after"), "0")
         self.assertEqual(
             exchange.calls[1]["params"].get("method"),
             _OKX_ORDERS_HISTORY,
