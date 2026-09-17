@@ -1,28 +1,12 @@
 """Executed spot order sync from exchange connectors."""
 from collections import defaultdict
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any, Dict, List, Set
 
-from sqlalchemy import and_, func
 from sqlalchemy.orm import Session, joinedload
 
-from ..utils.data_quality import sanitize_row
 from ..models.database import Order, Position
+from ..utils.data_quality import sanitize_row
 from .analyzer import PositionAnalyzerService
-
-SYNC_OVERLAP_HOURS = 2
-QUOTE_CURRENCIES = ("USDT", "USDC")
-
-
-def _market_pairs(symbol: str) -> List[str]:
-    """USDT and USDC market pairs for a base symbol (or the pair as-is if already qualified)."""
-    if "/" in symbol:
-        return [symbol]
-    return [
-        f"{symbol}/{quote}"
-        for quote in QUOTE_CURRENCIES
-        if symbol != quote
-    ]
 
 
 class OrderService:
@@ -45,19 +29,25 @@ class OrderService:
         )
         return sorted({r.symbol for r in rows if r.symbol})
 
-    def _sync_params_for_symbol(self, exchange: str, symbol: str) -> Tuple[int, bool]:
-        """Return (since_ms, paginate). Always limits to a recent window to avoid stale fills."""
-        overlap = timedelta(hours=SYNC_OVERLAP_HOURS)
-        last_at = (
-            self.db.query(func.max(Order.executed_at))
-            .filter(and_(Order.exchange == exchange, Order.symbol == symbol))
-            .scalar()
+    def _get_open_positions_by_symbol(self, exchange: str) -> Dict[str, Position]:
+        """Map base symbol → open synced position for the exchange."""
+        positions = (
+            self.db.query(Position)
+            .filter(
+                Position.exchange == exchange,
+                Position.status == "open",
+                Position.source == "synced",
+            )
+            .all()
         )
-        if last_at is None:
-            since = datetime.utcnow() - overlap
-        else:
-            since = last_at - overlap
-        return int(since.timestamp() * 1000), False
+        return {p.symbol: p for p in positions if p.symbol}
+
+    def _is_cold_start(self, exchange: str) -> bool:
+        """True when this exchange has no stored orders yet (use archive)."""
+        exists = (
+            self.db.query(Order.id).filter(Order.exchange == exchange).first()
+        )
+        return exists is None
 
     def _insert_orders(
         self, rows: List[dict], exchange: str, position: Position
@@ -100,97 +90,12 @@ class OrderService:
             added += 1
         return added
 
-    def sync_orders_from_connector(self, connector: Any, symbol: str) -> int:
-        """Fetch and persist new executed orders for one base symbol. Returns insert count."""
-        exchange = connector.name
-        since_ms, paginate = self._sync_params_for_symbol(exchange, symbol)
-
-        position = (
-            self.db.query(Position)
-            .filter(
-                Position.symbol == symbol,
-                Position.exchange == exchange,
-                Position.status == "open",
-                Position.source == "synced",
-            )
-            .first()
-        )
-        if not position:
-            print(f"No open position for {symbol} on {exchange}; skipping order sync.")
-            return 0
-
-        total_added = 0
-        for market_pair in _market_pairs(symbol):
-            print(
-                f"Syncing orders for {market_pair} from {exchange} "
-                f"(since_ms={since_ms}, paginate={paginate}) ..."
-            )
-            raw = connector.fetch_orders_sync(
-                market_pair, since_ms, paginate=paginate
-            )
-            total_added += self._insert_orders(raw, exchange, position)
-
-        if total_added:
-            self.db.commit()
-            position = (
-                self.db.query(Position)
-                .options(joinedload(Position.asset))
-                .filter(
-                    Position.symbol == symbol,
-                    Position.exchange == exchange,
-                    Position.status == "open",
-                Position.source == "synced",
-                )
-                .first()
-            )
-            if position:
-                price = position.asset.current_price if position.asset else None
-                PositionAnalyzerService(self.db).apply_new_orders(position.id, price)
-
-        return total_added
-
-    def _get_open_positions_by_symbol(self, exchange: str) -> Dict[str, Position]:
-        """Return a dict mapping symbol to open synced position for the exchange."""
-        positions = (
-            self.db.query(Position)
-            .filter(
-                Position.exchange == exchange,
-                Position.status == "open",
-                Position.source == "synced",
-            )
-            .all()
-        )
-        return {p.symbol: p for p in positions if p.symbol}
-
-    def sync_all_orders_from_connector(self, connector: Any) -> int:
-        """Fetch and persist executed orders for all open positions on this connector.
-
-        Uses account-wide fetching if the connector supports it (e.g. OKX 7-day window),
-        otherwise falls back to per-symbol fetching. Returns total insert count.
-        """
-        exchange = connector.name
-
-        if not connector.supports_account_wide_order_fetch:
-            symbols = self.get_symbols_for_connector(connector)
-            total = 0
-            for symbol in symbols:
-                total += self.sync_orders_from_connector(connector, symbol)
-            return total
-
-        positions_by_symbol = self._get_open_positions_by_symbol(exchange)
-        if not positions_by_symbol:
-            print(f"No open positions on {exchange}; skipping account-wide order sync.")
-            return 0
-
-        print(
-            f"Syncing orders for {len(positions_by_symbol)} position(s) "
-            f"from {exchange} (account-wide 7-day window)..."
-        )
-        raw_orders = connector.fetch_all_recent_orders_sync()
-        if not raw_orders:
-            print(f"No recent orders returned from {exchange}.")
-            return 0
-
+    def _persist_fetched_orders(
+        self,
+        raw_orders: List[dict],
+        exchange: str,
+        positions_by_symbol: Dict[str, Position],
+    ) -> int:
         orders_by_symbol: Dict[str, List[dict]] = defaultdict(list)
         for row in raw_orders:
             symbol = row.get("symbol")
@@ -224,3 +129,41 @@ class OrderService:
                     analyzer.apply_new_orders(position.id, price)
 
         return total_added
+
+    def sync_all_orders_from_connector(self, connector: Any) -> int:
+        """Fetch and persist executed orders for all open positions on this connector.
+
+        Same call path for every connector:
+        - cold start (no orders stored for the exchange) → fetch_archived_orders_sync
+        - otherwise → fetch_recent_orders_sync (last 7 days)
+
+        Each connector implements those methods; the service never branches on
+        connector type. Returns total insert count.
+        """
+        exchange = connector.name
+        positions_by_symbol = self._get_open_positions_by_symbol(exchange)
+        if not positions_by_symbol:
+            print(f"No open positions on {exchange}; skipping order sync.")
+            return 0
+
+        symbols = sorted(positions_by_symbol.keys())
+        if self._is_cold_start(exchange):
+            print(
+                f"Cold start for {exchange}: fetching archived orders "
+                f"for {len(symbols)} position(s)..."
+            )
+            raw_orders = connector.fetch_archived_orders_sync(symbols)
+        else:
+            print(
+                f"Syncing recent orders from {exchange} "
+                f"for {len(symbols)} position(s)..."
+            )
+            raw_orders = connector.fetch_recent_orders_sync(symbols)
+
+        if not raw_orders:
+            print(f"No orders returned from {exchange}.")
+            return 0
+
+        return self._persist_fetched_orders(
+            raw_orders, exchange, positions_by_symbol
+        )

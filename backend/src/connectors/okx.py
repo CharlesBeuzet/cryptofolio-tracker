@@ -1,14 +1,12 @@
 """OKX exchange connector."""
 import ccxt
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Sequence
 
 from ..utils.data_quality import ConnectorFetchError, positive_finite
 from .base import BaseConnector
 
-# OKX order history is split between a 7-day endpoint and a 3-month archive.
-_SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
 # OKX caps closed-order page size at 100 (Binance allows up to 1000).
 _OKX_ORDER_PAGE_LIMIT = 100
 # OKX fiat deposit history page size cap.
@@ -123,14 +121,6 @@ class OkxConnector(BaseConnector):
             "exchange": self.name,
         }
 
-    def _history_method_for_since(self, since_ms: Optional[int]) -> Optional[str]:
-        if since_ms is None:
-            return None
-        now_ms = int(datetime.now(tz=timezone.utc).timestamp() * 1000)
-        if now_ms - since_ms > _SEVEN_DAYS_MS:
-            return "privateGetTradeOrdersHistoryArchive"
-        return None
-
     def _fetch_executed_orders(
         self,
         market_pair: str,
@@ -138,19 +128,14 @@ class OkxConnector(BaseConnector):
         limit: int,
         paginate: bool,
     ) -> List[Dict[str, Any]]:
-        """ccxt names this fetch_closed_orders; we treat fully filled orders as executed."""
+        """Pair-level fetch. Do not pass since: OKX filters it on cTime, not fill time."""
         params: Dict[str, Any] = {}
         if paginate:
             params["paginate"] = True
-        archive_method = self._history_method_for_since(since_ms)
-        if archive_method is not None:
-            params["method"] = archive_method
         kwargs: Dict[str, Any] = {
             "limit": min(max(limit, 1), _OKX_ORDER_PAGE_LIMIT),
             "params": params,
         }
-        if since_ms is not None:
-            kwargs["since"] = since_ms
         return self.exchange.fetch_closed_orders(market_pair, **kwargs)
 
     def fetch_orders_sync(
@@ -182,34 +167,15 @@ class OkxConnector(BaseConnector):
             ) from e
 
     async def fetch_orders(self, symbol: Optional[str] = None) -> List[Dict]:
-        """Fetch order history from OKX for one base symbol or market pair."""
-        if not symbol:
-            print("OKX fetch_orders requires a symbol or market pair.")
-            return []
-        if "/" in symbol:
-            pairs = [symbol]
-        else:
-            pairs = [
-                f"{symbol}/{quote}"
-                for quote in ("USDT", "USDC")
-                if symbol != quote
-            ]
-        since_ms = int(
-            (datetime.now(tz=timezone.utc) - timedelta(days=90)).timestamp() * 1000
-        )
-        orders: List[Dict] = []
-        seen_ids: set[str] = set()
-        for market_pair in pairs:
-            for row in self.fetch_orders_sync(
-                market_pair, since_ms=since_ms, limit=_OKX_ORDER_PAGE_LIMIT, paginate=True
-            ):
-                ext_id = row.get("external_order_id")
-                if ext_id and ext_id in seen_ids:
-                    continue
-                if ext_id:
-                    seen_ids.add(ext_id)
-                orders.append(row)
-        return orders
+        """Fetch archived order history from OKX, optionally filtered to one base/pair."""
+        symbols = []
+        if symbol:
+            symbols = [symbol.split("/")[0] if "/" in symbol else symbol]
+        orders = self.fetch_archived_orders_sync(symbols)
+        if not symbols:
+            return orders
+        wanted = {s.upper() for s in symbols}
+        return [row for row in orders if str(row.get("symbol", "")).upper() in wanted]
 
     def _normalize_raw_okx_order(
         self, raw_order: Dict[str, Any]
@@ -258,12 +224,11 @@ class OkxConnector(BaseConnector):
             "exchange": self.name,
         }
 
-    def _fetch_all_spot_orders_7d(self) -> List[Dict[str, Any]]:
-        """Fetch all executed spot orders from the last 7 days (OKX window).
+    def _fetch_spot_order_history(self, path: str) -> List[Dict[str, Any]]:
+        """Account-wide executed spot orders (no instId, no begin).
 
-        Uses GET /api/v5/trade/orders-history with instType=SPOT, no instId, no begin.
-        OKX returns orders *completed* in the last 7 days, including orders placed
-        earlier. Paginates with after/before (ordId cursors) when needed.
+        path is trade/orders-history (completed in 7 days) or
+        trade/orders-history-archive (last ~3 months). Paginates with after=ordId.
         """
         all_orders: List[Dict[str, Any]] = []
         seen_ids: set[str] = set()
@@ -278,52 +243,49 @@ class OkxConnector(BaseConnector):
                 params["after"] = after_cursor
 
             try:
-                resp = self.exchange.request(
-                    "trade/orders-history",
-                    "private",
-                    "GET",
-                    params,
-                )
+                resp = self.exchange.request(path, "private", "GET", params)
             except Exception as e:
-                print(f"Error fetching OKX account-wide orders: {e}")
-                raise ConnectorFetchError(f"okx account-wide orders: {e}") from e
+                print(f"Error fetching OKX {path}: {e}")
+                raise ConnectorFetchError(f"okx {path}: {e}") from e
 
-            rows = self._okx_response_rows(resp, "trade/orders-history")
+            rows = self._okx_response_rows(resp, path)
             if not rows:
                 break
 
-            page_count = 0
             for raw_order in rows:
                 if not isinstance(raw_order, dict):
                     continue
                 order_id = raw_order.get("ordId")
                 if not order_id or order_id in seen_ids:
                     continue
-                seen_ids.add(order_id)
+                seen_ids.add(str(order_id))
                 normalized = self._normalize_raw_okx_order(raw_order)
                 if normalized:
                     all_orders.append(normalized)
-                    page_count += 1
-                after_cursor = order_id
+                after_cursor = str(order_id)
 
             if len(rows) < _OKX_ORDER_PAGE_LIMIT:
                 break
 
         return all_orders
 
-    def fetch_all_recent_orders_sync(self) -> List[Dict[str, Any]]:
-        """Fetch all executed spot orders from the last 7 days (OKX-specific).
+    def fetch_recent_orders_sync(
+        self, symbols: Sequence[str]
+    ) -> List[Dict[str, Any]]:
+        """Executed spot orders completed in the last 7 days (account-wide).
 
-        OKX's /trade/orders-history endpoint returns orders *completed* in the last
-        7 days, which includes orders placed earlier. This avoids the bug where
-        using max(fill_time) as `begin` misses late fills of earlier limits.
+        Ignores `symbols`: OKX /trade/orders-history with instType=SPOT, no instId,
+        no begin. That includes orders placed earlier and filled in the window.
         """
-        return self._fetch_all_spot_orders_7d()
+        del symbols
+        return self._fetch_spot_order_history("trade/orders-history")
 
-    @property
-    def supports_account_wide_order_fetch(self) -> bool:
-        """OKX supports and prefers account-wide order fetching."""
-        return True
+    def fetch_archived_orders_sync(
+        self, symbols: Sequence[str]
+    ) -> List[Dict[str, Any]]:
+        """OKX 3-month archive, account-wide, no begin (cold start / catch-up)."""
+        del symbols
+        return self._fetch_spot_order_history("trade/orders-history-archive")
 
     async def fetch_prices(self, symbols: List[str]) -> Dict[str, float]:
         """Fetch current prices from OKX.

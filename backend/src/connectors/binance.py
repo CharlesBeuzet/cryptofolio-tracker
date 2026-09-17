@@ -1,10 +1,15 @@
 """Binance exchange connector."""
 import ccxt
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from ..utils.data_quality import ConnectorFetchError, positive_finite
-from .base import BaseConnector
+from .base import (
+    ARCHIVED_ORDERS_DAYS,
+    RECENT_ORDERS_DAYS,
+    BaseConnector,
+    market_pairs_for,
+)
 
 
 class BinanceConnector(BaseConnector):
@@ -136,35 +141,80 @@ class BinanceConnector(BaseConnector):
                 f"binance orders for {market_pair}: {e}"
             ) from e
 
+    def _fetch_orders_for_symbols(
+        self,
+        symbols: Sequence[str],
+        since_ms: int,
+        *,
+        paginate: bool,
+    ) -> List[Dict[str, Any]]:
+        """Loop open-position bases across quote pairs; skip unknown markets."""
+        out: List[Dict[str, Any]] = []
+        seen_ids: set[str] = set()
+        for symbol in symbols:
+            for market_pair in market_pairs_for(symbol):
+                try:
+                    rows = self.fetch_orders_sync(
+                        market_pair, since_ms, paginate=paginate
+                    )
+                except ConnectorFetchError as e:
+                    msg = str(e).lower()
+                    if any(
+                        token in msg
+                        for token in (
+                            "does not have market",
+                            "invalid symbol",
+                            "badsymbol",
+                            "-1121",
+                        )
+                    ):
+                        print(f"Skipping unknown Binance market {market_pair}")
+                        continue
+                    raise
+                for row in rows:
+                    ext_id = row.get("external_order_id")
+                    if ext_id and ext_id in seen_ids:
+                        continue
+                    if ext_id:
+                        seen_ids.add(ext_id)
+                    out.append(row)
+        return out
+
+    def fetch_recent_orders_sync(
+        self, symbols: Sequence[str]
+    ) -> List[Dict[str, Any]]:
+        """Executed spot orders in the last 7 days, per open-position symbol."""
+        since_ms = int(
+            (
+                datetime.now(tz=timezone.utc) - timedelta(days=RECENT_ORDERS_DAYS)
+            ).timestamp()
+            * 1000
+        )
+        return self._fetch_orders_for_symbols(
+            symbols, since_ms=since_ms, paginate=False
+        )
+
+    def fetch_archived_orders_sync(
+        self, symbols: Sequence[str]
+    ) -> List[Dict[str, Any]]:
+        """Longer history (90 days) for cold start / catch-up, per symbol."""
+        since_ms = int(
+            (
+                datetime.now(tz=timezone.utc) - timedelta(days=ARCHIVED_ORDERS_DAYS)
+            ).timestamp()
+            * 1000
+        )
+        return self._fetch_orders_for_symbols(
+            symbols, since_ms=since_ms, paginate=True
+        )
+
     async def fetch_orders(self, symbol: Optional[str] = None) -> List[Dict]:
-        """Fetch order history from Binance for one base symbol or market pair."""
+        """Fetch archived order history from Binance for one base symbol or all given."""
         if not symbol:
             print("Binance fetch_orders requires a symbol or market pair.")
             return []
-        if "/" in symbol:
-            pairs = [symbol]
-        else:
-            pairs = [
-                f"{symbol}/{quote}"
-                for quote in ("USDT", "USDC")
-                if symbol != quote
-            ]
-        since_ms = int(
-            (datetime.now(tz=timezone.utc) - timedelta(days=90)).timestamp() * 1000
-        )
-        orders: List[Dict] = []
-        seen_ids: set[str] = set()
-        for market_pair in pairs:
-            for row in self.fetch_orders_sync(
-                market_pair, since_ms=since_ms, limit=500, paginate=False
-            ):
-                ext_id = row.get("external_order_id")
-                if ext_id and ext_id in seen_ids:
-                    continue
-                if ext_id:
-                    seen_ids.add(ext_id)
-                orders.append(row)
-        return orders
+        base = symbol.split("/")[0] if "/" in symbol else symbol
+        return self.fetch_archived_orders_sync([base])
 
 
     async def fetch_prices(self, symbols: List[str]) -> Dict[str, float]:

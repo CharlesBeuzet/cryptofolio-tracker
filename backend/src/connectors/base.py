@@ -1,9 +1,23 @@
 """Base connector interface for data providers."""
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from ..utils.data_quality import ConnectorFetchError, positive_finite
+
+# Spot quote currencies used when expanding a base symbol to market pairs.
+QUOTE_CURRENCIES = ("USDT", "USDC")
+# Incremental sync window: executed orders completed in this many days.
+RECENT_ORDERS_DAYS = 7
+# Cold-start / catch-up window when the provider has a longer archive.
+ARCHIVED_ORDERS_DAYS = 90
+
+
+def market_pairs_for(symbol: str) -> List[str]:
+    """USDT and USDC market pairs for a base symbol (or the pair as-is)."""
+    if "/" in symbol:
+        return [symbol]
+    return [f"{symbol}/{quote}" for quote in QUOTE_CURRENCIES if symbol != quote]
 
 
 class BaseConnector(ABC):
@@ -199,26 +213,31 @@ class BaseConnector(ABC):
         """
         return []
 
-    def fetch_all_recent_orders_sync(self) -> List[Dict[str, Any]]:
+    def fetch_recent_orders_sync(
+        self, symbols: Sequence[str]
+    ) -> List[Dict[str, Any]]:
         """
-        Fetch all recent executed spot orders for the account (scheduler-safe sync HTTP).
+        Executed spot orders completed in the last RECENT_ORDERS_DAYS days.
 
-        This method returns all executed orders within the provider's recent window
-        (e.g. 7 days for OKX) without symbol filtering. Connectors that support
-        account-wide fetching should override this method.
+        Scheduler-safe sync HTTP. `symbols` are open-position bases (e.g. BTC, PUMP).
+        Connectors may ignore them when the provider API is account-wide.
+        Providers without order history return [].
 
         Returns:
             Normalized rows: external_order_id, symbol (base), type, quantity, price,
-            executed_at (datetime), exchange. Returns empty list if not supported.
+            executed_at (datetime), exchange.
         """
         return []
 
-    @property
-    def supports_account_wide_order_fetch(self) -> bool:
-        """Whether this connector supports account-wide order fetching.
-
-        Returns True if fetch_all_recent_orders_sync is implemented and preferred
-        over per-symbol fetching for incremental sync.
+    def fetch_archived_orders_sync(
+        self, symbols: Sequence[str]
+    ) -> List[Dict[str, Any]]:
         """
-        return False
+        Longer executed-order history for cold start or catch-up.
+
+        Same row shape as fetch_recent_orders_sync. Default window is
+        ARCHIVED_ORDERS_DAYS when the provider has no dedicated archive endpoint.
+        Providers without order history return [].
+        """
+        return []
 
