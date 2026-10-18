@@ -8,6 +8,8 @@ _CONFIG_CACHE: Optional[Dict[str, Any]] = None
 
 # Top-level config keys treated as self-custody / wallet providers.
 _WALLET_VENUE_KEYS = frozenset({"hot_wallets", "wallets", "cold_wallets"})
+# Credentials and other sections that are not portfolio data sources.
+_NON_VENUE_KEYS = frozenset({"mobula"})
 
 
 def project_root() -> Path:
@@ -84,6 +86,8 @@ def list_configured_venues() -> List[Dict[str, str]]:
     venues: List[Dict[str, str]] = []
     for key, value in config.items():
         if not isinstance(key, str) or not isinstance(value, dict):
+            continue
+        if key in _NON_VENUE_KEYS:
             continue
         kind = "wallet" if key in _WALLET_VENUE_KEYS else "exchange"
         venues.append(

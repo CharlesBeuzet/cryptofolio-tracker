@@ -35,8 +35,16 @@ ethereum:
   # Public wallet address to track (required)
   address: "0xYourEthereumAddressHere"
 
+# Mobula market data. On-chain price charts only — not a portfolio connector.
+# Used when positions.exchange is solana or ethereum, with positions.token_address.
+# Create a key at https://admin.mobula.io. The API never returns this value.
+mobula:
+  api_key: "your_mobula_api_key_here"
+
 # Notes:
 # - For exchanges: Only provide API keys with read-only permissions for security
 # - For hot wallets: Provide a public address and RPC hostname (no private keys required)
 # - RPC hostname: Free public RPCs are fine to start; use your own for better reliability
-# - Asset price history is fetched on demand from exchange APIs and never stored in portfolio.db
+# - Centralized-exchange price history is fetched on demand from the exchange API
+# - On-chain price history (exchange solana or ethereum) is fetched on demand from Mobula
+# - Price history is never stored in portfolio.db
