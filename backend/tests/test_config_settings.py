@@ -59,7 +59,7 @@ class ConfigSettingsTests(unittest.TestCase):
         self.assertFalse(by_name["okx"]["configured"])
 
         available_names = {item["name"] for item in public["available_connectors"]}
-        self.assertEqual(available_names, {"binance", "okx", "ethereum"})
+        self.assertEqual(available_names, {"binance", "okx", "ethereum", "solana"})
 
     def test_update_keeps_secret_when_omitted(self) -> None:
         self._write(
@@ -149,6 +149,46 @@ class ConfigSettingsTests(unittest.TestCase):
         self.assertTrue(eth["configured"])
         self.assertTrue(eth["supports_address"])
         self.assertEqual(eth["address"], "0xabc123")
+
+    def test_solana_requires_api_key(self) -> None:
+        self._write({})
+        with self.assertRaises(ValueError) as ctx:
+            config_settings.update_config(
+                exchanges=[
+                    {
+                        "name": "solana",
+                        "hostname": "https://mainnet.helius-rpc.com",
+                        "address": "So11111111111111111111111111111111111111112",
+                    }
+                ],
+                replace_exchanges=True,
+            )
+        self.assertIn("api_key is required", str(ctx.exception))
+
+    def test_add_solana_connector_masks_api_key(self) -> None:
+        self._write({})
+        config_settings.update_config(
+            exchanges=[
+                {
+                    "name": "solana",
+                    "hostname": "https://mainnet.helius-rpc.com",
+                    "address": "So11111111111111111111111111111111111111112",
+                    "api_key": "helius-live-key-9999",
+                }
+            ],
+            replace_exchanges=True,
+        )
+        saved = yaml.safe_load(self.config_file.read_text(encoding="utf-8"))
+        self.assertEqual(saved["solana"]["api_key"], "helius-live-key-9999")
+        public = config_settings.get_public_config()
+        sol = next(ex for ex in public["exchanges"] if ex["name"] == "solana")
+        self.assertTrue(sol["configured"])
+        self.assertEqual(sol["api_key"]["hint"], "••••9999")
+        self.assertNotIn("helius-live-key-9999", str(public))
+        self.assertEqual(
+            next(item["required_secrets"] for item in public["available_connectors"] if item["name"] == "solana"),
+            ["api_key"],
+        )
 
 
 if __name__ == "__main__":

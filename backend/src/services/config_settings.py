@@ -67,6 +67,14 @@ def _catalog_by_name() -> Dict[str, Dict[str, Any]]:
     return {entry["name"]: entry for entry in list_available_connectors()}
 
 
+def _missing_required_secret(section: Dict[str, Any], meta: Dict[str, Any]) -> Optional[str]:
+    """Return the first required secret that is missing or still a placeholder."""
+    for key in meta.get("required_secrets") or []:
+        if not section.get(key) or _is_placeholder(section.get(key)):
+            return str(key)
+    return None
+
+
 def _is_configured(section: Dict[str, Any], meta: Dict[str, Any]) -> bool:
     """Exchange connectors need secrets; wallets need address + RPC hostname."""
     if meta.get("supports_address"):
@@ -77,6 +85,8 @@ def _is_configured(section: Dict[str, Any], meta: Dict[str, Any]) -> bool:
             hostname = section.get("hostname")
             if not hostname or _is_placeholder(hostname):
                 return False
+        if _missing_required_secret(section, meta):
+            return False
         return True
     return _has_real_secret(section)
 
@@ -222,6 +232,11 @@ def update_config(
                         raise ValueError(
                             f"{meta.get('label') or name}: RPC URL is required."
                         )
+                missing_secret = _missing_required_secret(merged, meta)
+                if missing_secret:
+                    raise ValueError(
+                        f"{meta.get('label') or name}: {missing_secret} is required."
+                    )
 
             if merged:
                 current[name] = merged

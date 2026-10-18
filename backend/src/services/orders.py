@@ -1,6 +1,6 @@
 """Executed spot order sync from exchange connectors."""
 from datetime import datetime, timedelta
-from typing import Any, List, Tuple
+from typing import Any, List, Optional, Tuple
 
 from sqlalchemy import and_, func
 from sqlalchemy.orm import Session, joinedload
@@ -44,19 +44,29 @@ class OrderService:
         )
         return sorted({r.symbol for r in rows if r.symbol})
 
-    def _sync_params_for_symbol(self, exchange: str, symbol: str) -> Tuple[int, bool]:
-        """Return (since_ms, paginate). Always limits to a recent window to avoid stale fills."""
+    def _sync_params_for_symbol(
+        self, connector: Any, symbol: str
+    ) -> Tuple[Optional[int], bool]:
+        """Return (since_ms, paginate).
+
+        Exchange connectors stay on a recent window without pagination.
+        Connectors that opt into ``full_history_when_empty`` page the whole
+        history the first time a symbol has no orders, then a short overlap.
+        """
         overlap = timedelta(hours=SYNC_OVERLAP_HOURS)
         last_at = (
             self.db.query(func.max(Order.executed_at))
-            .filter(and_(Order.exchange == exchange, Order.symbol == symbol))
+            .filter(and_(Order.exchange == connector.name, Order.symbol == symbol))
             .scalar()
         )
+        full_history = bool(connector.full_history_when_empty())
+        if last_at is None and full_history:
+            return None, True
         if last_at is None:
             since = datetime.utcnow() - overlap
         else:
             since = last_at - overlap
-        return int(since.timestamp() * 1000), False
+        return int(since.timestamp() * 1000), full_history
 
     def _insert_orders(
         self, rows: List[dict], exchange: str, position: Position
@@ -102,7 +112,7 @@ class OrderService:
     def sync_orders_from_connector(self, connector: Any, symbol: str) -> int:
         """Fetch and persist new executed orders for one base symbol. Returns insert count."""
         exchange = connector.name
-        since_ms, paginate = self._sync_params_for_symbol(exchange, symbol)
+        since_ms, paginate = self._sync_params_for_symbol(connector, symbol)
 
         position = (
             self.db.query(Position)
@@ -119,7 +129,12 @@ class OrderService:
             return 0
 
         total_added = 0
-        for market_pair in _market_pairs(symbol):
+        targets = (
+            [symbol]
+            if not connector.syncs_per_market_pair()
+            else _market_pairs(symbol)
+        )
+        for market_pair in targets:
             print(
                 f"Syncing orders for {market_pair} from {exchange} "
                 f"(since_ms={since_ms}, paginate={paginate}) ..."

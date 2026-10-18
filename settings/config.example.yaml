@@ -35,6 +35,15 @@ ethereum:
   # Public wallet address to track (required)
   address: "0xYourEthereumAddressHere"
 
+# Solana wallet via Helius RPC
+solana:
+  # Helius RPC endpoint (required). The API key is sent as ?api-key=
+  hostname: "https://mainnet.helius-rpc.com"
+  # Public wallet address to track (required)
+  address: "YourSolanaAddressHere"
+  # Helius API key (required, masked in Settings)
+  api_key: "your_helius_api_key_here"
+
 # Notes:
 # - For exchanges: Only provide API keys with read-only permissions for security
 # - For hot wallets: Provide a public address and RPC hostname (no private keys required)

@@ -156,7 +156,8 @@ class Order(Base):
     price = Column(Float, nullable=False)
     executed_at = Column(DateTime, nullable=False, index=True)
     exchange = Column(String(50), nullable=True)
-    external_order_id = Column(String(64), nullable=True, index=True)
+    # Solana signatures are ~88 chars; the id is "{signature}:{symbol}".
+    external_order_id = Column(String(160), nullable=True, index=True)
 
     position = relationship("Position", back_populates="orders")
 

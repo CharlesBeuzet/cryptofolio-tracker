@@ -131,6 +131,11 @@ export default function ConnectionsSettings() {
     setStatus(null)
   }
 
+  const requiresSecret = (ex: ExchangeDraft, secret: string) => {
+    const catalog = available.find((item) => item.name === ex.name)
+    return (catalog?.requiredSecrets || []).includes(secret)
+  }
+
   const removeExchange = (name: string) => {
     setExchanges((prev) => prev.filter((ex) => ex.name !== name))
     setExpanded((prev) => {
@@ -187,7 +192,10 @@ export default function ConnectionsSettings() {
           replaceExchanges: true,
           exchanges: exchanges.map((ex) => ({
             name: ex.name,
-            apiKey: ex.supportsAddress ? null : ex.apiKey.trim() || null,
+            apiKey:
+              !ex.supportsAddress || requiresSecret(ex, 'api_key')
+                ? ex.apiKey.trim() || null
+                : null,
             apiSecret: ex.supportsAddress ? null : ex.apiSecret.trim() || null,
             passphrase: ex.supportsAddress ? null : ex.passphrase.trim() || null,
             hostname: ex.supportsHostname ? ex.hostname.trim() || null : null,
@@ -254,7 +262,7 @@ export default function ConnectionsSettings() {
 
         {exchanges.length === 0 && !adding && (
           <div className="panel text-sillage-soft font-mono text-sm">
-            No connectors declared yet. Add an exchange or Ethereum wallet to get started.
+            No connectors declared yet. Add an exchange or wallet to get started.
           </div>
         )}
 
@@ -298,7 +306,7 @@ export default function ConnectionsSettings() {
                           className="field"
                           value={ex.address}
                           onChange={(e) => updateExchange(ex.name, { address: e.target.value })}
-                          placeholder="0x…"
+                          placeholder={ex.name === 'solana' ? 'Wallet public key' : '0x…'}
                           autoComplete="off"
                         />
                       </label>
@@ -309,10 +317,24 @@ export default function ConnectionsSettings() {
                             className="field"
                             value={ex.hostname}
                             onChange={(e) => updateExchange(ex.name, { hostname: e.target.value })}
-                            placeholder="https://eth.llamarpc.com"
+                            placeholder={
+                              ex.name === 'solana'
+                                ? 'https://mainnet.helius-rpc.com'
+                                : 'https://eth.llamarpc.com'
+                            }
                             autoComplete="off"
                           />
                         </label>
+                      )}
+                      {requiresSecret(ex, 'api_key') && (
+                        <SecretInput
+                          label="API key"
+                          hint={server?.apiKey.hint}
+                          isSet={Boolean(server?.apiKey.isSet)}
+                          value={ex.apiKey}
+                          onChange={(value) => updateExchange(ex.name, { apiKey: value })}
+                          required={ex.isNew}
+                        />
                       )}
                     </>
                   ) : (

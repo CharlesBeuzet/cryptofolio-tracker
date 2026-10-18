@@ -91,6 +91,14 @@ class BaseConnector(ABC):
         """
         return []
 
+    def syncs_per_market_pair(self) -> bool:
+        """When False, order sync passes the base symbol once instead of quote pairs."""
+        return True
+
+    def full_history_when_empty(self) -> bool:
+        """When True, the first sync pages history; later syncs page a short overlap."""
+        return False
+
     def fetch_price_history_sync(
         self,
         market_pair: str,
