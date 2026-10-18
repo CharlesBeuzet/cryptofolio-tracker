@@ -154,6 +154,47 @@ class SolanaConnectorTests(unittest.TestCase):
         self.assertEqual([params["page"] for method, params in calls], [1, 2])
         self.assertEqual(connector._symbols_by_mint[BONK_MINT], "BONK")
 
+    def test_fetch_prices_reads_helius_quotes(self) -> None:
+        def transport(method: str, params: Any) -> Any:
+            if params["page"] > 1:
+                return _assets_result([])
+            unpriced = _fungible(WIF_MINT, "WIF", 1_000_000)
+            unpriced["token_info"].pop("price_info")
+            junk = _fungible("JunkMintJunkMintJunkMintJunkMintJunkMint", "JUNK", 1_000_000)
+            junk["token_info"]["price_info"] = {"price_per_token": 0, "currency": "USDC"}
+            return _assets_result(
+                [
+                    _fungible(BONK_MINT, "BONK", 2_500_000),
+                    _fungible(WSOL_MINT, "SOL", 500_000_000, decimals=9),
+                    _fungible(USDC_MINT, "USDC", 3_000_000),
+                    unpriced,
+                    junk,
+                ],
+                lamports=1_000_000_000,
+            )
+
+        connector = SolanaConnector(_config(), transport=transport)
+        self.assertEqual(asyncio.run(connector.fetch_prices(["SOL"])), {})
+        connector._fetch_balances_sync()
+        prices = asyncio.run(
+            connector.fetch_prices(["SOL", "BONK", "USDC", "WIF", "JUNK", "MISSING"])
+        )
+        # Native SOL uses price_per_sol, not the wrapped-SOL price_info (999).
+        self.assertEqual(prices, {"SOL": 150.0, "BONK": 999.0, "USDC": 999.0})
+
+    def test_sol_price_falls_back_to_wrapped_sol_quote(self) -> None:
+        def transport(method: str, params: Any) -> Any:
+            result = _assets_result(
+                [_fungible(WSOL_MINT, "SOL", 1_000_000_000, decimals=9)],
+                lamports=0,
+            )
+            result["nativeBalance"].pop("price_per_sol")
+            return result
+
+        connector = SolanaConnector(_config(), transport=transport)
+        connector._fetch_balances_sync()
+        self.assertEqual(asyncio.run(connector.fetch_prices(["SOL"])), {"SOL": 999.0})
+
     def test_duplicate_symbols_get_a_mint_suffix(self) -> None:
         other = BONK_MINT[:-4] + "ZZZZ"
 
@@ -433,6 +474,61 @@ class PositionTokenAddressTests(unittest.TestCase):
         asyncio.run(AssetsService(self.db).sync_from_connector(connector))
         position = self.db.query(Position).one()
         self.assertIsNone(position.token_address)
+
+
+class AssetPriceTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.engine = create_engine("sqlite:///:memory:")
+        Base.metadata.create_all(bind=self.engine)
+        self.db = sessionmaker(bind=self.engine)()
+
+    def tearDown(self) -> None:
+        self.db.close()
+        self.engine.dispose()
+
+    def test_sync_saves_helius_price_on_the_asset(self) -> None:
+        def transport(method: str, params: Any) -> Any:
+            if params.get("page", 1) > 1:
+                return _assets_result([])
+            bonk = _fungible(BONK_MINT, "BONK", 2_000_000)
+            bonk["token_info"]["price_info"] = {
+                "price_per_token": 0.000021,
+                "currency": "USDC",
+            }
+            return _assets_result([bonk], lamports=2_000_000_000)
+
+        connector = SolanaConnector(_config(), transport=transport)
+        asyncio.run(AssetsService(self.db).sync_from_connector(connector))
+        bonk = self.db.query(Asset).filter_by(symbol="BONK").one()
+        sol = self.db.query(Asset).filter_by(symbol="SOL").one()
+        self.assertAlmostEqual(bonk.current_price, 0.000021)
+        self.assertEqual(sol.current_price, 150.0)
+        self.assertIsNotNone(bonk.last_updated)
+
+        bonk_again = _fungible(BONK_MINT, "BONK", 2_000_000)
+        bonk_again["token_info"]["price_info"] = {"price_per_token": 0.00003}
+
+        def later(method: str, params: Any) -> Any:
+            return _assets_result([bonk_again], lamports=2_000_000_000)
+
+        connector._transport = later
+        asyncio.run(AssetsService(self.db).sync_from_connector(connector))
+        self.db.refresh(bonk)
+        self.assertAlmostEqual(bonk.current_price, 0.00003)
+
+    def test_missing_quote_keeps_the_stored_price(self) -> None:
+        self.db.add(Asset(symbol="WIF", name="WIF", current_price=3.5))
+        self.db.commit()
+
+        def transport(method: str, params: Any) -> Any:
+            item = _fungible(WIF_MINT, "WIF", 1_000_000)
+            item["token_info"].pop("price_info")
+            return _assets_result([item])
+
+        connector = SolanaConnector(_config(), transport=transport)
+        asyncio.run(AssetsService(self.db).sync_from_connector(connector))
+        asset = self.db.query(Asset).filter_by(symbol="WIF").one()
+        self.assertEqual(asset.current_price, 3.5)
 
 
 class _Recording:

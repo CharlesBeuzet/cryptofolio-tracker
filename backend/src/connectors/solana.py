@@ -1,10 +1,12 @@
 """Solana wallet connector (Helius RPC).
 
-Balances come from one DAS ``getAssetsByOwner`` call. Orders are conversions
-against USDT or USDC only: the execution price is the stablecoin amount
-divided by the token amount in the same transaction. Transfers, airdrops, and
-swaps that are not against those quotes are ignored. Market prices are out of
-scope (``fetch_prices`` stays empty).
+Balances come from one DAS ``getAssetsByOwner`` call. That response includes
+``token_info.price_info`` (and ``nativeBalance.price_per_sol``), the same price
+block as ``getAsset``. Those quotes are returned by ``fetch_prices`` and stored
+on ``assets.current_price``. Orders are conversions against USDT or USDC only:
+the execution price is the stablecoin amount divided by the token amount in
+the same transaction. Transfers, airdrops, and swaps that are not against
+those quotes are ignored.
 """
 from __future__ import annotations
 
@@ -132,6 +134,14 @@ def _is_fungible(item: Dict[str, Any]) -> bool:
         return False
 
 
+def _quoted_price(info: Dict[str, Any]) -> Optional[float]:
+    """Helius ``price_info.price_per_token`` from getAsset / getAssetsByOwner."""
+    price_info = info.get("price_info")
+    if not isinstance(price_info, dict):
+        return None
+    return positive_finite(price_info.get("price_per_token"))
+
+
 def _raw_balance(info: Dict[str, Any]) -> Optional[Decimal]:
     balance = _decimal(info.get("balance"))
     if balance is None or balance <= 0:
@@ -158,6 +168,7 @@ class SolanaConnector(BaseConnector):
         self.api_key = (config.get("api_key") or "").strip()
         self._transport = transport
         self._symbols_by_mint: Dict[str, str] = dict(CANONICAL_MINTS)
+        self._prices_by_symbol: Dict[str, float] = {}
         self._index_loaded = False
         self._history_cache: Optional[Dict[str, Any]] = None
 
@@ -221,8 +232,18 @@ class SolanaConnector(BaseConnector):
         return rows
 
     async def fetch_prices(self, symbols: List[str]) -> Dict[str, float]:
-        """Market prices are provided by exchange connectors, not this wallet."""
-        return {}
+        """Quotes taken from the last ``getAssetsByOwner`` response.
+
+        Helius puts ``token_info.price_info.price_per_token`` on each fungible
+        asset (same field as ``getAsset``). Native SOL uses
+        ``nativeBalance.price_per_sol``. Symbols with no quote are omitted so
+        a later sync does not wipe ``assets.current_price``.
+        """
+        return {
+            symbol: self._prices_by_symbol[symbol]
+            for symbol in symbols
+            if symbol in self._prices_by_symbol
+        }
 
     async def test_connection(self) -> bool:
         if not self.address or not self.hostname or not self.api_key:
@@ -259,7 +280,9 @@ class SolanaConnector(BaseConnector):
         """Page ``getAssetsByOwner`` and remember mint → symbol for later swaps."""
         holdings: Dict[str, Decimal] = {}
         labels: Dict[str, str] = {}
+        prices_by_mint: Dict[str, float] = {}
         native_lamports = 0
+        sol_price: Optional[float] = None
         page = 1
         while page <= ASSET_MAX_PAGES:
             result = self._rpc(
@@ -281,6 +304,7 @@ class SolanaConnector(BaseConnector):
                 native = result.get("nativeBalance") or {}
                 parsed = _decimal(native.get("lamports"))
                 native_lamports = int(parsed) if parsed is not None and parsed > 0 else 0
+                sol_price = positive_finite(native.get("price_per_sol"))
             items = result.get("items") or []
             if not isinstance(items, list):
                 raise ConnectorFetchError("solana getAssetsByOwner: items was not a list")
@@ -295,6 +319,9 @@ class SolanaConnector(BaseConnector):
                 holdings[mint] = holdings.get(mint, Decimal(0)) + quantity
                 metadata = ((item.get("content") or {}).get("metadata") or {})
                 labels[mint] = _clean_symbol(info.get("symbol") or metadata.get("symbol"))
+                quoted = _quoted_price(info)
+                if quoted is not None:
+                    prices_by_mint[mint] = quoted
             if len(items) < ASSET_PAGE_LIMIT:
                 break
             page += 1
@@ -309,6 +336,7 @@ class SolanaConnector(BaseConnector):
 
         rows = self._rows_from_holdings(holdings, labels)
         self._symbols_by_mint = dict(CANONICAL_MINTS)
+        prices_by_symbol: Dict[str, float] = {}
         for row in rows:
             mint = row.pop("_mint")
             # Native SOL and wrapped SOL share the wSOL mint so a later price
@@ -316,6 +344,13 @@ class SolanaConnector(BaseConnector):
             row["token_address"] = WSOL_MINT if mint in ("native", WSOL_MINT) else mint
             if mint != "native":
                 self._symbols_by_mint[mint] = row["symbol"]
+            if mint == "native":
+                price = sol_price if sol_price is not None else prices_by_mint.get(WSOL_MINT)
+            else:
+                price = prices_by_mint.get(mint)
+            if price is not None:
+                prices_by_symbol[row["symbol"]] = price
+        self._prices_by_symbol = prices_by_symbol
         self._index_loaded = True
         return rows
 
