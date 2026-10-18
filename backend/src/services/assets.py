@@ -77,7 +77,10 @@ class AssetsService:
             symbol = balance["symbol"]
             seen_symbols.add(symbol)
             self._portfolio.update_position_from_balance(
-                symbol, balance["quantity"], exchange
+                symbol,
+                balance["quantity"],
+                exchange,
+                balance.get("token_address"),
             )
             opened += 1
 

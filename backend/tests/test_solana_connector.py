@@ -1,9 +1,12 @@
 """Solana connector parsing and order-sync window. Uses no network and no portfolio.db."""
 from __future__ import annotations
 
+import asyncio
+import tempfile
 import unittest
 import unittest.mock
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import create_engine
@@ -16,7 +19,8 @@ from src.connectors.solana import (
     WSOL_MINT,
     SolanaConnector,
 )
-from src.models.database import Asset, Base, Order, Position
+from src.models.database import Asset, Base, Order, Position, migrate_position_token_address
+from src.services.assets import AssetsService
 from src.services.orders import QUOTE_CURRENCIES, OrderService
 from src.utils.data_quality import ConnectorFetchError
 
@@ -142,6 +146,11 @@ class SolanaConnectorTests(unittest.TestCase):
         self.assertEqual(by_symbol["SOL"], 1.5)
         self.assertEqual(by_symbol["BONK"], 2.5)
         self.assertEqual(by_symbol["USDC"], 3.0)
+        by_address = {row["symbol"]: row["token_address"] for row in rows}
+        self.assertEqual(by_address["SOL"], WSOL_MINT)
+        self.assertEqual(by_address["BONK"], BONK_MINT)
+        self.assertEqual(by_address["USDC"], USDC_MINT)
+        self.assertTrue(all("_mint" not in row for row in rows))
         self.assertNotIn("NFT", by_symbol)
         self.assertTrue(all(row["exchange"] == "solana" for row in rows))
         self.assertEqual([params["page"] for method, params in calls], [1, 2])
@@ -165,6 +174,7 @@ class SolanaConnectorTests(unittest.TestCase):
         self.assertEqual(len(symbols), 2)
         self.assertTrue(all(symbol.startswith("BONK.") for symbol in symbols))
         self.assertNotEqual(symbols[0], symbols[1])
+        self.assertEqual({row["token_address"] for row in rows}, {BONK_MINT, other})
 
     def test_rpc_error_raises_and_empty_owner_is_empty(self) -> None:
         def fail(method: str, params: Any) -> Any:
@@ -372,6 +382,85 @@ class SolanaConnectorTests(unittest.TestCase):
 
         ok = SolanaConnector(_config(), transport=transport)
         self.assertTrue(asyncio.run(ok.test_connection()))
+
+
+class _BalanceConnector:
+    def __init__(self, rows: List[Dict[str, Any]]):
+        self.name = "solana"
+        self.rows = rows
+
+    async def fetch_balances(self) -> List[Dict[str, Any]]:
+        return self.rows
+
+    async def fetch_prices(self, symbols: List[str]) -> Dict[str, float]:
+        return {}
+
+
+class PositionTokenAddressTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.engine = create_engine("sqlite:///:memory:")
+        Base.metadata.create_all(bind=self.engine)
+        self.db = sessionmaker(bind=self.engine)()
+
+    def tearDown(self) -> None:
+        self.db.close()
+        self.engine.dispose()
+
+    def test_sync_saves_mint_and_does_not_clear_it(self) -> None:
+        connector = _BalanceConnector(
+            [
+                {
+                    "symbol": "BONK",
+                    "quantity": 2.0,
+                    "exchange": "solana",
+                    "token_address": BONK_MINT,
+                }
+            ]
+        )
+        asyncio.run(AssetsService(self.db).sync_from_connector(connector))
+        position = self.db.query(Position).filter_by(symbol="BONK", exchange="solana").one()
+        self.assertEqual(position.token_address, BONK_MINT)
+
+        connector.rows = [{"symbol": "BONK", "quantity": 4.0, "exchange": "solana"}]
+        asyncio.run(AssetsService(self.db).sync_from_connector(connector))
+        self.db.refresh(position)
+        self.assertEqual(position.quantity, 4.0)
+        self.assertEqual(position.token_address, BONK_MINT)
+
+    def test_exchange_balance_leaves_address_empty(self) -> None:
+        connector = _BalanceConnector(
+            [{"symbol": "BTC", "quantity": 1.0, "exchange": "solana"}]
+        )
+        connector.name = "binance"
+        asyncio.run(AssetsService(self.db).sync_from_connector(connector))
+        position = self.db.query(Position).one()
+        self.assertIsNone(position.token_address)
+
+    def test_migration_adds_column_and_keeps_rows(self) -> None:
+        tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        tmp.close()
+        path = Path(tmp.name)
+        engine = create_engine(f"sqlite:///{path}")
+        try:
+            with engine.begin() as conn:
+                conn.exec_driver_sql(
+                    "CREATE TABLE positions (id INTEGER PRIMARY KEY, symbol VARCHAR(20), quantity FLOAT)"
+                )
+                conn.exec_driver_sql(
+                    "INSERT INTO positions (symbol, quantity) VALUES ('SOL', 1.5)"
+                )
+            migrate_position_token_address(bind=engine)
+            migrate_position_token_address(bind=engine)
+            with engine.connect() as conn:
+                cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(positions)")}
+                stored = conn.exec_driver_sql(
+                    "SELECT symbol, quantity, token_address FROM positions"
+                ).one()
+            self.assertIn("token_address", cols)
+            self.assertEqual(tuple(stored), ("SOL", 1.5, None))
+        finally:
+            engine.dispose()
+            path.unlink(missing_ok=True)
 
 
 class _Recording:

@@ -311,6 +311,9 @@ class SolanaConnector(BaseConnector):
         self._symbols_by_mint = dict(CANONICAL_MINTS)
         for row in rows:
             mint = row.pop("_mint")
+            # Native SOL and wrapped SOL share the wSOL mint so a later price
+            # lookup can use one address.
+            row["token_address"] = WSOL_MINT if mint in ("native", WSOL_MINT) else mint
             if mint != "native":
                 self._symbols_by_mint[mint] = row["symbol"]
         self._index_loaded = True

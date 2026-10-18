@@ -203,9 +203,17 @@ class PortfolioService:
         return daily_pnl
 
     def update_position_from_balance(
-        self, symbol: str, quantity: float, exchange: str
+        self,
+        symbol: str,
+        quantity: float,
+        exchange: str,
+        token_address: Optional[str] = None,
     ):
-        """Update or create an open position from balance data."""
+        """Update or create an open position from balance data.
+
+        ``token_address`` is the on-chain mint or contract for this holding.
+        A missing value leaves any address already stored on the position.
+        """
         position = (
             self.db.query(Position)
             .options(joinedload(Position.asset))
@@ -225,10 +233,13 @@ class PortfolioService:
             self.db.add(asset)
             self.db.flush()
 
+        address = str(token_address).strip() if token_address else ""
         if position:
             position.quantity = quantity
             position.status = "open"
             position.last_updated = datetime.utcnow()
+            if address:
+                position.token_address = address
         else:
             position = Position(
                 asset_id=asset.id,
@@ -238,6 +249,7 @@ class PortfolioService:
                 exchange=exchange,
                 status="open",
                 source="synced",
+                token_address=address or None,
             )
             self.db.add(position)
 
