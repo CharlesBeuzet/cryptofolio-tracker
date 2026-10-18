@@ -218,7 +218,6 @@ def init_db():
     Base.metadata.create_all(bind=engine)
     migrate_tags_schema()
     migrate_manual_positions_schema()
-    migrate_position_token_address()
 
 
 def migrate_tags_schema(bind=None):
@@ -255,17 +254,6 @@ def migrate_manual_positions_schema(bind=None):
         if "external_url" not in cols:
             conn.exec_driver_sql(
                 "ALTER TABLE positions ADD COLUMN external_url VARCHAR(500)"
-            )
-
-
-def migrate_position_token_address(bind=None):
-    """Add positions.token_address when missing. Existing rows stay untouched."""
-    eng = bind or engine
-    with eng.begin() as conn:
-        cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(positions)")}
-        if "token_address" not in cols:
-            conn.exec_driver_sql(
-                "ALTER TABLE positions ADD COLUMN token_address VARCHAR(64)"
             )
 
 

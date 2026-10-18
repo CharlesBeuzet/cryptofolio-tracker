@@ -2,11 +2,9 @@
 from __future__ import annotations
 
 import asyncio
-import tempfile
 import unittest
 import unittest.mock
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import create_engine
@@ -19,7 +17,7 @@ from src.connectors.solana import (
     WSOL_MINT,
     SolanaConnector,
 )
-from src.models.database import Asset, Base, Order, Position, migrate_position_token_address
+from src.models.database import Asset, Base, Order, Position
 from src.services.assets import AssetsService
 from src.services.orders import QUOTE_CURRENCIES, OrderService
 from src.utils.data_quality import ConnectorFetchError
@@ -435,32 +433,6 @@ class PositionTokenAddressTests(unittest.TestCase):
         asyncio.run(AssetsService(self.db).sync_from_connector(connector))
         position = self.db.query(Position).one()
         self.assertIsNone(position.token_address)
-
-    def test_migration_adds_column_and_keeps_rows(self) -> None:
-        tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-        tmp.close()
-        path = Path(tmp.name)
-        engine = create_engine(f"sqlite:///{path}")
-        try:
-            with engine.begin() as conn:
-                conn.exec_driver_sql(
-                    "CREATE TABLE positions (id INTEGER PRIMARY KEY, symbol VARCHAR(20), quantity FLOAT)"
-                )
-                conn.exec_driver_sql(
-                    "INSERT INTO positions (symbol, quantity) VALUES ('SOL', 1.5)"
-                )
-            migrate_position_token_address(bind=engine)
-            migrate_position_token_address(bind=engine)
-            with engine.connect() as conn:
-                cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(positions)")}
-                stored = conn.exec_driver_sql(
-                    "SELECT symbol, quantity, token_address FROM positions"
-                ).one()
-            self.assertIn("token_address", cols)
-            self.assertEqual(tuple(stored), ("SOL", 1.5, None))
-        finally:
-            engine.dispose()
-            path.unlink(missing_ok=True)
 
 
 class _Recording:
