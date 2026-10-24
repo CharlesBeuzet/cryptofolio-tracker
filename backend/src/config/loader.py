@@ -75,17 +75,29 @@ def venue_display_name(key: str) -> str:
 
 def list_configured_venues() -> List[Dict[str, str]]:
     """
-    Return data providers declared as top-level mapping sections in config.yaml.
+    Return registry connectors that have a section in config.yaml.
 
     Each item has: key, display_name, kind ("exchange" | "wallet").
-    Order matches YAML declaration order.
+    Order matches YAML declaration order. Unknown keys (including a retired
+    ethereum stub) are omitted.
     """
+    from ..connectors.registry import available_connector_names, list_available_connectors
+
+    allowed = set(available_connector_names())
+    kinds = {
+        item["name"]: item.get("kind") or "exchange"
+        for item in list_available_connectors()
+    }
     config = load_config()
     venues: List[Dict[str, str]] = []
     for key, value in config.items():
         if not isinstance(key, str) or not isinstance(value, dict):
             continue
-        kind = "wallet" if key in _WALLET_VENUE_KEYS else "exchange"
+        if key not in allowed:
+            continue
+        kind = kinds.get(key) or (
+            "wallet" if key in _WALLET_VENUE_KEYS else "exchange"
+        )
         venues.append(
             {
                 "key": key,

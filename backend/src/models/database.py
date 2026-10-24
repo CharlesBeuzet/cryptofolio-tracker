@@ -2,6 +2,8 @@
 from datetime import datetime
 
 from sqlalchemy import (
+    BigInteger,
+    Boolean,
     CheckConstraint,
     Column,
     DateTime,
@@ -62,7 +64,8 @@ class Position(Base):
     quantity = Column(Float, nullable=False, default=0.0)
     first_bought_at = Column(DateTime, nullable=False)
     last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    exchange = Column(String(50), nullable=True)  # binance, coinbase, wallet, etc.
+    exchange = Column(String(50), nullable=True)  # binance, okx, or a Mobula chain slug
+    token_address = Column(String(128), nullable=True)  # on-chain contract; null for CEX
     status = Column(String(10), nullable=False, default="open")  # open | closed
     tag_id = Column(Integer, ForeignKey("tags.id"), nullable=True, index=True)
     source = Column(String(16), nullable=False, default="synced")  # synced | manual
@@ -156,7 +159,7 @@ class Order(Base):
     price = Column(Float, nullable=False)
     executed_at = Column(DateTime, nullable=False, index=True)
     exchange = Column(String(50), nullable=True)
-    external_order_id = Column(String(64), nullable=True, index=True)
+    external_order_id = Column(String(160), nullable=True, index=True)
 
     position = relationship("Position", back_populates="orders")
 
@@ -192,6 +195,20 @@ class FiatDeposit(Base):
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
 
+class MobulaActivityCursor(Base):
+    """How far wallet-activity paging has walked for one address.
+
+    Created by create_all. Existing tables are left untouched.
+    """
+
+    __tablename__ = "mobula_activity_cursor"
+
+    wallet = Column(String(128), primary_key=True)
+    oldest_tx_ms = Column(BigInteger, nullable=True)
+    newest_tx_ms = Column(BigInteger, nullable=True)
+    backfill_done = Column(Boolean, nullable=False, default=False)
+
+
 # Database setup
 from pathlib import Path
 
@@ -214,6 +231,7 @@ def init_db():
     Base.metadata.create_all(bind=engine)
     migrate_tags_schema()
     migrate_manual_positions_schema()
+    migrate_positions_token_address()
 
 
 def migrate_tags_schema(bind=None):
@@ -250,6 +268,17 @@ def migrate_manual_positions_schema(bind=None):
         if "external_url" not in cols:
             conn.exec_driver_sql(
                 "ALTER TABLE positions ADD COLUMN external_url VARCHAR(500)"
+            )
+
+
+def migrate_positions_token_address(bind=None):
+    """Add positions.token_address when missing. Does not rewrite or delete rows."""
+    eng = bind or engine
+    with eng.begin() as conn:
+        cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(positions)")}
+        if "token_address" not in cols:
+            conn.exec_driver_sql(
+                "ALTER TABLE positions ADD COLUMN token_address VARCHAR(128)"
             )
 
 

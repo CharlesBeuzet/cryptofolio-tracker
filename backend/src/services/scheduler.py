@@ -112,6 +112,23 @@ class DataUpdateScheduler:
 
             order_svc = OrderService(db)
             for connector in connectors:
+                if getattr(connector, "syncs_wallet_activity", False):
+                    try:
+                        n = await self._with_retry(
+                            f"sync wallet activity from {connector.name}",
+                            lambda c=connector: order_svc.sync_wallet_activity(c),
+                        )
+                        if n:
+                            print(
+                                f"Synced {n} new on-chain order(s) from {connector.name}."
+                            )
+                    except Exception as e:
+                        print(
+                            f"Error syncing wallet activity from {connector.name}: "
+                            f"{type(e).__name__}: {e}"
+                        )
+                        db.rollback()
+                    continue
                 symbols = order_svc.get_symbols_for_connector(connector)
                 for symbol in symbols:
                     try:

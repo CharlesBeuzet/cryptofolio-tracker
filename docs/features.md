@@ -36,7 +36,7 @@ Data is pulled and merged from:
 
 - **Binance**
 - **OKX**
-- **Ethereum** hot wallets (public address + RPC hostname)
+- **Mobula** wallets (public addresses across configured chains; the chain slug is stored on the position)
 
 Coinbase remains in the example YAML for reference but is not in the Settings add-connector catalog until a connector exists.
 

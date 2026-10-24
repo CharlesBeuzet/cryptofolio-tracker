@@ -3,15 +3,23 @@ import { useQuery, useMutation } from '@apollo/client'
 import { useState, useMemo, useEffect } from 'react'
 import { format } from 'date-fns'
 import { GET_POSITION, GET_PORTFOLIO, GET_ASSET_PRICE_HISTORY } from '../graphql/queries'
-import { ADD_POSITION_VALUATION, DELETE_POSITION_VALUATION } from '../graphql/mutations'
+import {
+  ADD_ONCHAIN_BUY_ORDER,
+  ADD_POSITION_VALUATION,
+  DELETE_ONCHAIN_MANUAL_ORDER,
+  DELETE_POSITION_VALUATION,
+} from '../graphql/mutations'
 import AssetPriceChart from '../components/charts/AssetPriceChart'
 import PortfolioValueChart from '../components/charts/PortfolioValueChart'
+import OnchainBuyForm from '../components/portfolio/OnchainBuyForm'
 import ValuationTable from '../components/portfolio/ValuationTable'
 import AssetSwitcher from '../components/common/AssetSwitcher'
 import RangeSegment, { type RangeKey, rangeToDays } from '../components/common/RangeSegment'
 import { formatPct, formatTokenPrice, formatUsdPrecise, pnlColorClass } from '../utils/format'
 import { excludeCashLikePositions } from '../utils/cashLikeAssets'
 import { groupPositionsByAsset, type PositionLike } from '../utils/groupPositionsByAsset'
+
+const CEX_EXCHANGES = new Set(['binance', 'okx', 'coinbase'])
 
 export default function Position() {
   const { id } = useParams<{ id: string }>()
@@ -28,10 +36,15 @@ export default function Position() {
   })
   const [addValuation] = useMutation(ADD_POSITION_VALUATION)
   const [deleteValuation] = useMutation(DELETE_POSITION_VALUATION)
+  const [addOnchainBuy] = useMutation(ADD_ONCHAIN_BUY_ORDER)
+  const [deleteOnchainBuy] = useMutation(DELETE_ONCHAIN_MANUAL_ORDER)
 
   const positionSymbol = data?.position?.symbol
   const positionExchange = data?.position?.exchange
+  const tokenAddress = data?.position?.tokenAddress as string | null | undefined
   const isManual = data?.position?.source === 'manual'
+  const isOnchain =
+    Boolean(tokenAddress) && !CEX_EXCHANGES.has((positionExchange || '').toLowerCase())
   const days = rangeToDays(range)
 
   useEffect(() => {
@@ -39,7 +52,12 @@ export default function Position() {
   }, [range, positionSymbol])
 
   const { data: priceData, loading: priceLoading } = useQuery(GET_ASSET_PRICE_HISTORY, {
-    variables: { symbol: positionSymbol || '', days, exchange: positionExchange || null },
+    variables: {
+      symbol: positionSymbol || '',
+      days,
+      exchange: positionExchange || null,
+      tokenAddress: tokenAddress || null,
+    },
     skip: !positionSymbol || !positionExchange || isManual,
   })
 
@@ -87,10 +105,12 @@ export default function Position() {
   const isPositive = unrealized >= 0
   const title = isManual && position.displayName ? position.displayName : position.symbol
 
-  const orders = [...(position.orders || [])].sort((a: { executedAt: string }, b: { executedAt: string }) => {
-    const byDate = new Date(b.executedAt).getTime() - new Date(a.executedAt).getTime()
-    return byDate !== 0 ? byDate : b.id - a.id
-  })
+  const orders = [...(position.orders || [])].sort(
+    (a: { id: number; executedAt: string }, b: { id: number; executedAt: string }) => {
+      const byDate = new Date(b.executedAt).getTime() - new Date(a.executedAt).getTime()
+      return byDate !== 0 ? byDate : b.id - a.id
+    },
+  )
 
   const valuations = position.valuations || []
   const chartHistory = [...valuations]
@@ -151,6 +171,42 @@ export default function Position() {
     try {
       await deleteValuation({
         variables: { id: valuationId },
+        refetchQueries: ['GetPortfolio', 'GetPosition'],
+      })
+      await refetch()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const onAddOnchainBuy = async (input: {
+    quantity: number
+    price: number
+    executedAt: string
+  }) => {
+    setBusy(true)
+    try {
+      await addOnchainBuy({
+        variables: {
+          positionId: position.id,
+          quantity: input.quantity,
+          price: input.price,
+          executedAt: input.executedAt,
+        },
+        refetchQueries: ['GetPortfolio', 'GetPosition'],
+      })
+      await refetch()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const onDeleteOnchainBuy = async (orderId: number) => {
+    if (!window.confirm('Delete this manual buy?')) return
+    setBusy(true)
+    try {
+      await deleteOnchainBuy({
+        variables: { id: orderId },
         refetchQueries: ['GetPortfolio', 'GetPosition'],
       })
       await refetch()
@@ -292,6 +348,16 @@ export default function Position() {
                         string,
                         string?,
                       ],
+                      ...(isOnchain
+                        ? ([
+                            [
+                              'Unpriced',
+                              (position.unpricedQuantity ?? 0).toLocaleString(undefined, {
+                                maximumFractionDigits: 8,
+                              }),
+                            ],
+                          ] as [string, string, string?][])
+                        : []),
                       ...(position.metrics?.avgExitPrice != null
                         ? ([
                             ['Avg sell', formatTokenPrice(position.metrics.avgExitPrice)],
@@ -353,6 +419,14 @@ export default function Position() {
       ) : (
         <div className="panel mt-4 sm:mt-5">
           <div className="lbl mb-1">Table 2 · Order history</div>
+          {isOnchain && (
+            <OnchainBuyForm
+              symbol={position.symbol}
+              unpriced={position.unpricedQuantity ?? 0}
+              busy={busy}
+              onAdd={onAddOnchainBuy}
+            />
+          )}
           <div className="table-scroll">
             <div className="table-scroll-inner">
               <div className="trow text-sillage-soft border-t-0">
@@ -362,6 +436,7 @@ export default function Position() {
                 <div className="w-24 text-right lbl text-[9px]">Price</div>
                 <div className="w-24 text-right lbl text-[9px]">Value</div>
                 <div className="w-24 text-right lbl text-[9px]">Venue</div>
+                {isOnchain && <div className="w-16 text-right lbl text-[9px]"> </div>}
               </div>
               {orders.length === 0 ? (
                 <div className="text-center py-8 text-sillage-soft text-sm">No orders found</div>
@@ -374,9 +449,11 @@ export default function Position() {
                     price: number
                     executedAt: string
                     exchange: string | null
+                    externalOrderId?: string | null
                   }) => {
                     const isBuy = order.type === 'buy'
                     const total = order.quantity * order.price
+                    const isManualOrder = (order.externalOrderId || '').startsWith('manual:')
                     return (
                       <div key={order.id} className="trow">
                         <div className="w-24 font-mono text-[11px] text-sillage-soft">
@@ -400,8 +477,22 @@ export default function Position() {
                           {formatUsdPrecise(total)}
                         </div>
                         <div className="w-24 text-right font-mono text-[11px] text-sillage-soft">
-                          {order.exchange || '—'}
+                          {isManualOrder ? 'manual' : order.exchange || '—'}
                         </div>
+                        {isOnchain && (
+                          <div className="w-16 text-right">
+                            {isManualOrder && (
+                              <button
+                                type="button"
+                                className="font-mono text-[9px] text-sillage-down hover:opacity-80"
+                                onClick={() => onDeleteOnchainBuy(order.id)}
+                                disabled={busy}
+                              >
+                                delete
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )
                   },

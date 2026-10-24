@@ -14,7 +14,7 @@ Stop tabbing between Binance, OKX, Coinbase, and block explorers. Stop trusting 
 | **Your keys stay home** | API secrets live in a local config file. No cloud account. No telemetry. |
 | **Built for a Pi** | SQLite, a single Docker container, one published port. Designed for Raspberry Pi 4/5. |
 | **Real analytics** | Average-cost entry, realised / unrealised P&L, order history per position. |
-| **Multi-source by default** | Binance · OKX · Ethereum hot wallets — aggregated into one portfolio. |
+| **Multi-source by default** | Binance · OKX · Mobula wallets — aggregated into one portfolio. |
 
 ---
 
