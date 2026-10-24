@@ -55,6 +55,8 @@ export const GET_POSITIONS = gql`
       value
       firstBoughtAt
       exchange
+      tokenAddress
+      unpricedQuantity
       durationDays
       source
       displayName
@@ -91,6 +93,8 @@ export const GET_POSITION = gql`
       value
       firstBoughtAt
       exchange
+      tokenAddress
+      unpricedQuantity
       durationDays
       source
       displayName
@@ -114,6 +118,7 @@ export const GET_POSITION = gql`
         price
         executedAt
         exchange
+        externalOrderId
       }
       valuations {
         id
@@ -150,6 +155,7 @@ export const GET_ASSET = gql`
         value
         firstBoughtAt
         exchange
+        tokenAddress
         durationDays
         source
         displayName
@@ -216,8 +222,18 @@ export const GET_DAILY_PNL_HISTORY = gql`
 `
 
 export const GET_ASSET_PRICE_HISTORY = gql`
-  query GetAssetPriceHistory($symbol: String!, $days: Int!, $exchange: String) {
-    assetPriceHistory(symbol: $symbol, days: $days, exchange: $exchange) {
+  query GetAssetPriceHistory(
+    $symbol: String!
+    $days: Int!
+    $exchange: String
+    $tokenAddress: String
+  ) {
+    assetPriceHistory(
+      symbol: $symbol
+      days: $days
+      exchange: $exchange
+      tokenAddress: $tokenAddress
+    ) {
       symbol
       days
       isMock
@@ -281,6 +297,8 @@ export const GET_APP_CONFIG = gql`
         supportsPassphrase
         supportsHostname
         supportsAddress
+        supportsWallets
+        supportsBlockchains
         requiredSecrets
       }
       exchanges {
@@ -290,9 +308,13 @@ export const GET_APP_CONFIG = gql`
         supportsPassphrase
         supportsHostname
         supportsAddress
+        supportsWallets
+        supportsBlockchains
         sandbox
         hostname
         address
+        wallets
+        blockchains
         apiKey {
           isSet
           hint
@@ -330,6 +352,8 @@ export const UPDATE_APP_CONFIG = gql`
           supportsPassphrase
           supportsHostname
           supportsAddress
+          supportsWallets
+          supportsBlockchains
           requiredSecrets
         }
         exchanges {
@@ -339,9 +363,13 @@ export const UPDATE_APP_CONFIG = gql`
           supportsPassphrase
           supportsHostname
           supportsAddress
+          supportsWallets
+          supportsBlockchains
           sandbox
           hostname
           address
+          wallets
+          blockchains
           apiKey {
             isSet
             hint

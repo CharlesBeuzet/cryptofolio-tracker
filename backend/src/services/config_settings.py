@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from ..config import loader
 from ..connectors.registry import available_connector_names, list_available_connectors
 from ..runtime import trigger_config_reload
+from .mobula_client import ALLOWED_BLOCKCHAINS, chain_slug
 
 SECRET_KEYS = ("api_key", "api_secret", "passphrase")
 
@@ -67,6 +68,13 @@ def _catalog_by_name() -> Dict[str, Dict[str, Any]]:
     return {entry["name"]: entry for entry in list_available_connectors()}
 
 
+def _real_wallets(section: Dict[str, Any]) -> List[str]:
+    wallets = section.get("wallets") or []
+    if isinstance(wallets, str):
+        wallets = [line.strip() for line in wallets.splitlines() if line.strip()]
+    return [str(item).strip() for item in wallets if str(item).strip() and not _is_placeholder(item)]
+
+
 def _is_configured(section: Dict[str, Any], meta: Dict[str, Any]) -> bool:
     """Exchange connectors need secrets; wallets need address + RPC hostname."""
     if meta.get("supports_address"):
@@ -78,6 +86,9 @@ def _is_configured(section: Dict[str, Any], meta: Dict[str, Any]) -> bool:
             if not hostname or _is_placeholder(hostname):
                 return False
         return True
+    if meta.get("supports_wallets"):
+        chains = section.get("blockchains") or []
+        return bool(_real_wallets(section) and chains and _has_real_secret(section))
     return _has_real_secret(section)
 
 
@@ -107,9 +118,13 @@ def get_public_config() -> Dict[str, Any]:
                 "supports_passphrase": bool(meta.get("supports_passphrase")),
                 "supports_hostname": bool(meta.get("supports_hostname")),
                 "supports_address": bool(meta.get("supports_address")),
+                "supports_wallets": bool(meta.get("supports_wallets")),
+                "supports_blockchains": bool(meta.get("supports_blockchains")),
                 "sandbox": bool(section["sandbox"]) if "sandbox" in section else None,
                 "hostname": section.get("hostname"),
                 "address": None if _is_placeholder(address) else (str(address).strip() if address else None),
+                "wallets": _wallets_text(section.get("wallets")),
+                "blockchains": _blockchains_text(section.get("blockchains")),
             }
         )
 
@@ -119,6 +134,62 @@ def get_public_config() -> Dict[str, Any]:
         "available_connectors": catalog,
         "exchanges": exchanges,
     }
+
+
+def _wallets_text(value: Any) -> Optional[str]:
+    if not value:
+        return None
+    if isinstance(value, str):
+        text = value.strip()
+        return text or None
+    lines = [str(item).strip() for item in value if str(item).strip()]
+    return "\n".join(lines) or None
+
+
+def _blockchains_text(value: Any) -> Optional[str]:
+    if not value:
+        return None
+    if isinstance(value, str):
+        text = value.strip()
+        return text or None
+    names = [str(item).strip() for item in value if str(item).strip()]
+    return ", ".join(names) or None
+
+
+def _parse_lines(raw: Any) -> List[str]:
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        parts = [str(item) for item in raw]
+    else:
+        parts = str(raw).splitlines()
+    out: List[str] = []
+    for part in parts:
+        text = part.strip()
+        if text and text not in out:
+            out.append(text)
+    return out
+
+
+def _parse_blockchains(raw: Any) -> List[str]:
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        chunks = [str(item) for item in raw]
+    else:
+        chunks = str(raw).replace("\n", ",").split(",")
+    slugs: List[str] = []
+    for chunk in chunks:
+        text = chunk.strip()
+        if not text:
+            continue
+        slug = chain_slug(text)
+        if slug is None or slug not in ALLOWED_BLOCKCHAINS:
+            allowed = ", ".join(ALLOWED_BLOCKCHAINS)
+            raise ValueError(f"Unsupported blockchain '{text}'. Allowed: {allowed}.")
+        if slug not in slugs:
+            slugs.append(slug)
+    return slugs
 
 
 def _apply_secret(
@@ -167,6 +238,24 @@ def _merge_exchange(
         else:
             merged["address"] = str(address).strip()
 
+    if meta.get("supports_wallets") and "wallets" in update and update.get("wallets") is not None:
+        wallets = _parse_lines(update.get("wallets"))
+        if wallets:
+            merged["wallets"] = wallets
+        else:
+            merged.pop("wallets", None)
+
+    if (
+        meta.get("supports_blockchains")
+        and "blockchains" in update
+        and update.get("blockchains") is not None
+    ):
+        chains = _parse_blockchains(update.get("blockchains"))
+        if chains:
+            merged["blockchains"] = chains
+        else:
+            merged.pop("blockchains", None)
+
     return merged
 
 
@@ -186,8 +275,9 @@ def update_config(
     known = set(available_connector_names())
     catalog = _catalog_by_name()
 
-    # Drop legacy nested hot_wallets block (replaced by ethereum connector sections).
+    # Retired wallet shapes. The next Settings save drops them.
     current.pop("hot_wallets", None)
+    current.pop("ethereum", None)
 
     if exchanges is not None:
         if replace_exchanges:
@@ -210,18 +300,22 @@ def update_config(
             existing = dict(current.get(name) or {})
             merged = _merge_exchange(existing, exchange_update, meta)
 
+            label = meta.get("label") or name
             if meta.get("supports_address"):
                 address = merged.get("address")
                 if not address or _is_placeholder(address):
-                    raise ValueError(
-                        f"{meta.get('label') or name}: wallet address is required."
-                    )
+                    raise ValueError(f"{label}: wallet address is required.")
                 if meta.get("supports_hostname"):
                     hostname = merged.get("hostname")
                     if not hostname or _is_placeholder(hostname):
-                        raise ValueError(
-                            f"{meta.get('label') or name}: RPC URL is required."
-                        )
+                        raise ValueError(f"{label}: RPC URL is required.")
+            if meta.get("supports_wallets"):
+                if not _real_wallets(merged):
+                    raise ValueError(f"{label}: at least one wallet address is required.")
+                if not merged.get("blockchains"):
+                    raise ValueError(f"{label}: at least one blockchain is required.")
+                if not _has_real_secret(merged):
+                    raise ValueError(f"{label}: API key is required.")
 
             if merged:
                 current[name] = merged
