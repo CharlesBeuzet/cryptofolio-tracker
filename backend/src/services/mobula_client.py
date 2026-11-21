@@ -515,7 +515,7 @@ class MobulaClient:
             response = self._http.get(
                 path,
                 params=dict(params),
-                headers={"Authorization": self.api_key},
+                headers={"x-api-key": self.api_key},
             )
         except httpx.HTTPError as exc:
             raise ConnectorFetchError(f"Mobula {path} failed: {exc}") from exc
