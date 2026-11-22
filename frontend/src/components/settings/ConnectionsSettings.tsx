@@ -34,6 +34,7 @@ type ExchangeDraft = {
   supportsPassphrase: boolean
   supportsHostname: boolean
   supportsAddress: boolean
+  requiredSecrets: string[]
   apiKey: string
   apiSecret: string
   passphrase: string
@@ -66,21 +67,28 @@ export default function ConnectionsSettings() {
     setMetaExists(Boolean(cfg.exists))
     setAvailable(cfg.availableConnectors || [])
     setServerExchanges(cfg.exchanges || [])
+    const catalogByName = new Map<string, AvailableConnector>(
+      (cfg.availableConnectors || []).map((item: AvailableConnector) => [item.name, item]),
+    )
     setExchanges(
-      (cfg.exchanges || []).map((ex: ExchangeConfig) => ({
-        name: ex.name,
-        label: ex.label || ex.name,
-        supportsPassphrase: ex.supportsPassphrase,
-        supportsHostname: ex.supportsHostname,
-        supportsAddress: ex.supportsAddress,
-        apiKey: '',
-        apiSecret: '',
-        passphrase: '',
-        hostname: ex.hostname || '',
-        address: ex.address || '',
-        sandbox: Boolean(ex.sandbox),
-        isNew: false,
-      })),
+      (cfg.exchanges || []).map((ex: ExchangeConfig) => {
+        const catalog = catalogByName.get(ex.name)
+        return {
+          name: ex.name,
+          label: ex.label || ex.name,
+          supportsPassphrase: ex.supportsPassphrase,
+          supportsHostname: ex.supportsHostname,
+          supportsAddress: ex.supportsAddress,
+          requiredSecrets: catalog?.requiredSecrets || [],
+          apiKey: '',
+          apiSecret: '',
+          passphrase: '',
+          hostname: ex.hostname || '',
+          address: ex.address || '',
+          sandbox: Boolean(ex.sandbox),
+          isNew: false,
+        }
+      }),
     )
     setExpanded({})
     setAdding(false)
@@ -110,16 +118,23 @@ export default function ConnectionsSettings() {
     if (!catalog) return
     if (exchanges.some((ex) => ex.name === catalog.name)) return
 
+    const defaultHostname =
+      catalog.name === 'zerion'
+        ? 'https://api.zerion.io'
+        : catalog.name === 'ethereum'
+          ? 'https://eth.llamarpc.com'
+          : ''
     const draft: ExchangeDraft = {
       name: catalog.name,
       label: catalog.label,
       supportsPassphrase: catalog.supportsPassphrase,
       supportsHostname: catalog.supportsHostname,
       supportsAddress: catalog.supportsAddress,
+      requiredSecrets: catalog.requiredSecrets || [],
       apiKey: '',
       apiSecret: '',
       passphrase: '',
-      hostname: '',
+      hostname: defaultHostname,
       address: '',
       sandbox: false,
       isNew: true,
@@ -156,21 +171,30 @@ export default function ConnectionsSettings() {
       if (ex.supportsAddress && ex.supportsHostname && !ex.hostname.trim()) {
         setStatus({
           kind: 'err',
-          text: `${ex.label}: RPC URL is required.`,
+          text: `${ex.label}: hostname is required.`,
         })
         setExpanded((prev) => ({ ...prev, [ex.name]: true }))
         return
       }
 
-      if (!ex.isNew) continue
-      const catalog = available.find((item) => item.name === ex.name)
-      const required = catalog?.requiredSecrets || []
+      const required = ex.requiredSecrets || []
       const values: Record<string, string> = {
         api_key: ex.apiKey,
         api_secret: ex.apiSecret,
         passphrase: ex.passphrase,
       }
-      const missing = required.filter((key) => !values[key]?.trim())
+      // New connectors must provide every required secret. Existing ones may leave
+      // blanks to keep the masked value already stored in config.yaml.
+      const missing = required.filter((key) => {
+        if (values[key]?.trim()) return false
+        if (!ex.isNew) {
+          const server = serverExchanges.find((s) => s.name === ex.name)
+          if (key === 'api_key' && server?.apiKey.isSet) return false
+          if (key === 'api_secret' && server?.apiSecret.isSet) return false
+          if (key === 'passphrase' && server?.passphrase.isSet) return false
+        }
+        return true
+      })
       if (missing.length) {
         setStatus({
           kind: 'err',
@@ -185,15 +209,22 @@ export default function ConnectionsSettings() {
       const result = await updateConfig({
         variables: {
           replaceExchanges: true,
-          exchanges: exchanges.map((ex) => ({
-            name: ex.name,
-            apiKey: ex.supportsAddress ? null : ex.apiKey.trim() || null,
-            apiSecret: ex.supportsAddress ? null : ex.apiSecret.trim() || null,
-            passphrase: ex.supportsAddress ? null : ex.passphrase.trim() || null,
-            hostname: ex.supportsHostname ? ex.hostname.trim() || null : null,
-            address: ex.supportsAddress ? ex.address.trim() || null : null,
-            sandbox: ex.supportsAddress ? null : ex.sandbox,
-          })),
+          exchanges: exchanges.map((ex) => {
+            const required = new Set(ex.requiredSecrets || [])
+            const isWallet = ex.supportsAddress
+            const sendApiKey = !isWallet || required.has('api_key')
+            const sendApiSecret = !isWallet || required.has('api_secret')
+            const sendPassphrase = ex.supportsPassphrase || required.has('passphrase')
+            return {
+              name: ex.name,
+              apiKey: sendApiKey ? ex.apiKey.trim() || null : null,
+              apiSecret: sendApiSecret ? ex.apiSecret.trim() || null : null,
+              passphrase: sendPassphrase ? ex.passphrase.trim() || null : null,
+              hostname: ex.supportsHostname ? ex.hostname.trim() || null : null,
+              address: isWallet ? ex.address.trim() || null : null,
+              sandbox: isWallet ? null : ex.sandbox,
+            }
+          }),
         },
       })
 
@@ -254,7 +285,7 @@ export default function ConnectionsSettings() {
 
         {exchanges.length === 0 && !adding && (
           <div className="panel text-sillage-soft font-mono text-sm">
-            No connectors declared yet. Add an exchange or Ethereum wallet to get started.
+            No connectors declared yet. Add an exchange or wallet to get started.
           </div>
         )}
 
@@ -304,15 +335,31 @@ export default function ConnectionsSettings() {
                       </label>
                       {ex.supportsHostname && (
                         <label className="flex flex-col gap-1.5">
-                          <span className="lbl">RPC URL *</span>
+                          <span className="lbl">
+                            {ex.name === 'ethereum' ? 'RPC URL *' : 'API hostname *'}
+                          </span>
                           <input
                             className="field"
                             value={ex.hostname}
                             onChange={(e) => updateExchange(ex.name, { hostname: e.target.value })}
-                            placeholder="https://eth.llamarpc.com"
+                            placeholder={
+                              ex.name === 'zerion'
+                                ? 'https://api.zerion.io'
+                                : 'https://eth.llamarpc.com'
+                            }
                             autoComplete="off"
                           />
                         </label>
+                      )}
+                      {(ex.requiredSecrets || []).includes('api_key') && (
+                        <SecretInput
+                          label="API key"
+                          hint={server?.apiKey.hint}
+                          isSet={Boolean(server?.apiKey.isSet)}
+                          value={ex.apiKey}
+                          onChange={(value) => updateExchange(ex.name, { apiKey: value })}
+                          required={ex.isNew || !server?.apiKey.isSet}
+                        />
                       )}
                     </>
                   ) : (

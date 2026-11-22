@@ -7,7 +7,9 @@ import yaml
 _CONFIG_CACHE: Optional[Dict[str, Any]] = None
 
 # Top-level config keys treated as self-custody / wallet providers.
-_WALLET_VENUE_KEYS = frozenset({"hot_wallets", "wallets", "cold_wallets"})
+_WALLET_VENUE_KEYS = frozenset(
+    {"hot_wallets", "wallets", "cold_wallets", "ethereum", "zerion"}
+)
 
 
 def project_root() -> Path:

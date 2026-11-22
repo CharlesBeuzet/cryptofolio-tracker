@@ -10,6 +10,7 @@ This folder holds configuration required to fetch portfolio data from exchanges 
 
 - **Exchanges** (Binance, OKX): API secrets; prefer read-only keys.
 - **Ethereum**: public `address` + RPC `hostname` (both required). No private keys and no manual token list.
+- **Zerion (EVM)**: public `address` + API `hostname` (`https://api.zerion.io`) + `api_key` (all required). Optional YAML `chain_ids`.
 - **Coinbase**: still shown in the example file for reference; not addable in Settings until a connector exists.
 
 See [docs/configuration.md](../docs/configuration.md) and [docs/settings.md](../docs/settings.md).

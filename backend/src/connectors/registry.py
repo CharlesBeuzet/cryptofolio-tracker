@@ -8,11 +8,13 @@ from .base import BaseConnector
 from .binance import BinanceConnector
 from .ethereum import EthereumConnector
 from .okx import OkxConnector
+from .zerion import ZerionConnector
 
 _CONNECTOR_FACTORIES = {
     "binance": BinanceConnector,
     "okx": OkxConnector,
     "ethereum": EthereumConnector,
+    "zerion": ZerionConnector,
 }
 
 # Field metadata for the Settings UI (must stay aligned with each connector __init__).
@@ -37,6 +39,13 @@ _CONNECTOR_SPECS: Dict[str, Dict[str, Any]] = {
         "supports_hostname": True,
         "supports_address": True,
         "required_secrets": (),
+    },
+    "zerion": {
+        "label": "Zerion (EVM)",
+        "supports_passphrase": False,
+        "supports_hostname": True,
+        "supports_address": True,
+        "required_secrets": ("api_key",),
     },
 }
 

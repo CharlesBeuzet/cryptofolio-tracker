@@ -22,6 +22,7 @@ Active connectors appear as collapsed cards (name + green **Active**). Click a c
 | **Binance** | `api_key`, `api_secret` |
 | **OKX** | `api_key`, `api_secret`, `passphrase` (optional `hostname` for regional API) |
 | **Ethereum** | public `address` + RPC `hostname` |
+| **Zerion (EVM)** | public EVM `address` + Zerion API `hostname` + `api_key`; optional YAML `chain_ids` |
 
 Coinbase may still appear in `config.example.yaml` for reference, but it is **not** in the Settings catalog until a connector is implemented.
 
@@ -50,6 +51,21 @@ ethereum:
 - No private keys.
 - No manual token contract list — token discovery is handled by the connector path when implemented.
 - Free public RPCs work to start; a dedicated RPC is more reliable for production use.
+
+## Zerion / EVM wallet shape
+
+```yaml
+zerion:
+  hostname: "https://api.zerion.io"       # Zerion REST API base (required)
+  address: "0xYourEthereumAddressHere"  # public EVM address (required)
+  api_key: "zk_..."                       # dashboard key (required)
+  # chain_ids: "ethereum,base,arbitrum"   # optional filter (edit YAML)
+```
+
+- No private keys. Holdings come from Zerion `positions` (`only_simple`); portfolio is used for connectivity checks.
+- Wallet transactions become synthetic orders (quantity, USD price, mined time) so average entry can be reconstructed.
+- Chart history for Zerion positions uses CoinGecko (not exchange OHLCV).
+- Settings UI shows address, hostname, and API key; add `chain_ids` in YAML to limit chains.
 
 ## GraphQL
 
