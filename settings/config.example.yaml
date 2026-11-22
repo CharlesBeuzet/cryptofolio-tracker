@@ -35,8 +35,18 @@ ethereum:
   # Public wallet address to track (required)
   address: "0xYourEthereumAddressHere"
 
+# Jupiter / Solana wallet (Ultra holdings + Trigger order history)
+jupiter:
+  # Jupiter API base URL (required in Settings; default works for keyless access)
+  hostname: "https://api.jup.ag"
+  # Public Solana wallet address to track (required)
+  address: "YourSolanaAddressHere"
+  # Optional: Jupiter portal API key for higher rate limits (x-api-key)
+  # api_key: "jup_your_api_key_here"
+
 # Notes:
 # - For exchanges: Only provide API keys with read-only permissions for security
 # - For hot wallets: Provide a public address and RPC hostname (no private keys required)
 # - RPC hostname: Free public RPCs are fine to start; use your own for better reliability
-# - Asset price history is fetched on demand from exchange APIs and never stored in portfolio.db
+# - Jupiter hostname is the Jupiter REST API base (not a Solana JSON-RPC URL)
+# - Asset price history is fetched on demand from exchange APIs (or CoinGecko for Jupiter) and never stored in portfolio.db

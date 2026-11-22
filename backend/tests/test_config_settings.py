@@ -59,7 +59,7 @@ class ConfigSettingsTests(unittest.TestCase):
         self.assertFalse(by_name["okx"]["configured"])
 
         available_names = {item["name"] for item in public["available_connectors"]}
-        self.assertEqual(available_names, {"binance", "okx", "ethereum"})
+        self.assertEqual(available_names, {"binance", "okx", "ethereum", "jupiter"})
 
     def test_update_keeps_secret_when_omitted(self) -> None:
         self._write(
@@ -126,7 +126,7 @@ class ConfigSettingsTests(unittest.TestCase):
                 exchanges=[{"name": "ethereum", "address": "0xabc123"}],
                 replace_exchanges=True,
             )
-        self.assertIn("RPC URL is required", str(ctx.exception))
+        self.assertIn("hostname is required", str(ctx.exception))
 
     def test_add_ethereum_connector(self) -> None:
         self._write({"hot_wallets": {"default_rpc": "https://old.example"}})
@@ -149,6 +149,28 @@ class ConfigSettingsTests(unittest.TestCase):
         self.assertTrue(eth["configured"])
         self.assertTrue(eth["supports_address"])
         self.assertEqual(eth["address"], "0xabc123")
+
+    def test_add_jupiter_connector(self) -> None:
+        self._write({})
+        config_settings.update_config(
+            exchanges=[
+                {
+                    "name": "jupiter",
+                    "hostname": "https://api.jup.ag",
+                    "address": "ErJKdNoarixqGGQTHbBtvHtg2nkcCqcKtYjGbVKUxY7D",
+                }
+            ],
+            replace_exchanges=True,
+        )
+        saved = yaml.safe_load(self.config_file.read_text(encoding="utf-8"))
+        self.assertEqual(saved["jupiter"]["hostname"], "https://api.jup.ag")
+        public = config_settings.get_public_config()
+        jup = next(ex for ex in public["exchanges"] if ex["name"] == "jupiter")
+        self.assertTrue(jup["configured"])
+        self.assertTrue(jup["supports_address"])
+        self.assertEqual(
+            jup["address"], "ErJKdNoarixqGGQTHbBtvHtg2nkcCqcKtYjGbVKUxY7D"
+        )
 
 
 if __name__ == "__main__":

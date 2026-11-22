@@ -23,7 +23,9 @@ commands live in `README.md`; only the non-obvious caveats are captured here.
 - `settings/config.yaml` (copied from `config.example.yaml`) holds exchange/wallet
   credentials. With placeholder/missing credentials the app boots fine but the dashboard
   shows empty/zero data. Portfolio balances/orders still arrive only via the scheduler
-  connectors. GraphQL **mutations** exist for user intent: conviction tags
+  connectors (Binance, OKX, Ethereum stub, Jupiter/Solana). Jupiter needs a public
+  Solana `address` plus Jupiter API `hostname` (`https://api.jup.ag`); optional YAML
+  `api_key` raises rate limits. GraphQL **mutations** exist for user intent: conviction tags
   (`createTag` / `updateTag` / `deleteTag` / `setPositionTag`) and
   `updateAppConfig` (Settings Connections; secrets are masked, never returned in
   cleartext). To demo the UI without real keys, seed the DB directly (Asset +
