@@ -37,6 +37,7 @@ Data is pulled and merged from:
 - **Binance**
 - **OKX**
 - **Ethereum** hot wallets (public address + RPC hostname)
+- **Zerion** multi-chain EVM wallets (Ethereum, Base, Arbitrum, …)
 
 Coinbase remains in the example YAML for reference but is not in the Settings add-connector catalog until a connector exists.
 

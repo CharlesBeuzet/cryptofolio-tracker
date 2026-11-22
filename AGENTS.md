@@ -23,7 +23,9 @@ commands live in `README.md`; only the non-obvious caveats are captured here.
 - `settings/config.yaml` (copied from `config.example.yaml`) holds exchange/wallet
   credentials. With placeholder/missing credentials the app boots fine but the dashboard
   shows empty/zero data. Portfolio balances/orders still arrive only via the scheduler
-  connectors. GraphQL **mutations** exist for user intent: conviction tags
+  connectors (Binance, OKX, Ethereum stub, Zerion/EVM). Zerion needs a public
+  EVM `address`, API `hostname` (`https://api.zerion.io`), and `api_key` (Basic
+  Auth); optional YAML `chain_ids` filters chains. GraphQL **mutations** exist for user intent: conviction tags
   (`createTag` / `updateTag` / `deleteTag` / `setPositionTag`) and
   `updateAppConfig` (Settings Connections; secrets are masked, never returned in
   cleartext). To demo the UI without real keys, seed the DB directly (Asset +

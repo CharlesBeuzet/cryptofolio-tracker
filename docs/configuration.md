@@ -13,6 +13,7 @@ For Docker on a Pi, edit `data/config.yaml` instead — that file is bind-mounte
 | **Binance** | `api_key`, `api_secret` (optional `sandbox`) |
 | **OKX** | `api_key`, `api_secret`, `passphrase` (optional `hostname`, `sandbox`) |
 | **Ethereum** | `hostname` (JSON-RPC URL), `address` (public wallet) |
+| **Zerion (EVM)** | `hostname` (Zerion API base, default `https://api.zerion.io`), `address` (public EVM wallet), `api_key`; optional `chain_ids` |
 | **Coinbase** | Present in `config.example.yaml` for reference — not loadable until a connector ships |
 
 ### Ethereum example
@@ -25,7 +26,19 @@ ethereum:
 
 Only a public address and RPC endpoint are required — never private keys. Token contracts are not listed manually in config.
 
-See `settings/config.example.yaml` and the [settings readme](../settings/readme.md) for the full template. The Settings catalog lists only connectors implemented in the registry (Binance, OKX, Ethereum today).
+### Zerion / EVM example
+
+```yaml
+zerion:
+  hostname: "https://api.zerion.io"
+  address: "0xYourEthereumAddressHere"
+  api_key: "your_zerion_api_key_here"
+  # chain_ids: "ethereum,base,arbitrum"   # optional filter
+```
+
+The connector pulls token balances from Zerion fungible positions, USD quotes from those positions, synthetic buy/sell orders from wallet transactions (for cost-basis tracking), and chart history from CoinGecko. No private keys.
+
+See `settings/config.example.yaml` and the [settings readme](../settings/readme.md) for the full template. The Settings catalog lists only connectors implemented in the registry (Binance, OKX, Ethereum, Zerion today).
 
 ## Security
 

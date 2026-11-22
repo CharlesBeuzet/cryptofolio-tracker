@@ -35,8 +35,20 @@ ethereum:
   # Public wallet address to track (required)
   address: "0xYourEthereumAddressHere"
 
+# Zerion — multi-chain EVM wallet tracker (Ethereum, Base, Arbitrum, …)
+zerion:
+  # Zerion REST API base (required)
+  hostname: "https://api.zerion.io"
+  # Public EVM wallet address to track (required)
+  address: "0xYourEthereumAddressHere"
+  # API key from https://dashboard.zerion.io (Basic Auth username; required)
+  api_key: "your_zerion_api_key_here"
+  # Optional: comma-separated Zerion chain IDs to include
+  # chain_ids: "ethereum,base,arbitrum"
+
 # Notes:
 # - For exchanges: Only provide API keys with read-only permissions for security
 # - For hot wallets: Provide a public address and RPC hostname (no private keys required)
+# - Zerion: public address + API key; never private keys. Charts use CoinGecko.
 # - RPC hostname: Free public RPCs are fine to start; use your own for better reliability
 # - Asset price history is fetched on demand from exchange APIs and never stored in portfolio.db

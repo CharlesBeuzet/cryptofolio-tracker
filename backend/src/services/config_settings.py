@@ -67,8 +67,17 @@ def _catalog_by_name() -> Dict[str, Dict[str, Any]]:
     return {entry["name"]: entry for entry in list_available_connectors()}
 
 
+def _required_secrets_present(section: Dict[str, Any], meta: Dict[str, Any]) -> bool:
+    """True when every catalog-required secret is set to a non-placeholder value."""
+    for key in meta.get("required_secrets") or ():
+        raw = section.get(key)
+        if not raw or _is_placeholder(raw):
+            return False
+    return True
+
+
 def _is_configured(section: Dict[str, Any], meta: Dict[str, Any]) -> bool:
-    """Exchange connectors need secrets; wallets need address + RPC hostname."""
+    """Exchange connectors need secrets; wallets need address + hostname (+ secrets)."""
     if meta.get("supports_address"):
         address = section.get("address")
         if not address or _is_placeholder(address):
@@ -77,7 +86,7 @@ def _is_configured(section: Dict[str, Any], meta: Dict[str, Any]) -> bool:
             hostname = section.get("hostname")
             if not hostname or _is_placeholder(hostname):
                 return False
-        return True
+        return _required_secrets_present(section, meta)
     return _has_real_secret(section)
 
 
@@ -220,7 +229,13 @@ def update_config(
                     hostname = merged.get("hostname")
                     if not hostname or _is_placeholder(hostname):
                         raise ValueError(
-                            f"{meta.get('label') or name}: RPC URL is required."
+                            f"{meta.get('label') or name}: hostname is required."
+                        )
+                for key in meta.get("required_secrets") or ():
+                    raw = merged.get(key)
+                    if not raw or _is_placeholder(raw):
+                        raise ValueError(
+                            f"{meta.get('label') or name}: {key} is required."
                         )
 
             if merged:

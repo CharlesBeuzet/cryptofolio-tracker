@@ -59,7 +59,7 @@ class ConfigSettingsTests(unittest.TestCase):
         self.assertFalse(by_name["okx"]["configured"])
 
         available_names = {item["name"] for item in public["available_connectors"]}
-        self.assertEqual(available_names, {"binance", "okx", "ethereum"})
+        self.assertEqual(available_names, {"binance", "okx", "ethereum", "zerion"})
 
     def test_update_keeps_secret_when_omitted(self) -> None:
         self._write(
@@ -126,7 +126,7 @@ class ConfigSettingsTests(unittest.TestCase):
                 exchanges=[{"name": "ethereum", "address": "0xabc123"}],
                 replace_exchanges=True,
             )
-        self.assertIn("RPC URL is required", str(ctx.exception))
+        self.assertIn("hostname is required", str(ctx.exception))
 
     def test_add_ethereum_connector(self) -> None:
         self._write({"hot_wallets": {"default_rpc": "https://old.example"}})
@@ -149,6 +149,44 @@ class ConfigSettingsTests(unittest.TestCase):
         self.assertTrue(eth["configured"])
         self.assertTrue(eth["supports_address"])
         self.assertEqual(eth["address"], "0xabc123")
+
+    def test_add_zerion_connector(self) -> None:
+        self._write({})
+        config_settings.update_config(
+            exchanges=[
+                {
+                    "name": "zerion",
+                    "hostname": "https://api.zerion.io",
+                    "address": "0x42b9df65b219b3dd36ff330a4dd8f327a6ada990",
+                    "api_key": "zk_test_key_1234",
+                }
+            ],
+            replace_exchanges=True,
+        )
+        saved = yaml.safe_load(self.config_file.read_text(encoding="utf-8"))
+        self.assertEqual(saved["zerion"]["hostname"], "https://api.zerion.io")
+        self.assertEqual(saved["zerion"]["api_key"], "zk_test_key_1234")
+        public = config_settings.get_public_config()
+        z = next(ex for ex in public["exchanges"] if ex["name"] == "zerion")
+        self.assertTrue(z["configured"])
+        self.assertTrue(z["supports_address"])
+        self.assertEqual(z["address"], "0x42b9df65b219b3dd36ff330a4dd8f327a6ada990")
+        self.assertEqual(z["api_key"]["hint"], "••••1234")
+
+    def test_zerion_requires_api_key(self) -> None:
+        self._write({})
+        with self.assertRaises(ValueError) as ctx:
+            config_settings.update_config(
+                exchanges=[
+                    {
+                        "name": "zerion",
+                        "hostname": "https://api.zerion.io",
+                        "address": "0x42b9df65b219b3dd36ff330a4dd8f327a6ada990",
+                    }
+                ],
+                replace_exchanges=True,
+            )
+        self.assertIn("api_key is required", str(ctx.exception))
 
 
 if __name__ == "__main__":
