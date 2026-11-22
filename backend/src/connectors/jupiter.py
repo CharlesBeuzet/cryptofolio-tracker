@@ -221,7 +221,7 @@ class JupiterConnector(BaseConnector):
             if mint == SOL_MINT:
                 symbol = "SOL"
             balances[symbol] = balances.get(symbol, 0.0) + qty
-            self._mint_by_symbol[symbol] = mint
+            self._mint_by_symbol.setdefault(symbol, mint)
 
         rows: List[Dict[str, Any]] = []
         for symbol, quantity in sorted(balances.items()):
@@ -408,7 +408,7 @@ class JupiterConnector(BaseConnector):
         tx_id = trade.get("txId") or trade.get("signature")
         order_key = trade.get("orderKey")
         if tx_id:
-            external_id = str(tx_id)
+            external_id = f"{tx_id}:{base_symbol}:{side}"
         elif order_key:
             external_id = f"{order_key}:{side}:{executed_at.isoformat()}"
         else:
