@@ -118,15 +118,36 @@ class JupiterConnector(BaseConnector):
         except ValueError as exc:
             raise ConnectorFetchError(f"jupiter JSON {method} {path}: {exc}") from exc
 
+    def _disambiguated_symbol(self, mint: str, preferred: str) -> str:
+        """Return a portfolio ticker unique to ``mint`` (Solana tickers collide often)."""
+        base = (preferred or "").strip().upper() or mint[:6].upper()
+        if mint == SOL_MINT:
+            return "SOL"
+        # Never let a non-wrapped mint claim the bare SOL ticker.
+        if base == "SOL":
+            base = f"SOL-{mint[:4].upper()}"
+        existing = self._mint_by_symbol.get(base)
+        if existing is None or existing == mint:
+            return base
+        suffix = mint[:4].upper()
+        candidate = f"{base}-{suffix}"
+        n = 2
+        while True:
+            taken = self._mint_by_symbol.get(candidate)
+            if taken is None or taken == mint:
+                return candidate
+            candidate = f"{base}-{suffix}{n}"
+            n += 1
+
     def _remember_token(self, mint: str, symbol: str, decimals: Optional[int] = None) -> str:
-        clean_symbol = (symbol or "").strip().upper() or mint[:6]
-        # Prefer the first non-empty ticker we see for a mint.
+        # Prefer a previously assigned unique ticker for this mint.
         existing = self._symbol_by_mint.get(mint)
-        if existing and existing != mint[:6]:
+        if existing and existing != mint[:6].upper():
             clean_symbol = existing
         else:
-            self._symbol_by_mint[mint] = clean_symbol
-        self._mint_by_symbol.setdefault(clean_symbol, mint)
+            clean_symbol = self._disambiguated_symbol(mint, symbol)
+        self._symbol_by_mint[mint] = clean_symbol
+        self._mint_by_symbol[clean_symbol] = mint
         if decimals is not None:
             try:
                 self._decimals_by_mint[mint] = int(decimals)
@@ -172,8 +193,8 @@ class JupiterConnector(BaseConnector):
             self._remember_token(mint, symbol, decimals if decimals is not None else None)
 
         for mint in unknown:
-            self._symbol_by_mint.setdefault(mint, mint[:6].upper())
-            self._mint_by_symbol.setdefault(self._symbol_by_mint[mint], mint)
+            if mint not in self._symbol_by_mint:
+                self._remember_token(mint, mint[:6].upper())
 
     def _parse_holdings(self, payload: Dict[str, Any]) -> List[Dict[str, Any]]:
         mint_qty: Dict[str, float] = {}
@@ -214,14 +235,14 @@ class JupiterConnector(BaseConnector):
 
         self._hydrate_metadata(list(mint_qty.keys()))
 
+        # One mint → one balance row. Never sum distinct mints that share a ticker.
         balances: Dict[str, float] = {}
         for mint, qty in mint_qty.items():
-            symbol = self._symbol_by_mint.get(mint, mint[:6].upper())
-            # Fold wrapped SOL into native SOL ticker.
+            preferred = self._symbol_by_mint.get(mint, mint[:6].upper())
             if mint == SOL_MINT:
-                symbol = "SOL"
+                preferred = "SOL"
+            symbol = self._remember_token(mint, preferred)
             balances[symbol] = balances.get(symbol, 0.0) + qty
-            self._mint_by_symbol[symbol] = mint
 
         rows: List[Dict[str, Any]] = []
         for symbol, quantity in sorted(balances.items()):
@@ -405,12 +426,14 @@ class JupiterConnector(BaseConnector):
         if price is None:
             return None
 
+        # Include base mint so both legs of one swap (e.g. sell SOL + buy TOKEN)
+        # get distinct ids under the (exchange, external_order_id) uniqueness rule.
         tx_id = trade.get("txId") or trade.get("signature")
         order_key = trade.get("orderKey")
         if tx_id:
-            external_id = str(tx_id)
+            external_id = f"{tx_id}:{base_mint}"
         elif order_key:
-            external_id = f"{order_key}:{side}:{executed_at.isoformat()}"
+            external_id = f"{order_key}:{base_mint}:{side}:{executed_at.isoformat()}"
         else:
             return None
 
