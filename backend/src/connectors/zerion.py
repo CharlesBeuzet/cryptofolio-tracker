@@ -538,10 +538,37 @@ class ZerionConnector(BaseConnector):
                 orders.append(row)
         return orders
 
+    def _ensure_impl_cache(self, symbol: str) -> None:
+        """Populate _impl_by_symbol via positions fetch if symbol is missing."""
+        if symbol in self._impl_by_symbol:
+            return
+        if symbol in _COINGECKO_NATIVE_BY_SYMBOL:
+            return
+        if not self.address or not self.api_key:
+            return
+        params: Dict[str, Any] = {
+            "currency": "usd",
+            "filter[positions]": "only_simple",
+            "filter[trash]": "only_non_trash",
+            "sort": "value",
+        }
+        params.update(self._chain_filter_params())
+        try:
+            payload = self._request_json(
+                "GET",
+                f"v1/wallets/{self.address}/positions/",
+                params=params,
+            )
+            if isinstance(payload, dict):
+                self._parse_positions(payload)
+        except Exception:
+            pass
+
     def _coingecko_chart_target(self, base: str) -> Tuple[str, Dict[str, str]]:
         """Return (path, params) for CoinGecko market_chart."""
         lookback_placeholder = True  # days filled by caller
         _ = lookback_placeholder
+        self._ensure_impl_cache(base)
         impl = self._impl_by_symbol.get(base)
         if impl:
             chain_id, contract = impl
@@ -567,7 +594,8 @@ class ZerionConnector(BaseConnector):
         base = market_pair.split("/")[0].strip().upper() if market_pair else ""
         if not base:
             return []
-        lookback_days = max(1, int(days))
+        # CoinGecko keyless API caps at 365 days.
+        lookback_days = min(365, max(1, int(days)))
         path, params = self._coingecko_chart_target(base)
         params = {**params, "days": str(lookback_days)}
 
