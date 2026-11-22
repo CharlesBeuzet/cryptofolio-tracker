@@ -220,7 +220,7 @@ def update_config(
                     hostname = merged.get("hostname")
                     if not hostname or _is_placeholder(hostname):
                         raise ValueError(
-                            f"{meta.get('label') or name}: RPC URL is required."
+                            f"{meta.get('label') or name}: hostname is required."
                         )
 
             if merged:

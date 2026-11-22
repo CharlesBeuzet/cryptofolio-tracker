@@ -7,12 +7,14 @@ import yaml
 from .base import BaseConnector
 from .binance import BinanceConnector
 from .ethereum import EthereumConnector
+from .jupiter import JupiterConnector
 from .okx import OkxConnector
 
 _CONNECTOR_FACTORIES = {
     "binance": BinanceConnector,
     "okx": OkxConnector,
     "ethereum": EthereumConnector,
+    "jupiter": JupiterConnector,
 }
 
 # Field metadata for the Settings UI (must stay aligned with each connector __init__).
@@ -33,6 +35,13 @@ _CONNECTOR_SPECS: Dict[str, Dict[str, Any]] = {
     },
     "ethereum": {
         "label": "Ethereum",
+        "supports_passphrase": False,
+        "supports_hostname": True,
+        "supports_address": True,
+        "required_secrets": (),
+    },
+    "jupiter": {
+        "label": "Jupiter (Solana)",
         "supports_passphrase": False,
         "supports_hostname": True,
         "supports_address": True,
