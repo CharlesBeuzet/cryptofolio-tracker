@@ -538,10 +538,31 @@ class ZerionConnector(BaseConnector):
                 orders.append(row)
         return orders
 
+    def _hydrate_implementations(self) -> None:
+        """Fill `_impl_by_symbol` from Zerion positions (fresh connector instances)."""
+        if not self.address or not self.api_key:
+            return
+        params: Dict[str, Any] = {
+            "currency": "usd",
+            "filter[positions]": "only_simple",
+            "filter[trash]": "only_non_trash",
+            "sort": "value",
+        }
+        params.update(self._chain_filter_params())
+        payload = self._request_json(
+            "GET",
+            f"v1/wallets/{self.address}/positions/",
+            params=params,
+        )
+        if not isinstance(payload, dict):
+            raise ConnectorFetchError("zerion hydrate: unexpected positions shape")
+        if payload.get("errors"):
+            raise ConnectorFetchError(f"zerion hydrate: {payload.get('errors')}")
+        # Side effect: remembers chain/contract per symbol for CoinGecko charts.
+        self._parse_positions(payload)
+
     def _coingecko_chart_target(self, base: str) -> Tuple[str, Dict[str, str]]:
         """Return (path, params) for CoinGecko market_chart."""
-        lookback_placeholder = True  # days filled by caller
-        _ = lookback_placeholder
         impl = self._impl_by_symbol.get(base)
         if impl:
             chain_id, contract = impl
@@ -567,9 +588,23 @@ class ZerionConnector(BaseConnector):
         base = market_pair.split("/")[0].strip().upper() if market_pair else ""
         if not base:
             return []
+        # Charts load a fresh connector via get_connector_by_name — hydrate
+        # contract metadata from Zerion positions before resolving CoinGecko.
+        if base not in self._impl_by_symbol and base not in _COINGECKO_NATIVE_BY_SYMBOL:
+            try:
+                self._hydrate_implementations()
+            except ConnectorFetchError:
+                raise
+            except Exception as exc:
+                raise ConnectorFetchError(
+                    f"zerion price history hydrate for {base}: {exc}"
+                ) from exc
+
         lookback_days = max(1, int(days))
+        # Keyless CoinGecko rejects days > 365; use `max` (daily) for longer UI ranges.
+        days_param = "max" if lookback_days > 365 else str(lookback_days)
         path, params = self._coingecko_chart_target(base)
-        params = {**params, "days": str(lookback_days)}
+        params = {**params, "days": days_param}
 
         try:
             payload = self._request_json(

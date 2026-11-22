@@ -281,6 +281,32 @@ class ZerionConnectorTests(unittest.TestCase):
         self.assertIn("ethereum/contract/", chart_calls[0][1])
         self.assertIn("0x1f9840a85d5af5bf1d1762f925bdaddc4201f984", chart_calls[0][1])
 
+    def test_price_history_hydrates_impl_on_fresh_connector(self) -> None:
+        """Charts construct a new connector — must load positions before CoinGecko."""
+        fresh = ZerionConnector(
+            {
+                "address": "0x42b9df65b219b3dd36ff330a4dd8f327a6ada990",
+                "hostname": "https://api.zerion.io",
+                "api_key": "test-zerion-key",
+            }
+        )
+        http = _FakeHttp()
+        with patch.object(fresh, "_request_json", side_effect=http):
+            points = fresh.fetch_price_history_sync("UNI/USDT", since_ms=0, days=7)
+        self.assertEqual(len(points), 2)
+        pos_calls = [c for c in http.calls if "positions" in c[1]]
+        chart_calls = [c for c in http.calls if "market_chart" in c[1]]
+        self.assertEqual(len(pos_calls), 1)
+        self.assertEqual(len(chart_calls), 1)
+        self.assertIn("0x1f9840a85d5af5bf1d1762f925bdaddc4201f984", chart_calls[0][1])
+
+    def test_price_history_long_range_uses_coingecko_max(self) -> None:
+        asyncio.run(self.connector.fetch_balances())
+        self.connector.fetch_price_history_sync("UNI/USDT", since_ms=0, days=730)
+        chart_calls = [c for c in self.http.calls if "market_chart" in c[1]]
+        self.assertEqual(len(chart_calls), 1)
+        self.assertEqual(chart_calls[0][2].get("days"), "max")
+
     def test_price_history_native_eth(self) -> None:
         asyncio.run(self.connector.fetch_balances())
         self.connector.fetch_price_history_sync("ETH/USDT", since_ms=0, days=1)
