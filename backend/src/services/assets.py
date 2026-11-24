@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..utils.data_quality import ConnectorFetchError, positive_finite, sanitize_rows
 from ..models.database import Asset, Position
-from .portfolio import PortfolioService
+from .portfolio import PortfolioService, token_identity
 
 
 def _apply_stablecoin_usd_prices(prices: Dict[str, float], symbols) -> None:
@@ -77,7 +77,10 @@ class AssetsService:
             symbol = balance["symbol"]
             seen_symbols.add(symbol)
             self._portfolio.update_position_from_balance(
-                symbol, balance["quantity"], exchange
+                symbol,
+                balance["quantity"],
+                exchange,
+                spot_price=balance.get("price"),
             )
             opened += 1
 
@@ -101,6 +104,58 @@ class AssetsService:
 
         return {"opened": opened, "closed": closed}
 
+    def _sync_chain_positions(
+        self, balances: List[Dict], chains: List[str]
+    ) -> Dict[str, int]:
+        """Upsert one position per chain slug + contract. Close only those slugs."""
+        opened = 0
+        closed = 0
+        seen: Set[tuple] = set()
+        allowed = {chain.strip().lower() for chain in chains if chain}
+
+        for balance in balances:
+            if positive_finite(balance.get("quantity")) is None:
+                continue
+            chain = str(balance.get("exchange") or "").strip().lower()
+            token = str(balance.get("token_address") or "").strip()
+            if not chain or not token or chain not in allowed:
+                continue
+            self._portfolio.update_position_from_balance(
+                balance["symbol"],
+                balance["quantity"],
+                chain,
+                token_address=token,
+                spot_price=balance.get("price"),
+            )
+            seen.add((chain, token_identity(token)))
+            opened += 1
+
+        for chain in allowed:
+            rows = (
+                self.db.query(Position)
+                .filter(
+                    and_(
+                        Position.exchange == chain,
+                        Position.status == "open",
+                        Position.source != "manual",
+                    )
+                )
+                .all()
+            )
+            for position in rows:
+                key = (chain, token_identity(position.token_address or ""))
+                if key in seen:
+                    continue
+                position.status = "closed"
+                position.quantity = 0
+                position.last_updated = datetime.utcnow()
+                closed += 1
+
+        if closed:
+            self.db.commit()
+
+        return {"opened": opened, "closed": closed}
+
     async def sync_from_connector(self, connector: Any) -> Dict[str, int]:
         """Fetch balances and prices from one connector, then sync assets and positions.
 
@@ -118,7 +173,12 @@ class AssetsService:
         symbols = [b["symbol"] for b in balances]
         prices = await self._fetch_prices(connector, symbols)
         assets_updated = self._sync_assets(balances, prices)
-        position_counts = self._sync_positions(balances, exchange)
+        if getattr(connector, "chain_scoped", False):
+            position_counts = self._sync_chain_positions(
+                balances, list(connector.configured_chains())
+            )
+        else:
+            position_counts = self._sync_positions(balances, exchange)
         return {
             "assets_updated": assets_updated,
             "positions_opened": position_counts["opened"],

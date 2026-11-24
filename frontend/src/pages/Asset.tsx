@@ -48,11 +48,13 @@ export default function Asset() {
   const allManual =
     venues.length > 0 && venues.every((p: { source?: string }) => p.source === 'manual')
 
+  const primaryVenue =
+    venues.find((p: { id: number }) => p.id === asset?.primaryId) || venues[0]
   const primaryExchange =
-    venues.find((p: { id: number }) => p.id === asset?.primaryId)?.exchange ||
-    venues[0]?.exchange ||
+    primaryVenue?.exchange ||
     (assetData?.orders || []).find((o: { exchange?: string | null }) => o.exchange)?.exchange ||
     null
+  const primaryTokenAddress = primaryVenue?.tokenAddress || null
   const days = rangeToDays(range)
 
   useEffect(() => {
@@ -60,7 +62,12 @@ export default function Asset() {
   }, [range, symbol])
 
   const { data: priceData, loading: priceLoading } = useQuery(GET_ASSET_PRICE_HISTORY, {
-    variables: { symbol, days, exchange: primaryExchange },
+    variables: {
+      symbol,
+      days,
+      exchange: primaryExchange,
+      tokenAddress: primaryTokenAddress,
+    },
     skip: !symbol || !primaryExchange || allManual,
   })
 

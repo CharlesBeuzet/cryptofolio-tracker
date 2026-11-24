@@ -21,6 +21,7 @@ from ..services.manual_positions import (
     manual_pnl,
     position_source,
 )
+from ..services.onchain_orders import OnchainOrderService
 
 
 @strawberry.type
@@ -77,6 +78,7 @@ class OrderType:
     price: float
     executed_at: datetime
     exchange: Optional[str]
+    external_order_id: Optional[str] = None
 
 
 @strawberry.type
@@ -133,6 +135,8 @@ class PositionType:
     pnl_percent: Optional[float]
     first_bought_at: datetime
     exchange: Optional[str]
+    token_address: Optional[str]
+    unpriced_quantity: float
     status: str
     source: str
     display_name: Optional[str]
@@ -233,6 +237,9 @@ def _position_to_type(pos: Position) -> PositionType:
         avg_entry = metrics.avg_entry_price if metrics else 0.0
         book_cost = cost_basis(metrics) if metrics else 0.0
 
+    derived = metrics.order_derived_qty if metrics else 0.0
+    unpriced = max(0.0, (pos.quantity or 0.0) - derived)
+
     return PositionType(
         id=pos.id,
         symbol=pos.symbol,
@@ -243,6 +250,8 @@ def _position_to_type(pos: Position) -> PositionType:
         pnl_percent=pnl_percent,
         first_bought_at=pos.first_bought_at,
         exchange=pos.exchange,
+        token_address=pos.token_address,
+        unpriced_quantity=unpriced,
         status=pos.status,
         source=position_source(pos),
         display_name=pos.display_name if is_manual_position(pos) else None,
@@ -273,6 +282,7 @@ def _order_to_type(order: Order) -> OrderType:
         price=order.price,
         executed_at=order.executed_at,
         exchange=order.exchange,
+        external_order_id=order.external_order_id,
     )
 
 
@@ -363,9 +373,13 @@ class ExchangeConnector:
     supports_passphrase: bool
     supports_hostname: bool
     supports_address: bool
+    supports_wallets: bool = False
+    supports_blockchains: bool = False
     sandbox: Optional[bool]
     hostname: Optional[str]
     address: Optional[str]
+    wallets: Optional[str] = None
+    blockchains: Optional[str] = None
 
 
 @strawberry.type
@@ -377,6 +391,8 @@ class AvailableConnectorType:
     supports_passphrase: bool
     supports_hostname: bool
     supports_address: bool
+    supports_wallets: bool = False
+    supports_blockchains: bool = False
     required_secrets: List[str]
 
 
@@ -401,6 +417,8 @@ class ExchangeConnectorInput:
     sandbox: Optional[bool] = None
     hostname: Optional[str] = None
     address: Optional[str] = None
+    wallets: Optional[str] = None
+    blockchains: Optional[str] = None
 
 
 @strawberry.type
@@ -428,9 +446,13 @@ def _config_to_type(data: dict) -> AppConfigType:
             supports_passphrase=ex["supports_passphrase"],
             supports_hostname=bool(ex.get("supports_hostname")),
             supports_address=bool(ex.get("supports_address")),
+            supports_wallets=bool(ex.get("supports_wallets")),
+            supports_blockchains=bool(ex.get("supports_blockchains")),
             sandbox=ex.get("sandbox"),
             hostname=ex.get("hostname"),
             address=ex.get("address"),
+            wallets=ex.get("wallets"),
+            blockchains=ex.get("blockchains"),
         )
         for ex in data["exchanges"]
     ]
@@ -441,6 +463,8 @@ def _config_to_type(data: dict) -> AppConfigType:
             supports_passphrase=item["supports_passphrase"],
             supports_hostname=item["supports_hostname"],
             supports_address=bool(item.get("supports_address")),
+            supports_wallets=bool(item.get("supports_wallets")),
+            supports_blockchains=bool(item.get("supports_blockchains")),
             required_secrets=list(item.get("required_secrets") or []),
         )
         for item in data.get("available_connectors") or []
@@ -657,13 +681,25 @@ class Query:
         symbol: str,
         days: int = 90,
         exchange: Optional[str] = None,
+        token_address: Optional[str] = None,
     ) -> AssetPriceHistoryType:
-        """Fetch USDT price history from the position's exchange (in-memory cache only).
+        """Fetch price history from the position's venue (in-memory cache only).
 
-        days <= 0 means Max (capped exchange lookback).
+        CEX charts use the symbol/USDT pair. On-chain charts use token_address
+        on the chain slug stored in exchange. days <= 0 means Max.
         """
-        service = PriceHistoryService()
-        result = await service.fetch(symbol, days, exchange)
+        db = SessionLocal()
+        try:
+            service = PriceHistoryService()
+            result = await service.fetch(
+                symbol,
+                days,
+                exchange,
+                token_address=token_address,
+                db=db,
+            )
+        finally:
+            db.close()
         return AssetPriceHistoryType(
             symbol=symbol.upper(),
             days=days,
@@ -725,6 +761,8 @@ class Mutation:
                         "sandbox": ex.sandbox,
                         "hostname": ex.hostname,
                         "address": ex.address,
+                        "wallets": ex.wallets,
+                        "blockchains": ex.blockchains,
                     }
                     for ex in exchanges
                 ]
@@ -900,6 +938,41 @@ class Mutation:
         db = SessionLocal()
         try:
             pos = ManualPositionService(db).delete_valuation(id)
+            return _position_to_type(pos)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+        finally:
+            db.close()
+
+    @strawberry.mutation
+    def add_onchain_buy_order(
+        self,
+        position_id: int,
+        quantity: float,
+        price: float,
+        executed_at: Optional[datetime] = None,
+    ) -> PositionType:
+        """Record a manual buy and rebuild metrics before returning the position."""
+        db = SessionLocal()
+        try:
+            pos = OnchainOrderService(db).add_buy(
+                position_id,
+                quantity,
+                price,
+                executed_at,
+            )
+            return _position_to_type(pos)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+        finally:
+            db.close()
+
+    @strawberry.mutation
+    def delete_onchain_manual_order(self, id: int) -> PositionType:
+        """Delete a user-entered buy and rebuild metrics before returning."""
+        db = SessionLocal()
+        try:
+            pos = OnchainOrderService(db).delete_manual(id)
             return _position_to_type(pos)
         except ValueError as exc:
             raise ValueError(str(exc)) from exc

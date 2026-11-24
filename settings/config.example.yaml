@@ -28,15 +28,19 @@ coinbase:
   # Optional: enable sandbox
   # sandbox: false
 
-# Ethereum hot wallet (same connector shape as exchanges)
-ethereum:
-  # JSON-RPC endpoint (required)
-  hostname: "https://eth.llamarpc.com"
-  # Public wallet address to track (required)
-  address: "0xYourEthereumAddressHere"
+# Mobula multichain wallets (balances, swaps, and on-chain charts)
+# Allowed blockchains: ethereum, base, arbitrum, polygon, avalanche, bnb, optimism, sonic, solana
+mobula:
+  api_key: "YOUR_MOBULA_API_KEY"
+  wallets:
+    - "YOUR_SOLANA_ADDRESS"
+    - "0xYOUR_ETHEREUM_ADDRESS"
+  blockchains:
+    - solana
+    - ethereum
 
 # Notes:
 # - For exchanges: Only provide API keys with read-only permissions for security
-# - For hot wallets: Provide a public address and RPC hostname (no private keys required)
-# - RPC hostname: Free public RPCs are fine to start; use your own for better reliability
-# - Asset price history is fetched on demand from exchange APIs and never stored in portfolio.db
+# - For Mobula: public wallet addresses only — never private keys
+# - An empty blockchains list skips Mobula calls
+# - Asset price history is fetched on demand and never stored in portfolio.db

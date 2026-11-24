@@ -10,6 +10,8 @@ type AvailableConnector = {
   supportsPassphrase: boolean
   supportsHostname: boolean
   supportsAddress: boolean
+  supportsWallets?: boolean
+  supportsBlockchains?: boolean
   requiredSecrets: string[]
 }
 
@@ -20,9 +22,13 @@ type ExchangeConfig = {
   supportsPassphrase: boolean
   supportsHostname: boolean
   supportsAddress: boolean
+  supportsWallets?: boolean
+  supportsBlockchains?: boolean
   sandbox?: boolean | null
   hostname?: string | null
   address?: string | null
+  wallets?: string | null
+  blockchains?: string | null
   apiKey: SecretField
   apiSecret: SecretField
   passphrase: SecretField
@@ -34,11 +40,15 @@ type ExchangeDraft = {
   supportsPassphrase: boolean
   supportsHostname: boolean
   supportsAddress: boolean
+  supportsWallets: boolean
+  supportsBlockchains: boolean
   apiKey: string
   apiSecret: string
   passphrase: string
   hostname: string
   address: string
+  wallets: string
+  blockchains: string
   sandbox: boolean
   /** True when freshly added and not yet persisted */
   isNew?: boolean
@@ -73,11 +83,15 @@ export default function ConnectionsSettings() {
         supportsPassphrase: ex.supportsPassphrase,
         supportsHostname: ex.supportsHostname,
         supportsAddress: ex.supportsAddress,
+        supportsWallets: Boolean(ex.supportsWallets),
+        supportsBlockchains: Boolean(ex.supportsBlockchains),
         apiKey: '',
         apiSecret: '',
         passphrase: '',
         hostname: ex.hostname || '',
         address: ex.address || '',
+        wallets: ex.wallets || '',
+        blockchains: ex.blockchains || '',
         sandbox: Boolean(ex.sandbox),
         isNew: false,
       })),
@@ -116,11 +130,15 @@ export default function ConnectionsSettings() {
       supportsPassphrase: catalog.supportsPassphrase,
       supportsHostname: catalog.supportsHostname,
       supportsAddress: catalog.supportsAddress,
+      supportsWallets: Boolean(catalog.supportsWallets),
+      supportsBlockchains: Boolean(catalog.supportsBlockchains),
       apiKey: '',
       apiSecret: '',
       passphrase: '',
       hostname: '',
       address: '',
+      wallets: '',
+      blockchains: '',
       sandbox: false,
       isNew: true,
     }
@@ -145,6 +163,22 @@ export default function ConnectionsSettings() {
     setStatus(null)
 
     for (const ex of exchanges) {
+      if (ex.supportsWallets && !ex.wallets.trim()) {
+        setStatus({
+          kind: 'err',
+          text: `${ex.label}: at least one wallet address is required.`,
+        })
+        setExpanded((prev) => ({ ...prev, [ex.name]: true }))
+        return
+      }
+      if (ex.supportsBlockchains && !ex.blockchains.trim()) {
+        setStatus({
+          kind: 'err',
+          text: `${ex.label}: at least one blockchain is required.`,
+        })
+        setExpanded((prev) => ({ ...prev, [ex.name]: true }))
+        return
+      }
       if (ex.supportsAddress && !ex.address.trim()) {
         setStatus({
           kind: 'err',
@@ -188,11 +222,14 @@ export default function ConnectionsSettings() {
           exchanges: exchanges.map((ex) => ({
             name: ex.name,
             apiKey: ex.supportsAddress ? null : ex.apiKey.trim() || null,
-            apiSecret: ex.supportsAddress ? null : ex.apiSecret.trim() || null,
-            passphrase: ex.supportsAddress ? null : ex.passphrase.trim() || null,
+            apiSecret: ex.supportsWallets || ex.supportsAddress ? null : ex.apiSecret.trim() || null,
+            passphrase:
+              ex.supportsWallets || ex.supportsAddress ? null : ex.passphrase.trim() || null,
             hostname: ex.supportsHostname ? ex.hostname.trim() || null : null,
             address: ex.supportsAddress ? ex.address.trim() || null : null,
-            sandbox: ex.supportsAddress ? null : ex.sandbox,
+            wallets: ex.supportsWallets ? ex.wallets : null,
+            blockchains: ex.supportsBlockchains ? ex.blockchains : null,
+            sandbox: ex.supportsAddress || ex.supportsWallets ? null : ex.sandbox,
           })),
         },
       })
@@ -254,7 +291,7 @@ export default function ConnectionsSettings() {
 
         {exchanges.length === 0 && !adding && (
           <div className="panel text-sillage-soft font-mono text-sm">
-            No connectors declared yet. Add an exchange or Ethereum wallet to get started.
+            No connectors declared yet. Add an exchange or a Mobula wallet to get started.
           </div>
         )}
 
@@ -262,6 +299,7 @@ export default function ConnectionsSettings() {
           const server = serverExchanges.find((s) => s.name === ex.name)
           const isOpen = Boolean(expanded[ex.name])
           const isWallet = ex.supportsAddress
+          const isMobula = ex.supportsWallets
           return (
             <div key={ex.name} className="panel !py-0 !px-0 overflow-hidden">
               <button
@@ -289,7 +327,46 @@ export default function ConnectionsSettings() {
                     </p>
                   )}
 
-                  {isWallet ? (
+                  {isMobula ? (
+                    <>
+                      <p className="cap">
+                        Public wallet addresses only. One address per line. Chains:{' '}
+                        ethereum, base, arbitrum, polygon, avalanche, bnb, optimism, sonic, solana.
+                      </p>
+                      <SecretInput
+                        label="API key"
+                        hint={server?.apiKey.hint}
+                        isSet={Boolean(server?.apiKey.isSet)}
+                        value={ex.apiKey}
+                        onChange={(value) => updateExchange(ex.name, { apiKey: value })}
+                        required={ex.isNew || !server?.apiKey.isSet}
+                      />
+                      <label className="flex flex-col gap-1.5">
+                        <span className="lbl">Wallet addresses *</span>
+                        <textarea
+                          className="field min-h-[88px]"
+                          value={ex.wallets}
+                          onChange={(event) =>
+                            updateExchange(ex.name, { wallets: event.target.value })
+                          }
+                          placeholder={'YOUR_SOLANA_ADDRESS\n0xYOUR_ETHEREUM_ADDRESS'}
+                          autoComplete="off"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1.5">
+                        <span className="lbl">Blockchains *</span>
+                        <input
+                          className="field"
+                          value={ex.blockchains}
+                          onChange={(event) =>
+                            updateExchange(ex.name, { blockchains: event.target.value })
+                          }
+                          placeholder="solana, ethereum"
+                          autoComplete="off"
+                        />
+                      </label>
+                    </>
+                  ) : isWallet ? (
                     <>
                       <p className="cap">Public address only — never paste a private key.</p>
                       <label className="flex flex-col gap-1.5">

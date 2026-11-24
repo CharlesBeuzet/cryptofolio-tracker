@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import and_
+from sqlalchemy import and_, case, func
 
 from ..utils.data_quality import positive_finite, snapshot_skip_reason
 from ..models.database import (
@@ -11,6 +11,21 @@ from ..models.database import (
     PortfolioSnapshot,
 )
 from .manual_positions import is_manual_position, manual_pnl, position_market_value
+
+
+def token_identity(token_address: str) -> str:
+    """EVM addresses compare case-insensitively. Solana mints do not."""
+    text = token_address.strip()
+    if text.lower().startswith("0x"):
+        return text.lower()
+    return text
+
+
+def _token_clause(column, token_address: str):
+    identity = token_identity(token_address)
+    if identity.startswith("0x"):
+        return func.lower(column) == identity
+    return column == identity
 
 
 class PortfolioService:
@@ -202,34 +217,59 @@ class PortfolioService:
 
         return daily_pnl
 
+    def _apply_spot(self, asset: Optional[Asset], spot_price: Optional[float]) -> None:
+        price = positive_finite(spot_price)
+        if asset is None or price is None:
+            return
+        asset.current_price = price
+        asset.last_updated = datetime.utcnow()
+
     def update_position_from_balance(
-        self, symbol: str, quantity: float, exchange: str
+        self,
+        symbol: str,
+        quantity: float,
+        exchange: str,
+        token_address: Optional[str] = None,
+        spot_price: Optional[float] = None,
     ):
-        """Update or create an open position from balance data."""
-        position = (
+        """Update or create an open position from balance data.
+
+        On-chain rows match on (exchange, token_address) so a ticker suffix
+        assigned on an earlier sync stays put. CEX rows still match on
+        (symbol, exchange) and keep a null token address.
+        """
+        query = (
             self.db.query(Position)
             .options(joinedload(Position.asset))
             .filter(
-                and_(
-                    Position.symbol == symbol,
-                    Position.exchange == exchange,
-                    Position.source != "manual",
-                )
+                Position.exchange == exchange,
+                Position.source != "manual",
             )
-            .first()
         )
-
-        asset = self.db.query(Asset).filter(Asset.symbol == symbol).first()
-        if not asset:
-            asset = Asset(symbol=symbol, name=symbol)
-            self.db.add(asset)
-            self.db.flush()
+        if token_address:
+            query = query.filter(_token_clause(Position.token_address, token_address))
+        else:
+            query = query.filter(
+                Position.symbol == symbol,
+                Position.token_address.is_(None),
+            )
+        position = query.order_by(
+            case((Position.status == "open", 0), else_=1),
+            Position.id.desc(),
+        ).first()
 
         if position:
             position.quantity = quantity
             position.status = "open"
             position.last_updated = datetime.utcnow()
+            self._apply_spot(position.asset, spot_price)
         else:
+            asset = self.db.query(Asset).filter(Asset.symbol == symbol).first()
+            if not asset:
+                asset = Asset(symbol=symbol, name=symbol)
+                self.db.add(asset)
+                self.db.flush()
+            self._apply_spot(asset, spot_price)
             position = Position(
                 asset_id=asset.id,
                 symbol=symbol,
@@ -238,8 +278,78 @@ class PortfolioService:
                 exchange=exchange,
                 status="open",
                 source="synced",
+                token_address=token_address,
             )
             self.db.add(position)
 
         self.db.commit()
         return position
+
+    def ensure_token_position(
+        self,
+        symbol: str,
+        exchange: str,
+        token_address: str,
+        *,
+        executed_at: datetime,
+        name: Optional[str] = None,
+    ) -> Position:
+        """Find the on-chain position for a contract, or open a closed shell for an order.
+
+        A zero-quantity closed row keeps the order without showing a holding the
+        balance sync has not confirmed. The next balance sync reopens it.
+        """
+        position = (
+            self.db.query(Position)
+            .filter(
+                Position.exchange == exchange,
+                Position.source != "manual",
+                _token_clause(Position.token_address, token_address),
+            )
+            .order_by(
+                case((Position.status == "open", 0), else_=1),
+                Position.id.desc(),
+            )
+            .first()
+        )
+        if position:
+            return position
+
+        symbol = self._free_chain_symbol(symbol, exchange, token_address)
+        asset = self.db.query(Asset).filter(Asset.symbol == symbol).first()
+        if not asset:
+            asset = Asset(symbol=symbol, name=name or symbol)
+            self.db.add(asset)
+            self.db.flush()
+        position = Position(
+            asset_id=asset.id,
+            symbol=symbol,
+            quantity=0,
+            first_bought_at=executed_at,
+            exchange=exchange,
+            status="closed",
+            source="synced",
+            token_address=token_address,
+        )
+        self.db.add(position)
+        self.db.flush()
+        return position
+
+    def _free_chain_symbol(self, symbol: str, exchange: str, token_address: str) -> str:
+        """Avoid colliding with another contract that already uses this ticker."""
+        candidate = (symbol or "TOKEN")[:20]
+        taken = (
+            self.db.query(Position)
+            .filter(
+                Position.exchange == exchange,
+                Position.symbol == candidate,
+                Position.source != "manual",
+            )
+            .all()
+        )
+        if not taken:
+            return candidate
+        suffix = token_address[-4:].upper()
+        room = max(1, 19 - len(suffix))
+        alt = f"{candidate[:room]}-{suffix}"[:20]
+        return alt

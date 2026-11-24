@@ -6,7 +6,7 @@
 Exchanges / wallets          Local machine
 ┌─────────────────┐          ┌──────────────────────────────────┐
 │ Binance / OKX / │  ccxt    │  Connectors (scheduled hourly)   │
-│ Ethereum RPC    │  web3    │         ↓                        │
+│ Mobula wallets  │  HTTP    │         ↓                        │
 └─────────────────┘          │  SQLite (portfolio.db)           │
                              │         ↓                        │
                              │  FastAPI + GraphQL  →  React UI  │
@@ -18,7 +18,7 @@ Exchanges / wallets          Local machine
 3. **GraphQL** resolvers expose portfolio, positions, orders, and related data.
 4. The **React** frontend queries GraphQL and renders overview, positions, performance, and Settings.
 
-Portfolio balances and orders arrive via the scheduler and connectors. GraphQL **mutations** exist for user intent only: saving connector config and managing conviction tags.
+Portfolio balances and orders arrive via the scheduler and connectors. GraphQL **mutations** cover connector config, conviction tags, manual position marks, and on-chain buys for tokens a swap did not price.
 
 ## Technology stack
 

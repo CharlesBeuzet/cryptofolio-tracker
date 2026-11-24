@@ -59,7 +59,7 @@ class ConfigSettingsTests(unittest.TestCase):
         self.assertFalse(by_name["okx"]["configured"])
 
         available_names = {item["name"] for item in public["available_connectors"]}
-        self.assertEqual(available_names, {"binance", "okx", "ethereum"})
+        self.assertEqual(available_names, {"binance", "okx", "mobula"})
 
     def test_update_keeps_secret_when_omitted(self) -> None:
         self._write(
@@ -111,44 +111,79 @@ class ConfigSettingsTests(unittest.TestCase):
         self.assertEqual(saved["okx"]["api_key"], "new-okx-key")
         self.assertEqual(saved["okx"]["passphrase"], "new-okx-pass")
 
-    def test_ethereum_requires_address(self) -> None:
-        self._write({})
-        with self.assertRaises(ValueError):
-            config_settings.update_config(
-                exchanges=[{"name": "ethereum", "hostname": "https://eth.llamarpc.com"}],
-                replace_exchanges=True,
-            )
-
-    def test_ethereum_requires_hostname(self) -> None:
+    def test_mobula_requires_wallets_and_chains(self) -> None:
         self._write({})
         with self.assertRaises(ValueError) as ctx:
             config_settings.update_config(
-                exchanges=[{"name": "ethereum", "address": "0xabc123"}],
+                exchanges=[{"name": "mobula", "api_key": "real-mobula-key-1234"}],
                 replace_exchanges=True,
             )
-        self.assertIn("RPC URL is required", str(ctx.exception))
+        self.assertIn("wallet address is required", str(ctx.exception))
 
-    def test_add_ethereum_connector(self) -> None:
-        self._write({"hot_wallets": {"default_rpc": "https://old.example"}})
+        with self.assertRaises(ValueError) as ctx:
+            config_settings.update_config(
+                exchanges=[
+                    {
+                        "name": "mobula",
+                        "api_key": "real-mobula-key-1234",
+                        "wallets": "So11111111111111111111111111111111111111112",
+                    }
+                ],
+                replace_exchanges=True,
+            )
+        self.assertIn("blockchain is required", str(ctx.exception))
+
+    def test_mobula_rejects_unknown_blockchain(self) -> None:
+        self._write({})
+        with self.assertRaises(ValueError) as ctx:
+            config_settings.update_config(
+                exchanges=[
+                    {
+                        "name": "mobula",
+                        "api_key": "real-mobula-key-1234",
+                        "wallets": "So11111111111111111111111111111111111111112",
+                        "blockchains": "solana, fantom",
+                    }
+                ],
+                replace_exchanges=True,
+            )
+        self.assertIn("Unsupported blockchain", str(ctx.exception))
+
+    def test_add_mobula_connector_drops_retired_ethereum(self) -> None:
+        self._write(
+            {
+                "hot_wallets": {"default_rpc": "https://old.example"},
+                "ethereum": {
+                    "hostname": "https://eth.llamarpc.com",
+                    "address": "0xabc123",
+                },
+            }
+        )
         config_settings.update_config(
             exchanges=[
                 {
-                    "name": "ethereum",
-                    "hostname": "https://eth.llamarpc.com",
-                    "address": "0xabc123",
+                    "name": "mobula",
+                    "api_key": "real-mobula-key-1234",
+                    "wallets": "WalletOne\nWalletTwo",
+                    "blockchains": "Solana, evm:1",
                 }
             ],
             replace_exchanges=True,
         )
         saved = yaml.safe_load(self.config_file.read_text(encoding="utf-8"))
         self.assertNotIn("hot_wallets", saved)
-        self.assertEqual(saved["ethereum"]["hostname"], "https://eth.llamarpc.com")
-        self.assertEqual(saved["ethereum"]["address"], "0xabc123")
+        self.assertNotIn("ethereum", saved)
+        self.assertEqual(saved["mobula"]["api_key"], "real-mobula-key-1234")
+        self.assertEqual(saved["mobula"]["wallets"], ["WalletOne", "WalletTwo"])
+        self.assertEqual(saved["mobula"]["blockchains"], ["solana", "ethereum"])
         public = config_settings.get_public_config()
-        eth = next(ex for ex in public["exchanges"] if ex["name"] == "ethereum")
-        self.assertTrue(eth["configured"])
-        self.assertTrue(eth["supports_address"])
-        self.assertEqual(eth["address"], "0xabc123")
+        mobula = next(ex for ex in public["exchanges"] if ex["name"] == "mobula")
+        self.assertTrue(mobula["configured"])
+        self.assertTrue(mobula["supports_wallets"])
+        self.assertEqual(mobula["wallets"], "WalletOne\nWalletTwo")
+        self.assertEqual(mobula["blockchains"], "solana, ethereum")
+        self.assertEqual(mobula["api_key"]["hint"], "••••1234")
+        self.assertNotIn("real-mobula-key", str(public))
 
 
 if __name__ == "__main__":

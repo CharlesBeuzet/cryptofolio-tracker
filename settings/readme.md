@@ -9,7 +9,7 @@ This folder holds configuration required to fetch portfolio data from exchanges 
 ## Shape notes
 
 - **Exchanges** (Binance, OKX): API secrets; prefer read-only keys.
-- **Ethereum**: public `address` + RPC `hostname` (both required). No private keys and no manual token list.
+- **Mobula**: `api_key`, public `wallets`, and `blockchains` slugs. No private keys. The chain is stored on each position, not as a separate connector.
 - **Coinbase**: still shown in the example file for reference; not addable in Settings until a connector exists.
 
 See [docs/configuration.md](../docs/configuration.md) and [docs/settings.md](../docs/settings.md).

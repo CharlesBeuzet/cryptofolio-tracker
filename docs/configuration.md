@@ -12,26 +12,31 @@ For Docker on a Pi, edit `data/config.yaml` instead — that file is bind-mounte
 |---------|--------|
 | **Binance** | `api_key`, `api_secret` (optional `sandbox`) |
 | **OKX** | `api_key`, `api_secret`, `passphrase` (optional `hostname`, `sandbox`) |
-| **Ethereum** | `hostname` (JSON-RPC URL), `address` (public wallet) |
+| **Mobula** | `api_key`, `wallets` (one address per entry), `blockchains` (chain slugs) |
 | **Coinbase** | Present in `config.example.yaml` for reference — not loadable until a connector ships |
 
-### Ethereum example
+### Mobula example
 
 ```yaml
-ethereum:
-  hostname: "https://eth.llamarpc.com"
-  address: "0xYourEthereumAddressHere"
+mobula:
+  api_key: "YOUR_MOBULA_API_KEY"
+  wallets:
+    - "YOUR_SOLANA_ADDRESS"
+    - "0xYOUR_ETHEREUM_ADDRESS"
+  blockchains:
+    - solana
+    - ethereum
 ```
 
-Only a public address and RPC endpoint are required — never private keys. Token contracts are not listed manually in config.
+Public addresses only — never private keys. Allowed slugs: `ethereum`, `base`, `arbitrum`, `polygon`, `avalanche`, `bnb`, `optimism`, `sonic`, `solana`. An empty list makes no Mobula calls. Holdings are stored with the chain slug in `positions.exchange` and the contract in `positions.token_address`.
 
-See `settings/config.example.yaml` and the [settings readme](../settings/readme.md) for the full template. The Settings catalog lists only connectors implemented in the registry (Binance, OKX, Ethereum today).
+See `settings/config.example.yaml` and the [settings readme](../settings/readme.md) for the full template. The Settings catalog lists only connectors implemented in the registry (Binance, OKX, Mobula).
 
 ## Security
 
 - **Never commit** `config.yaml` (or `data/config.yaml`) — it contains secrets and is gitignored.
 - Prefer **read-only** exchange API keys.
-- Hot wallet tracking only needs a **public address** — never private keys.
+- Mobula tracking only needs a **public address** and an API key — never private keys.
 - By default the backend runs locally and is not exposed to the public internet; Docker publishes only port 8080 on your LAN.
 - The Settings API masks secrets (`••••last4`) and never echoes raw keys back to the client.
 

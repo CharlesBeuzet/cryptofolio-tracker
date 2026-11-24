@@ -131,6 +131,76 @@ export const ADD_POSITION_VALUATION = gql`
   }
 `
 
+export const ADD_ONCHAIN_BUY_ORDER = gql`
+  mutation AddOnchainBuyOrder(
+    $positionId: Int!
+    $quantity: Float!
+    $price: Float!
+    $executedAt: DateTime
+  ) {
+    addOnchainBuyOrder(
+      positionId: $positionId
+      quantity: $quantity
+      price: $price
+      executedAt: $executedAt
+    ) {
+      id
+      quantity
+      avgEntryPrice
+      costBasis
+      pnl
+      pnlPercent
+      unpricedQuantity
+      orders {
+        id
+        symbol
+        type
+        quantity
+        price
+        executedAt
+        exchange
+        externalOrderId
+      }
+      metrics {
+        avgExitPrice
+        cashInTrade
+        realisedPnl
+        orderDerivedQty
+      }
+    }
+  }
+`
+
+export const DELETE_ONCHAIN_MANUAL_ORDER = gql`
+  mutation DeleteOnchainManualOrder($id: Int!) {
+    deleteOnchainManualOrder(id: $id) {
+      id
+      quantity
+      avgEntryPrice
+      costBasis
+      pnl
+      pnlPercent
+      unpricedQuantity
+      orders {
+        id
+        symbol
+        type
+        quantity
+        price
+        executedAt
+        exchange
+        externalOrderId
+      }
+      metrics {
+        avgExitPrice
+        cashInTrade
+        realisedPnl
+        orderDerivedQty
+      }
+    }
+  }
+`
+
 export const DELETE_POSITION_VALUATION = gql`
   mutation DeletePositionValuation($id: Int!) {
     deletePositionValuation(id: $id) {

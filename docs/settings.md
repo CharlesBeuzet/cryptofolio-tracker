@@ -21,7 +21,7 @@ Active connectors appear as collapsed cards (name + green **Active**). Click a c
 |-----------|-----------------|
 | **Binance** | `api_key`, `api_secret` |
 | **OKX** | `api_key`, `api_secret`, `passphrase` (optional `hostname` for regional API) |
-| **Ethereum** | public `address` + RPC `hostname` |
+| **Mobula** | `api_key`, wallet addresses, blockchain slugs |
 
 Coinbase may still appear in `config.example.yaml` for reference, but it is **not** in the Settings catalog until a connector is implemented.
 
@@ -39,17 +39,23 @@ Coinbase may still appear in `config.example.yaml` for reference, but it is **no
 
 Removing a connector from the UI and saving deletes that section from the YAML.
 
-## Ethereum wallet shape
+## Mobula wallet shape
 
 ```yaml
-ethereum:
-  hostname: "https://eth.llamarpc.com"   # JSON-RPC endpoint (required)
-  address: "0xYourEthereumAddressHere"  # public address (required)
+mobula:
+  api_key: "YOUR_MOBULA_API_KEY"
+  wallets:
+    - "YOUR_SOLANA_ADDRESS"
+    - "0xYOUR_ETHEREUM_ADDRESS"
+  blockchains:
+    - solana
+    - ethereum
 ```
 
-- No private keys.
-- No manual token contract list — token discovery is handled by the connector path when implemented.
-- Free public RPCs work to start; a dedicated RPC is more reliable for production use.
+- No private keys. The API key is masked in Settings like an exchange secret.
+- Wallet addresses are one per line in the form. Blockchains are comma-separated slugs.
+- Allowed slugs: `ethereum`, `base`, `arbitrum`, `polygon`, `avalanche`, `bnb`, `optimism`, `sonic`, `solana`.
+- A retired `ethereum` section is removed the next time Settings is saved.
 
 ## GraphQL
 
@@ -72,9 +78,10 @@ mutation {
     exchanges: [
       { name: "binance", apiKey: null, apiSecret: null }
       {
-        name: "ethereum"
-        address: "0xYourEthereumAddressHere"
-        hostname: "https://eth.llamarpc.com"
+        name: "mobula"
+        apiKey: null
+        wallets: "YOUR_SOLANA_ADDRESS"
+        blockchains: "solana, ethereum"
       }
     ]
   ) {

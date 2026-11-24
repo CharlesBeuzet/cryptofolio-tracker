@@ -201,7 +201,11 @@ class PositionAnalyzerService:
         )
         for order in orders:
             self._process_order(metrics, order)
-            metrics.last_processed_order_id = order.id
+        if orders:
+            # Watermark is the highest id, not the latest timestamp. A buy dated
+            # before an existing sell still receives a newer id and must not be
+            # applied a second time by apply_new_orders.
+            metrics.last_processed_order_id = max(order.id for order in orders)
 
         if current_price is None:
             current_price = self._position_price(position_id)

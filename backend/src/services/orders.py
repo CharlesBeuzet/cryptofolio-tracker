@@ -1,13 +1,14 @@
 """Executed spot order sync from exchange connectors."""
 from datetime import datetime, timedelta
-from typing import Any, List, Tuple
+from typing import Any, Dict, List, Set, Tuple
 
 from sqlalchemy import and_, func
 from sqlalchemy.orm import Session, joinedload
 
 from ..utils.data_quality import sanitize_row
-from ..models.database import Order, Position
+from ..models.database import MobulaActivityCursor, Order, Position
 from .analyzer import PositionAnalyzerService
+from .portfolio import PortfolioService
 
 SYNC_OVERLAP_HOURS = 2
 QUOTE_CURRENCIES = ("USDT", "USDC")
@@ -138,7 +139,7 @@ class OrderService:
                     Position.symbol == symbol,
                     Position.exchange == exchange,
                     Position.status == "open",
-                Position.source == "synced",
+                    Position.source == "synced",
                 )
                 .first()
             )
@@ -147,3 +148,130 @@ class OrderService:
                 PositionAnalyzerService(self.db).apply_new_orders(position.id, price)
 
         return total_added
+
+    def sync_wallet_activity(self, connector: Any) -> int:
+        """Page Mobula wallet activity and store swap legs as orders.
+
+        The first run walks history backward, at most 20 pages per wallet.
+        Later runs pull one page of newer transactions, then continue the
+        backfill if it has not finished. Each page is committed before the
+        next request so a retry does not repurchase the same history.
+        """
+        if not getattr(connector, "syncs_wallet_activity", False):
+            return 0
+        added = 0
+        for wallet in connector.wallets():
+            cursor = self.db.get(MobulaActivityCursor, wallet)
+            if cursor is None:
+                cursor = MobulaActivityCursor(wallet=wallet, backfill_done=False)
+                self.db.add(cursor)
+                self.db.flush()
+            already_scanned = cursor.newest_tx_ms is not None or bool(cursor.backfill_done)
+            if already_scanned:
+                if cursor.newest_tx_ms is not None:
+                    page = connector.fetch_activity_page(
+                        wallet, from_ms=int(cursor.newest_tx_ms)
+                    )
+                else:
+                    page = connector.fetch_activity_page(wallet)
+                added += self._persist_chain_orders(page.get("orders") or [])
+                self._note_activity_cursor(cursor, page, finished_backfill=False)
+                self.db.commit()
+            if cursor.backfill_done:
+                continue
+            to_ms = (int(cursor.oldest_tx_ms) - 1) if cursor.oldest_tx_ms else None
+            for _ in range(20):
+                page = connector.fetch_activity_page(wallet, to_ms=to_ms)
+                added += self._persist_chain_orders(page.get("orders") or [])
+                page_size = int(page.get("page_size") or 100)
+                finished = int(page.get("count") or 0) < page_size
+                self._note_activity_cursor(cursor, page, finished_backfill=finished)
+                self.db.commit()
+                if cursor.backfill_done or page.get("oldest_tx_ms") is None:
+                    break
+                to_ms = int(page["oldest_tx_ms"]) - 1
+        return added
+
+    def _note_activity_cursor(
+        self,
+        cursor: MobulaActivityCursor,
+        page: Dict[str, Any],
+        *,
+        finished_backfill: bool,
+    ) -> None:
+        oldest = page.get("oldest_tx_ms")
+        newest = page.get("newest_tx_ms")
+        if oldest is not None:
+            cursor.oldest_tx_ms = (
+                int(oldest)
+                if cursor.oldest_tx_ms is None
+                else min(int(cursor.oldest_tx_ms), int(oldest))
+            )
+        if newest is not None:
+            cursor.newest_tx_ms = (
+                int(newest)
+                if cursor.newest_tx_ms is None
+                else max(int(cursor.newest_tx_ms), int(newest))
+            )
+        if finished_backfill:
+            cursor.backfill_done = True
+
+    def _persist_chain_orders(self, rows: List[dict]) -> int:
+        """Insert swap legs and rebuild metrics in executed_at order."""
+        added = 0
+        touched: Set[int] = set()
+        portfolio = PortfolioService(self.db)
+        for row in rows:
+            ext_id = row.get("external_order_id")
+            exchange = row.get("exchange")
+            token = row.get("token_address")
+            if not ext_id or not exchange or not token:
+                continue
+            cleaned = sanitize_row(row)
+            if cleaned is None:
+                continue
+            exists = (
+                self.db.query(Order)
+                .filter(
+                    Order.exchange == exchange,
+                    Order.external_order_id == ext_id,
+                )
+                .first()
+            )
+            if exists:
+                continue
+            position = portfolio.ensure_token_position(
+                cleaned["symbol"],
+                exchange,
+                token,
+                executed_at=cleaned["executed_at"],
+                name=row.get("name"),
+            )
+            self.db.add(
+                Order(
+                    position_id=position.id,
+                    symbol=position.symbol,
+                    type=cleaned["type"],
+                    quantity=cleaned["quantity"],
+                    price=cleaned["price"],
+                    executed_at=cleaned["executed_at"],
+                    exchange=exchange,
+                    external_order_id=ext_id,
+                )
+            )
+            touched.add(position.id)
+            added += 1
+        if not added:
+            return 0
+        self.db.commit()
+        analyzer = PositionAnalyzerService(self.db)
+        for position_id in touched:
+            position = (
+                self.db.query(Position)
+                .options(joinedload(Position.asset))
+                .filter(Position.id == position_id)
+                .first()
+            )
+            price = position.asset.current_price if position and position.asset else None
+            analyzer.recompute_position(position_id, price)
+        return added
